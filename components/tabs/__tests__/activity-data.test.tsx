@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from "vitest";
 import { renderToString } from "react-dom/server";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
 import { CompanyProvider } from "@/lib/company/store";
@@ -179,5 +179,40 @@ describe("ActivityDataTab — inline BU row interactions", () => {
 
     // After the toggle, "Excluded from total" should be gone
     expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
+  });
+});
+
+// ── Refrigerant gas-card flow tests ──────────────────────────────────────────
+
+function renderActivityInCategory(catKey: "refrigerants") {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Click the Refrigerants category card
+  const catBtn = screen.getByText("Refrigerants & cooling").closest("button")!;
+  fireEvent.click(catBtn);
+}
+
+describe("ActivityDataTab — refrigerant gas-card flow", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("refrigerants category lists workbook gases and supports per-BU entry", async () => {
+    renderActivityInCategory("refrigerants");
+    // Should show gas cards — R-404A (HFC) is a workbook gas
+    fireEvent.click(await screen.findByText(/R-404A/));
+    // now on the gas type screen with BU "Pune"
+    const input = await screen.findByLabelText("Pune R-404A (HFC) topped up");
+    fireEvent.change(input, { target: { value: "6" } });
+    // Emissions cell should now show a value ending in "t" (e.g. "24 t")
+    const emCells = screen.getAllByText(/\d\s*t$/);
+    expect(emCells.length).toBeGreaterThan(0);
   });
 });

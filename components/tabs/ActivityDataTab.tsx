@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import { useCompany } from "@/lib/company/store";
-import { FUELS } from "@/lib/model/factors";
-import { combustionBreakdown, combustionCO2e } from "@/lib/model/baseline";
+import { FUELS, REFRIGERANTS } from "@/lib/model/factors";
+import { combustionBreakdown, combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { fuelFamily, type FuelFamily } from "@/lib/activity-groups";
 import { combustionGrade, refrigerantGrade, facilityGrade, confidenceOf } from "@/lib/data-quality";
-import { FY_YEARS, type CombustionAsset, type FuelId } from "@/lib/model/types";
+import { FY_YEARS, type CombustionAsset, type FuelId, type RefrigerantId, type RefrigerantFactor } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
 
 import { CAT_DEFS, ELEC_TYPES, facCO2e, newId, type Nav, type CatKey, type CatDef, type Sel } from "./activity/shared";
@@ -54,8 +54,15 @@ export function ActivityDataTab() {
   const fuelsInFamily = (fam: FuelFamily) => (Object.keys(FUELS) as FuelId[]).filter((id) => fuelFamily(id) === fam).map((id) => ({ id, label: FUELS[id].label }));
   const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : (key === "liquid" || key === "gas" || key === "solid") ? assetsByFamily(key).length : 0;
 
-  const typesFor = (d: CatDef): { key: string; label: string; gridEf?: number }[] =>
-    d.kind === "electricity"
+  // Gases from the Excel workbook (inExcel: true)
+  const refrigGases = (Object.values(REFRIGERANTS) as RefrigerantFactor[])
+    .filter((r) => r.inExcel)
+    .map((r) => ({ key: r.id, label: r.label, gwp: r.gwp }));
+
+  const typesFor = (d: CatDef): { key: string; label: string; gridEf?: number; gwp?: number }[] =>
+    d.kind === "refrigerant"
+      ? refrigGases
+      : d.kind === "electricity"
       ? ELEC_TYPES.map((t) => ({ key: t.key, label: t.label, gridEf: t.gridEf }))
       : fuelsInFamily(d.key as FuelFamily).map((f) => ({ key: f.id, label: f.label }));
 
@@ -66,22 +73,48 @@ export function ActivityDataTab() {
   });
 
   const typeAggTotal = (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") =>
-    d.kind === "electricity"
+    d.kind === "refrigerant"
+      ? s1.selectedSystems.filter((sy) => !sy.excluded && sy.refrigerant === (t.key as RefrigerantId)).reduce((s, sy) => s + refrigerantCO2e(sy), 0)
+      : d.kind === "electricity"
       ? s2.selectedFacilities.filter((f) => !f.excluded && f.name === t.label).reduce((s, f) => s + facCO2e(f), 0)
       : s1.selectedAssets.filter((a) => !a.excluded && a.fuelType === (t.key as FuelId) && (!cat || a.category === cat)).reduce((s, a) => s + combustionCO2e(a), 0);
 
-  const catTotal = (d: CatDef) => d.kind === "refrigerant" ? b1.refrigerantT : typesFor(d).reduce((s, t) => s + typeAggTotal(d, t), 0);
+  const catTotal = (d: CatDef) => typesFor(d).reduce((s, t) => s + typeAggTotal(d, t), 0);
+
+  const refrigSysById = (id: string) => s1.selectedSystems.find((sy) => sy.id === id);
 
   const entryFor = (d: CatDef, t: { key: string; label: string }, cat: "stationary" | "mobile" | undefined, bu: string): CombustionAsset | Facility | undefined =>
     d.kind === "electricity"
       ? s2.selectedFacilities.find((f) => (f.bu ?? "") === bu && f.name === t.label)
+      : d.kind === "refrigerant"
+      ? undefined  // refrigerant entries are looked up via refrigSysById path
       : s1.selectedAssets.find((a) => (a.bu ?? "") === bu && a.fuelType === (t.key as FuelId) && (!cat || a.category === cat));
 
   const emOfEntry = (d: CatDef, ex: CombustionAsset | Facility | undefined) =>
     !ex ? 0 : d.kind === "electricity" ? facCO2e(ex as Facility) : combustionCO2e(ex as CombustionAsset);
 
   const nWithData = (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") =>
-    buReg.units.filter((u) => entryFor(d, t, cat, u.name)).length;
+    d.kind === "refrigerant"
+      ? buReg.units.filter((u) => s1.selectedSystems.some((sy) => (sy.bu ?? "") === u.name && sy.refrigerant === (t.key as RefrigerantId))).length
+      : buReg.units.filter((u) => entryFor(d, t, cat, u.name)).length;
+
+  // Returns the refrigeration system id for (gasId, bu), creating it if missing.
+  const ensureRefrigEntry = (gasId: RefrigerantId, bu: string, agg: boolean): string => {
+    const ex = s1.selectedSystems.find((sy) => (sy.bu ?? "") === bu && sy.refrigerant === gasId);
+    if (ex) return ex.id;
+    const id = newId("r");
+    s1.addRefrigerationSystem(year, {
+      id,
+      name: bu ? `${REFRIGERANTS[gasId].label} — ${bu}` : REFRIGERANTS[gasId].label,
+      systemType: "commercialHVAC",
+      refrigerant: gasId,
+      toppedUpKg: 0,
+      gasCostPerKg: 900,
+      bu: bu || undefined,
+      excluded: bu ? !agg : false,
+    });
+    return id;
+  };
 
   // Returns the entry id for (type, category, bu), creating it if missing WITHOUT navigating.
   const ensureEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean): string => {
@@ -148,10 +181,14 @@ export function ActivityDataTab() {
         emOfEntry={emOfEntry}
         openEntry={openEntry}
         ensureEntry={ensureEntry}
+        ensureRefrigEntry={ensureRefrigEntry}
         combById={combById}
         facById={facById}
+        refrigSysById={refrigSysById}
+        selectedSystems={s1.selectedSystems}
         updateCombustion={s1.updateCombustion}
         updateFacility={s2.updateFacility}
+        updateRefrigeration={s1.updateRefrigeration}
       />
     );
   }
@@ -169,8 +206,8 @@ export function ActivityDataTab() {
         typeAggTotal={typeAggTotal}
         catTotal={catTotal}
         nWithData={nWithData}
+        refrigGases={refrigGases}
         selectedSystems={s1.selectedSystems}
-        addRefrigeration={s1.addRefrigeration}
         updateRefrigeration={s1.updateRefrigeration}
         delRefrigeration={s1.delRefrigeration}
         co2Ref={co2Ref}

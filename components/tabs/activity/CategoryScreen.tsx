@@ -1,39 +1,15 @@
 "use client";
 
-import { ArrowLeft, ChevronRight, Plus, Check, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronRight, ChevronDown, Check } from "lucide-react";
 import { useState } from "react";
 import { CAT_DEFS, META, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, ScopeBadge, type Nav, type CatKey, type CatDef, type Sel } from "./shared";
 import { FUELS, FUELS_BY_CATEGORY } from "@/lib/model/factors";
 import { fuelFamily, type FuelFamily } from "@/lib/activity-groups";
-import { refrigerantGrade } from "@/lib/data-quality";
 import { fmt, cn } from "@/lib/utils";
-import { ReliabilityBadge } from "../../ui/ReliabilityBadge";
 import { DetailPanel } from "../DataInputTab";
 import type { FuelId, RefrigerationSystem } from "@/lib/model/types";
-import { Zap, Trash2 } from "lucide-react";
+import { Zap } from "lucide-react";
 import { IconTile, unitLabel } from "./shared";
-
-// Re-export the Row component used in refrigerant list
-function Row({ emoji, bg, name, sub, badge, value, unit, onChange, co2e, onOpen, onDelete }: {
-  emoji: string; bg: string; name: string; sub: string; badge: React.ReactNode;
-  value: number; unit: string; onChange: (v: number) => void; co2e: number; onOpen: () => void; onDelete: () => void;
-}) {
-  return (
-    <div className="group flex items-center gap-3 py-2.5 px-3 border-t border-line/40 transition-colors hover:bg-brand-50/40">
-      <IconTile emoji={emoji} bg={bg} hover />
-      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <div className="flex items-center gap-2"><span className="text-sm font-medium text-ink truncate group-hover:text-brand-700 transition-colors">{name}</span>{badge}</div>
-        <div className="text-xs text-ink-faint truncate">{sub}</div>
-      </button>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-28 text-right tabular-nums rounded-lg border border-brand-200 bg-brand-50/50 px-2.5 py-1.5 text-sm transition-colors focus:outline-none focus:border-brand-400 focus:bg-white" aria-label={`${name} consumption`} />
-        <span className="text-xs text-ink-faint w-14">{unitLabel(unit)}</span>
-      </div>
-      <div className="w-20 text-right text-sm font-semibold tabular-nums shrink-0">{fmt(co2e)}<span className="text-ink-faint font-normal text-xs"> t</span></div>
-      <button onClick={onDelete} className="p-1.5 rounded-lg text-ink-faint hover:text-red-500 transition-colors shrink-0" aria-label="Delete"><Trash2 size={15} /></button>
-    </div>
-  );
-}
 
 type Props = {
   nav: Nav & { level: "cat" };
@@ -42,19 +18,20 @@ type Props = {
   buReg: { mode: "central" | "bu"; units: { name: string; aggregate: boolean }[] };
   sel: Sel;
   setSel: (s: Sel) => void;
-  typesFor: (d: CatDef) => { key: string; label: string; gridEf?: number }[];
+  typesFor: (d: CatDef) => { key: string; label: string; gridEf?: number; gwp?: number }[];
   typeAggTotal: (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") => number;
   catTotal: (d: CatDef) => number;
   nWithData: (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") => number;
+  // gas list passed from container
+  refrigGases: { key: string; label: string; gwp: number }[];
   // store access for refrigerant ops
   selectedSystems: RefrigerationSystem[];
-  addRefrigeration: (year: number) => void;
   updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
   delRefrigeration: (year: number, id: string) => void;
   co2Ref: (id: string) => number;
 };
 
-export function CategoryScreen({ nav, setNav, year, buReg, sel, setSel, typesFor, typeAggTotal, catTotal, nWithData, selectedSystems, addRefrigeration, updateRefrigeration, delRefrigeration, co2Ref }: Props) {
+export function CategoryScreen({ nav, setNav, year, buReg, sel, setSel, typesFor, typeAggTotal, catTotal, nWithData, refrigGases, selectedSystems, updateRefrigeration, delRefrigeration, co2Ref }: Props) {
   const [catMode, setCatMode] = useState<"stationary" | "mobile">("stationary");
   const [fuelFilter, setFuelFilter] = useState<Set<string>>(new Set());
   const [fuelMenuOpen, setFuelMenuOpen] = useState(false);
@@ -79,15 +56,26 @@ export function CategoryScreen({ nav, setNav, year, buReg, sel, setSel, typesFor
       </div>
 
       {def.kind === "refrigerant" ? (
-        <div className="rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-brand-50 to-transparent">
-            <span className="text-sm font-semibold text-ink">{selectedSystems.length} system{selectedSystems.length === 1 ? "" : "s"}</span>
-            <button onClick={() => addRefrigeration(year)} className="inline-flex items-center gap-1 text-xs font-medium rounded-lg border border-line bg-surface px-2.5 py-1.5 hover:border-brand-300"><Plus size={13} /> Add system</button>
+        <>
+          <p className="text-xs text-ink-soft -mt-1">Each refrigerant shows its total fugitive emissions, aggregated from the business units. Click one to add units &amp; enter topped-up kg.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {refrigGases.map((r) => {
+              const totalEm = typeAggTotal(def, { key: r.key, label: r.label });
+              const nbu = nWithData(def, { key: r.key, label: r.label });
+              return (
+                <button key={r.key} onClick={() => setNav({ level: "type", key: def.key, typeKey: r.key })} style={{ background: GRAD[def.meta] }} className="group rounded-xl3 border border-white/60 shadow-card p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-card-lg hover:ring-2 hover:ring-white/80">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="w-12 h-12 rounded-2xl bg-white/55 backdrop-blur-sm grid place-items-center transition-all group-hover:bg-white/85 group-hover:scale-105"><CatIcon size={24} strokeWidth={1.9} style={{ color: ICON_COLOR[def.meta] }} /></span>
+                    <div className="text-right"><div className="text-[9px] uppercase tracking-wide text-ink-soft font-bold">Emissions</div><div className="text-lg font-extrabold tabular-nums text-ink leading-none mt-0.5">{fmt(totalEm)}<span className="text-[10px] text-ink-soft"> t</span></div></div>
+                  </div>
+                  <div className="mt-3 text-sm font-bold text-ink leading-tight">{r.label}</div>
+                  <div className="text-[10px] text-ink-soft mt-0.5">GWP {r.gwp.toLocaleString()}</div>
+                  <div className="text-[11px] text-ink-soft mt-0.5 inline-flex items-center gap-0.5">{buReg.mode === "central" ? "Central" : `${nbu}/${buReg.units.length} BUs`} <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" /></div>
+                </button>
+              );
+            })}
           </div>
-          {selectedSystems.length === 0 ? <p className="px-4 py-6 text-sm text-ink-faint text-center">No cooling systems yet.</p> : selectedSystems.map((sy) => (
-            <Row key={sy.id} emoji={m.emoji} bg={m.bg} name={sy.name} sub={`${sy.refrigerant} · topped up`} badge={<ReliabilityBadge grade={refrigerantGrade(sy)} />} value={sy.toppedUpKg} unit="kg" onChange={(v) => updateRefrigeration(year, sy.id, { toppedUpKg: v })} co2e={co2Ref(sy.id)} onOpen={() => setSel({ kind: "refrigerant", id: sy.id })} onDelete={() => delRefrigeration(year, sy.id)} />
-          ))}
-        </div>
+        </>
       ) : def.kind === "electricity" ? (
         <>
           <p className="text-xs text-ink-soft -mt-1">Each source shows its total emissions, aggregated from the business units. Click one to add units &amp; enter values.</p>
