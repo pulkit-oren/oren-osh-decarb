@@ -11,7 +11,7 @@ const assets = [
 describe("siteList", () => {
   it("returns sorted unique non-empty sites", () => {
     expect(siteList(assets)).toEqual(["HQ", "Pune plant"]);
-    const noSites = [{ id: "x" }];
+    const noSites: { id: string; site?: string }[] = [{ id: "x" }];
     expect(siteList(noSites)).toEqual([]);
   });
 });
