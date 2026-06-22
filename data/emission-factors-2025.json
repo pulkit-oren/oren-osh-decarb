@@ -1,0 +1,2594 @@
+[
+  {
+    "r": 3,
+    "type": "Fuels - Liquid",
+    "item": "Diesel",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 830.565,
+    "densKgL": null,
+    "cv": 42839,
+    "defra": {
+      "2022": 2.56,
+      "2023": 2.51,
+      "2024": 2.51279,
+      "2025": 2.57082
+    },
+    "ipcc2014": 2.92638,
+    "imo2024": null
+  },
+  {
+    "r": 4,
+    "type": "Fuels - Liquid",
+    "item": "Petrol",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 746.204,
+    "densKgL": null,
+    "cv": 43061,
+    "defra": {
+      "2022": 2.16,
+      "2023": 2.1,
+      "2024": 2.0844,
+      "2025": 2.06916
+    },
+    "ipcc2014": 2.3026999999999997,
+    "imo2024": null
+  },
+  {
+    "r": 5,
+    "type": "Fuels - Liquid",
+    "item": "Fuel Oil / Furnace Oil",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 983.284,
+    "densKgL": null,
+    "cv": 40752,
+    "defra": {
+      "2022": 3.18,
+      "2023": 3.17,
+      "2024": 3.17493,
+      "2025": 3.17492
+    },
+    "ipcc2014": 3.0213799999999997,
+    "imo2024": null
+  },
+  {
+    "r": 6,
+    "type": "Fuels - Liquid",
+    "item": "Lubricants",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 864.304,
+    "densKgL": null,
+    "cv": 40752,
+    "defra": {
+      "2022": 2.75,
+      "2023": 2.75,
+      "2024": 2.74934,
+      "2025": 2.74934
+    },
+    "ipcc2014": 2.663024302628103,
+    "imo2024": null
+  },
+  {
+    "r": 7,
+    "type": "Fuels - Liquid",
+    "item": "Kerosene / Burning Oil",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 802.568,
+    "densKgL": null,
+    "cv": 43865,
+    "defra": {
+      "2022": 2.54,
+      "2023": 2.54,
+      "2024": 2.54015,
+      "2025": 2.54016
+    },
+    "ipcc2014": 2.68782,
+    "imo2024": null
+  },
+  {
+    "r": 8,
+    "type": "Fuels - Liquid",
+    "item": "Residual Fuel Oil",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 983.284,
+    "densKgL": null,
+    "cv": 40752,
+    "defra": {
+      "2022": 3.18,
+      "2023": 3.17,
+      "2024": 3.17493,
+      "2025": 3.17492
+    },
+    "ipcc2014": 3.0213799999999997,
+    "imo2024": null
+  },
+  {
+    "r": 9,
+    "type": "Fuels - Liquid",
+    "item": "Marine Heavy Fuel Oil (VLSFO)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3.11,
+      "2023": 3.1,
+      "2024": 3.10202,
+      "2025": 3.10202
+    },
+    "ipcc2014": null,
+    "imo2024": 2.9606615999999994
+  },
+  {
+    "r": 10,
+    "type": "Fuels - Liquid",
+    "item": "Marine Heavy Fuel Oil (HSFO)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": 3.1251428
+  },
+  {
+    "r": 11,
+    "type": "Fuels - Liquid",
+    "item": "Marine Light Fuel Oil (ULSFO)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": 2.9952935999999997
+  },
+  {
+    "r": 12,
+    "type": "Fuels - Liquid",
+    "item": "Marine Light Fuel Oil (VLSFO)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": 2.9952935999999997
+  },
+  {
+    "r": 13,
+    "type": "Fuels - Liquid",
+    "item": "Marine Gas Oil (ULSGO)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2.78,
+      "2023": 2.77,
+      "2024": 2.77139,
+      "2025": 2.77139
+    },
+    "ipcc2014": null,
+    "imo2024": 2.7680589999999996
+  },
+  {
+    "r": 14,
+    "type": "Fuels - Liquid",
+    "item": "Jet Fuel (Aviation Turbine Fuel)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 800,
+    "densKgL": null,
+    "cv": 43905,
+    "defra": {
+      "2022": 2.55,
+      "2023": 2.54,
+      "2024": 2.54269,
+      "2025": 2.54269
+    },
+    "ipcc2014": 2.5875399999999997,
+    "imo2024": null
+  },
+  {
+    "r": 15,
+    "type": "Fuels - Liquid",
+    "item": "Aviation Gasoline (Aviation Spirit)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 729.927,
+    "densKgL": null,
+    "cv": 44797,
+    "defra": {
+      "2022": 2.33,
+      "2023": 2.33,
+      "2024": 2.33116,
+      "2025": 2.33116
+    },
+    "ipcc2014": 2.19914,
+    "imo2024": null
+  },
+  {
+    "r": 16,
+    "type": "Fuels - Gas",
+    "item": "Liquefied Natural Gas (LNG)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 452.489,
+    "densKgL": null,
+    "cv": 45745,
+    "defra": {
+      "2022": 1.56,
+      "2023": 1.17,
+      "2024": 1.17216,
+      "2025": 1.17797
+    },
+    "ipcc2014": 6.316507141610073,
+    "imo2024": null
+  },
+  {
+    "r": 17,
+    "type": "Fuels - Gas",
+    "item": "Liquefied Petroleum Gases (LPG)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 529.749,
+    "densKgL": null,
+    "cv": 45944,
+    "defra": {
+      "2022": 1.56,
+      "2023": 1.56,
+      "2024": 1.55713,
+      "2025": 1.55713
+    },
+    "ipcc2014": 1.4763600000000001,
+    "imo2024": null
+  },
+  {
+    "r": 18,
+    "type": "Fuels - Gas",
+    "item": "Butane",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 575.374,
+    "densKgL": null,
+    "cv": 45300,
+    "defra": {
+      "2022": 1.75,
+      "2023": 1.75,
+      "2024": 1.74532,
+      "2025": 1.74533
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 19,
+    "type": "Fuels - Gas",
+    "item": "Propane",
+    "renewable": false,
+    "unitStr": "Co2e (kg/l)",
+    "densKgM3": 514.933,
+    "densKgL": null,
+    "cv": 46400,
+    "defra": {
+      "2022": 1.54,
+      "2023": 1.54,
+      "2024": 1.54357,
+      "2025": 1.54358
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 20,
+    "type": "Fuels - Gas",
+    "item": "Compressed Natural Gas (CNG) - SCM",
+    "renewable": false,
+    "unitStr": "Co2e (kg/m3)",
+    "densKgM3": 175,
+    "densKgL": null,
+    "cv": 45745,
+    "defra": {
+      "2022": 0.44,
+      "2023": 0.45,
+      "2024": 0.44942,
+      "2025": 0.4507
+    },
+    "ipcc2014": 1.89,
+    "imo2024": null
+  },
+  {
+    "r": 21,
+    "type": "Fuels - Gas",
+    "item": "Compressed Natural Gas (CNG) - KG",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": 175,
+    "densKgL": null,
+    "cv": 45745,
+    "defra": {
+      "2022": 0.44,
+      "2023": 0.45,
+      "2024": 0.44942,
+      "2025": 0.4507
+    },
+    "ipcc2014": 2.69952,
+    "imo2024": null
+  },
+  {
+    "r": 22,
+    "type": "Fuels - Gas",
+    "item": "Piped Natural Gas (PNG)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/m3)",
+    "densKgM3": 0.802,
+    "densKgL": null,
+    "cv": 45745,
+    "defra": {
+      "2022": 2.02,
+      "2023": 2.04,
+      "2024": 2.04542,
+      "2025": 2.06672
+    },
+    "ipcc2014": 1.885,
+    "imo2024": null
+  },
+  {
+    "r": 23,
+    "type": "Fuels - Solid",
+    "item": "Petroleum Coke",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": 33972,
+    "defra": {
+      "2022": 3386.87,
+      "2023": 3386.57,
+      "2024": 3386.57168,
+      "2025": 3386.57168
+    },
+    "ipcc2014": 3183.45,
+    "imo2024": null
+  },
+  {
+    "r": 24,
+    "type": "Fuels - Solid",
+    "item": "Coal - Coking",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": 30240,
+    "defra": {
+      "2022": 3165.24,
+      "2023": 3164.65,
+      "2024": 3164.65002,
+      "2025": 3164.65002
+    },
+    "ipcc2014": 2686.48,
+    "imo2024": null
+  },
+  {
+    "r": 25,
+    "type": "Fuels - Solid",
+    "item": "Coal - Anthracite",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": 2643.09,
+    "imo2024": null
+  },
+  {
+    "r": 26,
+    "type": "Fuels - Solid",
+    "item": "Coal - Bituminous",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": 2458.88,
+    "imo2024": null
+  },
+  {
+    "r": 27,
+    "type": "Fuels - Solid",
+    "item": "Coal - Lignite",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": 1210.72,
+    "imo2024": null
+  },
+  {
+    "r": 28,
+    "type": "Fuels - Solid",
+    "item": "Coal - Briquettes",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 29,
+    "type": "Fuels - Solid",
+    "item": "Coal (Electricity Generation)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": 23826,
+    "defra": {
+      "2022": 2270.45,
+      "2023": 2199.33,
+      "2024": 2262.11448,
+      "2025": 2225.22448
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 30,
+    "type": "Fuels - Solid",
+    "item": "Coal (Industrial)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": 25405,
+    "defra": {
+      "2022": 2411.43,
+      "2023": 2396.48,
+      "2024": 2399.43994,
+      "2025": 2395.28994
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 31,
+    "type": "Fuels - Solid",
+    "item": "Wood Pellets",
+    "renewable": true,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": 650,
+    "densKgL": null,
+    "cv": 17280,
+    "defra": {
+      "2022": 50.55459,
+      "2023": 51.56192,
+      "2024": 54.33654,
+      "2025": 55.19389
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 32,
+    "type": "Fuels - Solid",
+    "item": "Wood Chips",
+    "renewable": true,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": 253,
+    "densKgL": null,
+    "cv": 13600,
+    "defra": {
+      "2022": 39.78833,
+      "2023": 40.58114,
+      "2024": 42.76487,
+      "2025": 43.43964
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 33,
+    "type": "Fuels - Solid",
+    "item": "Wood Logs",
+    "renewable": true,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": 425,
+    "densKgL": null,
+    "cv": 14710,
+    "defra": {
+      "2022": 43.03576,
+      "2023": 43.89327,
+      "2024": 46.25524,
+      "2025": 46.98508
+    },
+    "ipcc2014": 1894.6200000000001,
+    "imo2024": null
+  },
+  {
+    "r": 34,
+    "type": "Fuels - Liquid",
+    "item": "Biodiesel",
+    "renewable": true,
+    "unitStr": "Co2 (kg/tonne)",
+    "densKgM3": 890,
+    "densKgL": null,
+    "cv": 37200,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": 1924.62,
+    "imo2024": null
+  },
+  {
+    "r": 35,
+    "type": "Fuels - Liquid",
+    "item": "Bio Briquettes",
+    "renewable": true,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": 1271.0900000000001,
+    "imo2024": null
+  },
+  {
+    "r": 36,
+    "type": "Fuels - Gas",
+    "item": "Biogas",
+    "renewable": true,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": 1.15,
+    "densKgL": null,
+    "cv": 20000,
+    "defra": {
+      "2022": 1.21919,
+      "2023": 1.23595,
+      "2024": 1.26431,
+      "2025": 1.24314
+    },
+    "ipcc2014": 2761.57,
+    "imo2024": null
+  },
+  {
+    "r": 37,
+    "type": "Fuels - Gas",
+    "item": "Landfill gas",
+    "renewable": true,
+    "unitStr": "Co2e (kg/tonne)",
+    "densKgM3": 1.3,
+    "densKgL": null,
+    "cv": 12300,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 0.69696
+    },
+    "ipcc2014": 2761.57,
+    "imo2024": null
+  },
+  {
+    "r": 38,
+    "type": "Process Emissions",
+    "item": "Carbon Dioxide",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1,
+      "2023": 1,
+      "2024": 1,
+      "2025": 1
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 39,
+    "type": "Process Emissions",
+    "item": "Methane - Non Fossil",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": 0.716,
+    "densKgL": null,
+    "cv": 50000,
+    "defra": {
+      "2022": null,
+      "2023": 28,
+      "2024": 28,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 40,
+    "type": "Process Emissions",
+    "item": "Methane - Fossil",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 41,
+    "type": "Process Emissions",
+    "item": "Nitrous Oxide",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 265,
+      "2023": 265,
+      "2024": 265,
+      "2025": 265
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 42,
+    "type": "Process Emissions",
+    "item": "Nitrogen Trifluoride",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 16100,
+      "2023": 16100,
+      "2024": 16100,
+      "2025": 16100
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 43,
+    "type": "Process Emissions",
+    "item": "Sulphur Hexafluoride (SF6)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 23500,
+      "2023": 23500,
+      "2024": 23500,
+      "2025": 23500
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 44,
+    "type": "Fugitive Emissions",
+    "item": "HFC-23",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 12400,
+      "2023": 12400,
+      "2024": 12400,
+      "2025": 12400
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 45,
+    "type": "Fugitive Emissions",
+    "item": "HFC-32",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 677,
+      "2023": 677,
+      "2024": 677,
+      "2025": 677
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 46,
+    "type": "Fugitive Emissions",
+    "item": "HFC-41",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 116,
+      "2023": 116,
+      "2024": 116,
+      "2025": 116
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 47,
+    "type": "Fugitive Emissions",
+    "item": "HFC-125",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3170,
+      "2023": 3170,
+      "2024": 3170,
+      "2025": 3170
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 48,
+    "type": "Fugitive Emissions",
+    "item": "HFC-134",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1120,
+      "2023": 1120,
+      "2024": 1120,
+      "2025": 1120
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 49,
+    "type": "Fugitive Emissions",
+    "item": "HFC-134a",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1300,
+      "2023": 1300,
+      "2024": 1300,
+      "2025": 1300
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 50,
+    "type": "Fugitive Emissions",
+    "item": "HFC-143",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 328,
+      "2023": 328,
+      "2024": 328,
+      "2025": 328
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 51,
+    "type": "Fugitive Emissions",
+    "item": "HFC-143a",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 4800,
+      "2023": 4800,
+      "2024": 4800,
+      "2025": 4800
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 52,
+    "type": "Fugitive Emissions",
+    "item": "HFC-152",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 16,
+      "2023": 16,
+      "2024": 16,
+      "2025": 16
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 53,
+    "type": "Fugitive Emissions",
+    "item": "HFC-152a",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 138,
+      "2023": 138,
+      "2024": 138,
+      "2025": 138
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 54,
+    "type": "Fugitive Emissions",
+    "item": "HFC-161",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 4,
+      "2023": 4,
+      "2024": 4,
+      "2025": 4
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 55,
+    "type": "Fugitive Emissions",
+    "item": "HFC-227ca",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 56,
+    "type": "Fugitive Emissions",
+    "item": "HFC-227ea",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3350,
+      "2023": 3350,
+      "2024": 3350,
+      "2025": 3350
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 57,
+    "type": "Fugitive Emissions",
+    "item": "HFC-236cb",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1210,
+      "2023": 1210,
+      "2024": 1210,
+      "2025": 1210
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 58,
+    "type": "Fugitive Emissions",
+    "item": "HFC-236ea",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1330,
+      "2023": 1330,
+      "2024": 1330,
+      "2025": 1330
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 59,
+    "type": "Fugitive Emissions",
+    "item": "HFC-236fa",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 8060,
+      "2023": 8060,
+      "2024": 8060,
+      "2025": 8060
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 60,
+    "type": "Fugitive Emissions",
+    "item": "HFC-245ca",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 716,
+      "2023": 716,
+      "2024": 716,
+      "2025": 716
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 61,
+    "type": "Fugitive Emissions",
+    "item": "HFC-245cb",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 62,
+    "type": "Fugitive Emissions",
+    "item": "HFC-245ea",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 63,
+    "type": "Fugitive Emissions",
+    "item": "HFC-245eb",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 64,
+    "type": "Fugitive Emissions",
+    "item": "HFC-245fa",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 858,
+      "2023": 858,
+      "2024": 858,
+      "2025": 858
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 65,
+    "type": "Fugitive Emissions",
+    "item": "HFC-263fb",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 66,
+    "type": "Fugitive Emissions",
+    "item": "HFC-272ca",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 67,
+    "type": "Fugitive Emissions",
+    "item": "HFC-329p",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 68,
+    "type": "Fugitive Emissions",
+    "item": "HFC-365mfc",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 804,
+      "2023": 804,
+      "2024": 804,
+      "2025": 804
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 69,
+    "type": "Fugitive Emissions",
+    "item": "HFC-43-I0mee",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1650,
+      "2023": 1650,
+      "2024": 1650,
+      "2025": 1650
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 70,
+    "type": "Fugitive Emissions",
+    "item": "HFO-1123",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 71,
+    "type": "Fugitive Emissions",
+    "item": "Perfluoromethane (PFC-14)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 6630,
+      "2023": 6630,
+      "2024": 6630,
+      "2025": 6630
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 72,
+    "type": "Fugitive Emissions",
+    "item": "Perfluoroethane (PFC-116)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 11100,
+      "2023": 11100,
+      "2024": 11100,
+      "2025": 11100
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 73,
+    "type": "Fugitive Emissions",
+    "item": "Perfluoropropane (PFC-218)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 8900,
+      "2023": 8900,
+      "2024": 8900,
+      "2025": 8900
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 74,
+    "type": "Fugitive Emissions",
+    "item": "Perfluorocyclobutane (PFC-318)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 9540,
+      "2023": 9540,
+      "2024": 9540,
+      "2025": 9540
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 75,
+    "type": "Fugitive Emissions",
+    "item": "Perfluorobutane (PFC-31-10)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": 9200,
+      "2024": 9200,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 76,
+    "type": "Fugitive Emissions",
+    "item": "Perfluoropentane (PFC-41-12)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": 8550,
+      "2024": 8550,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 77,
+    "type": "Fugitive Emissions",
+    "item": "Perfluorohexane (PFC-51-14)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": 7910,
+      "2024": 7910,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 78,
+    "type": "Fugitive Emissions",
+    "item": "Perfluoroheptane (PFC-61-16)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 79,
+    "type": "Fugitive Emissions",
+    "item": "Perfluorooctane (PFC-71-18)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 80,
+    "type": "Fugitive Emissions",
+    "item": "Perfluorodecalin (PFC-91-18)",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": null,
+      "2023": 7190,
+      "2024": 7190,
+      "2025": null
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 81,
+    "type": "Refrigerants",
+    "item": "R401A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 18,
+      "2023": 18,
+      "2024": 18,
+      "2025": 18
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 82,
+    "type": "Refrigerants",
+    "item": "R401B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 15,
+      "2023": 15,
+      "2024": 15,
+      "2025": 15
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 83,
+    "type": "Refrigerants",
+    "item": "R401C",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 21,
+      "2023": 21,
+      "2024": 21,
+      "2025": 21
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 84,
+    "type": "Refrigerants",
+    "item": "R402A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1902,
+      "2023": 1902,
+      "2024": 1902,
+      "2025": 1902
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 85,
+    "type": "Refrigerants",
+    "item": "R402B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1205,
+      "2023": 1205,
+      "2024": 1205,
+      "2025": 1205
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 86,
+    "type": "Refrigerants",
+    "item": "R403A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1780,
+      "2023": 1780,
+      "2024": 1780,
+      "2025": 1780
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 87,
+    "type": "Refrigerants",
+    "item": "R403B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3471,
+      "2023": 3471,
+      "2024": 3471,
+      "2025": 3471
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 88,
+    "type": "Refrigerants",
+    "item": "R404A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3943,
+      "2023": 3943,
+      "2024": 3943,
+      "2025": 3943
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 89,
+    "type": "Refrigerants",
+    "item": "R405A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3920,
+      "2023": 3920,
+      "2024": 3920,
+      "2025": 3920
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 90,
+    "type": "Refrigerants",
+    "item": "R407A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1923,
+      "2023": 1923,
+      "2024": 1923,
+      "2025": 1923
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 91,
+    "type": "Refrigerants",
+    "item": "R407B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2547,
+      "2023": 2547,
+      "2024": 2547,
+      "2025": 2547
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 92,
+    "type": "Refrigerants",
+    "item": "R407C",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1624,
+      "2023": 1624,
+      "2024": 1624,
+      "2025": 1624
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 93,
+    "type": "Refrigerants",
+    "item": "R407D",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1487,
+      "2023": 1487,
+      "2024": 1487,
+      "2025": 1487
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 94,
+    "type": "Refrigerants",
+    "item": "R407E",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1425,
+      "2023": 1425,
+      "2024": 1425,
+      "2025": 1425
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 95,
+    "type": "Refrigerants",
+    "item": "R407F",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1674,
+      "2023": 1674,
+      "2024": 1674,
+      "2025": 1674
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 96,
+    "type": "Refrigerants",
+    "item": "R408A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2430,
+      "2023": 2430,
+      "2024": 2430,
+      "2025": 2430
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 97,
+    "type": "Refrigerants",
+    "item": "R410A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1924,
+      "2023": 1924,
+      "2024": 1924,
+      "2025": 1924
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 98,
+    "type": "Refrigerants",
+    "item": "R410B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2048,
+      "2023": 2048,
+      "2024": 2048,
+      "2025": 2048
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 99,
+    "type": "Refrigerants",
+    "item": "R411A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 15,
+      "2023": 15,
+      "2024": 15,
+      "2025": 15
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 100,
+    "type": "Refrigerants",
+    "item": "R411B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 4,
+      "2023": 4,
+      "2024": 4,
+      "2025": 4
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 101,
+    "type": "Refrigerants",
+    "item": "R412A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 445,
+      "2023": 445,
+      "2024": 445,
+      "2025": 445
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 102,
+    "type": "Refrigerants",
+    "item": "R413A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1945,
+      "2023": 1945,
+      "2024": 1945,
+      "2025": 1945
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 103,
+    "type": "Refrigerants",
+    "item": "R415A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 25,
+      "2023": 25,
+      "2024": 25,
+      "2025": 25
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 104,
+    "type": "Refrigerants",
+    "item": "R415B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 104,
+      "2023": 104,
+      "2024": 104,
+      "2025": 104
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 105,
+    "type": "Refrigerants",
+    "item": "R416A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 767,
+      "2023": 767,
+      "2024": 767,
+      "2025": 767
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 106,
+    "type": "Refrigerants",
+    "item": "R417A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2127,
+      "2023": 2127,
+      "2024": 2127,
+      "2025": 2127
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 107,
+    "type": "Refrigerants",
+    "item": "R417B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2742,
+      "2023": 2742,
+      "2024": 2742,
+      "2025": 2742
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 108,
+    "type": "Refrigerants",
+    "item": "R417C",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1643,
+      "2023": 1643,
+      "2024": 1643,
+      "2025": 1643
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 109,
+    "type": "Refrigerants",
+    "item": "R418A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3,
+      "2023": 3,
+      "2024": 3,
+      "2025": 3
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 110,
+    "type": "Refrigerants",
+    "item": "R419A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2688,
+      "2023": 2688,
+      "2024": 2688,
+      "2025": 2688
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 111,
+    "type": "Refrigerants",
+    "item": "R419B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2161,
+      "2023": 2161,
+      "2024": 2161,
+      "2025": 2161
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 112,
+    "type": "Refrigerants",
+    "item": "R420A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1144,
+      "2023": 1144,
+      "2024": 1144,
+      "2025": 1144
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 113,
+    "type": "Refrigerants",
+    "item": "R421A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2385,
+      "2023": 2385,
+      "2024": 2385,
+      "2025": 2385
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 114,
+    "type": "Refrigerants",
+    "item": "R421B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2890,
+      "2023": 2890,
+      "2024": 2890,
+      "2025": 2890
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 115,
+    "type": "Refrigerants",
+    "item": "R422A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2847,
+      "2023": 2847,
+      "2024": 2847,
+      "2025": 2847
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 116,
+    "type": "Refrigerants",
+    "item": "R422B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2290,
+      "2023": 2290,
+      "2024": 2290,
+      "2025": 2290
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 117,
+    "type": "Refrigerants",
+    "item": "R422C",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2794,
+      "2023": 2794,
+      "2024": 2794,
+      "2025": 2794
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 118,
+    "type": "Refrigerants",
+    "item": "R422D",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2473,
+      "2023": 2473,
+      "2024": 2473,
+      "2025": 2473
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 119,
+    "type": "Refrigerants",
+    "item": "R422E",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2350,
+      "2023": 2350,
+      "2024": 2350,
+      "2025": 2350
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 120,
+    "type": "Refrigerants",
+    "item": "R423A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2274,
+      "2023": 2274,
+      "2024": 2274,
+      "2025": 2274
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 121,
+    "type": "Refrigerants",
+    "item": "R424A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2212,
+      "2023": 2212,
+      "2024": 2212,
+      "2025": 2212
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 122,
+    "type": "Refrigerants",
+    "item": "R425A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1431,
+      "2023": 1431,
+      "2024": 1431,
+      "2025": 1431
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 123,
+    "type": "Refrigerants",
+    "item": "R426A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1371,
+      "2023": 1371,
+      "2024": 1371,
+      "2025": 1371
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 124,
+    "type": "Refrigerants",
+    "item": "R427A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2024,
+      "2023": 2024,
+      "2024": 2024,
+      "2025": 2024
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 125,
+    "type": "Refrigerants",
+    "item": "R428A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3417,
+      "2023": 3417,
+      "2024": 3417,
+      "2025": 3417
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 126,
+    "type": "Refrigerants",
+    "item": "R429A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 13.8,
+      "2023": 13.8,
+      "2024": 13.8,
+      "2025": 13.8
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 127,
+    "type": "Refrigerants",
+    "item": "R430A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 105,
+      "2023": 105,
+      "2024": 105,
+      "2025": 105
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 128,
+    "type": "Refrigerants",
+    "item": "R431A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 40,
+      "2023": 40,
+      "2024": 40,
+      "2025": 40
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 129,
+    "type": "Refrigerants",
+    "item": "R434A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3075,
+      "2023": 3075,
+      "2024": 3075,
+      "2025": 3075
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 130,
+    "type": "Refrigerants",
+    "item": "R435A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 27.6,
+      "2023": 27.6,
+      "2024": 27.6,
+      "2025": 27.6
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 131,
+    "type": "Refrigerants",
+    "item": "R437A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1639,
+      "2023": 1639,
+      "2024": 1639,
+      "2025": 1639
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 132,
+    "type": "Refrigerants",
+    "item": "R438A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 2059,
+      "2023": 2059,
+      "2024": 2059,
+      "2025": 2059
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 133,
+    "type": "Refrigerants",
+    "item": "R439A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1828,
+      "2023": 1828,
+      "2024": 1828,
+      "2025": 1828
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 134,
+    "type": "Refrigerants",
+    "item": "R440A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 156,
+      "2023": 156,
+      "2024": 156,
+      "2025": 156
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 135,
+    "type": "Refrigerants",
+    "item": "R442A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 1754,
+      "2023": 1754,
+      "2024": 1754,
+      "2025": 1754
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 136,
+    "type": "Refrigerants",
+    "item": "R444A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 88,
+      "2023": 88,
+      "2024": 88,
+      "2025": 88
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 137,
+    "type": "Refrigerants",
+    "item": "R445A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 117,
+      "2023": 117,
+      "2024": 117,
+      "2025": 117
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 138,
+    "type": "Refrigerants",
+    "item": "R500",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 36,
+      "2023": 36,
+      "2024": 36,
+      "2025": 36
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 139,
+    "type": "Refrigerants",
+    "item": "R503",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 4972,
+      "2023": 4972,
+      "2024": 4972,
+      "2025": 4972
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 140,
+    "type": "Refrigerants",
+    "item": "R504",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 326,
+      "2023": 326,
+      "2024": 326,
+      "2025": 326
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 141,
+    "type": "Refrigerants",
+    "item": "R507A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 3985,
+      "2023": 3985,
+      "2024": 3985,
+      "2025": 3985
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 142,
+    "type": "Refrigerants",
+    "item": "R508A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 11607,
+      "2023": 11607,
+      "2024": 11607,
+      "2025": 11607
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 143,
+    "type": "Refrigerants",
+    "item": "R508B",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 11698,
+      "2023": 11698,
+      "2024": 11698,
+      "2025": 11698
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 144,
+    "type": "Refrigerants",
+    "item": "R509A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 4984,
+      "2023": 4984,
+      "2024": 4984,
+      "2025": 4984
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 145,
+    "type": "Refrigerants",
+    "item": "R511A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 6.9,
+      "2023": 6.9,
+      "2024": 6.9,
+      "2025": 6.9
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  },
+  {
+    "r": 146,
+    "type": "Refrigerants",
+    "item": "R512A",
+    "renewable": false,
+    "unitStr": "Co2e (kg/kg)",
+    "densKgM3": null,
+    "densKgL": null,
+    "cv": null,
+    "defra": {
+      "2022": 196,
+      "2023": 196,
+      "2024": 196,
+      "2025": 196
+    },
+    "ipcc2014": null,
+    "imo2024": null
+  }
+]

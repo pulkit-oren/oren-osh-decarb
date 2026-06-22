@@ -25,7 +25,7 @@ describe("baseline", () => {
   });
 
   it("combustion energy kJ = volume × density × CV", () => {
-    expect(combustionEnergyKJ(genset)).toBeCloseTo(250000 * 0.83057 * 42839, -3);
+    expect(combustionEnergyKJ(genset)).toBeCloseTo(250000 * 0.830565 * 42839, -3);
   });
 
   it("refrigerant CO2e = topped-up kg × gwp (tonnes)", () => {

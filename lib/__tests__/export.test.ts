@@ -23,7 +23,7 @@ describe("export sheets", () => {
 
   it("factors sheet carries the DEFRA 2025 diesel EF actually used", () => {
     const s = factorsSheet(DEFAULT_SETTINGS);
-    expect(s.rows.some((r) => r[1] === "Diesel (HSD)" && r[2] === "EF 2025" && r[3] === 2.57082)).toBe(true);
+    expect(s.rows.some((r) => r[1] === "Diesel" && r[2] === "EF 2025" && r[3] === 2.57082)).toBe(true);
     expect(s.rows.some((r) => r[0] === "Assumption" && r[1] === "Grid emission factor")).toBe(true);
   });
 

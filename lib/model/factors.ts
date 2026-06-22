@@ -22,92 +22,241 @@ export const LATEST_DEFRA_YEAR = 2025;
 export const DEFRA_YEARS = [2022, 2023, 2024, 2025];
 
 export const FUELS: Record<FuelId, FuelFactor> = {
-  /* ---- Liquid fossil fuels (DEFRA 2022–2025, kgCO2e per litre) ---- */
+  /* ---- Liquid fossil fuels — workbook "Fuels - Liquid" (DEFRA 2022–2025, kgCO2e per litre) ---- */
   diesel: {
-    id: "diesel", label: "Diesel (HSD)", unit: "L", densityKgPerUnit: 0.83057, cvKJperKg: 42839, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2.57082, co2eByYear: { 2022: 2.56, 2023: 2.51, 2024: 2.51279, 2025: 2.57082 }, typicalPricePerUnit: 92,
+    id: "diesel", label: "Diesel", unit: "L", densityKgPerUnit: 0.830565, cvKJperKg: 42839,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.57082, co2eByYear: { 2022: 2.56, 2023: 2.51, 2024: 2.51279, 2025: 2.57082 },
+    typicalPricePerUnit: 92,
   },
   petrol: {
-    id: "petrol", label: "Petrol", unit: "L", densityKgPerUnit: 0.746204, cvKJperKg: 43061, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2.06916, co2eByYear: { 2022: 2.16, 2023: 2.1, 2024: 2.0844, 2025: 2.06916 }, typicalPricePerUnit: 105,
+    id: "petrol", label: "Petrol", unit: "L", densityKgPerUnit: 0.746204, cvKJperKg: 43061,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.06916, co2eByYear: { 2022: 2.16, 2023: 2.1, 2024: 2.0844, 2025: 2.06916 },
+    typicalPricePerUnit: 105,
   },
   fuelOil: {
-    id: "fuelOil", label: "Furnace / fuel oil (FO)", unit: "L", densityKgPerUnit: 0.983284, cvKJperKg: 40752, renewable: false, efSource: "DEFRA",
-    co2eFactor: 3.17492, co2eByYear: { 2022: 3.18, 2023: 3.17, 2024: 3.17493, 2025: 3.17492 }, typicalPricePerUnit: 62,
+    id: "fuelOil", label: "Fuel Oil / Furnace Oil", unit: "L", densityKgPerUnit: 0.983284, cvKJperKg: 40752,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 3.17492, co2eByYear: { 2022: 3.18, 2023: 3.17, 2024: 3.17493, 2025: 3.17492 },
+    typicalPricePerUnit: 62,
   },
+  kerosene: {
+    id: "kerosene", label: "Kerosene / Burning Oil", unit: "L", densityKgPerUnit: 0.802568, cvKJperKg: 43865,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.54016, co2eByYear: { 2022: 2.54, 2023: 2.54, 2024: 2.54015, 2025: 2.54016 },
+    typicalPricePerUnit: 78,
+  },
+  lubricants: {
+    id: "lubricants", label: "Lubricants", unit: "L", densityKgPerUnit: 0.864304, cvKJperKg: 40752,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.74934, co2eByYear: { 2022: 2.75, 2023: 2.75, 2024: 2.74934, 2025: 2.74934 },
+    typicalPricePerUnit: 62,
+  },
+  residualFuelOil: {
+    id: "residualFuelOil", label: "Residual Fuel Oil", unit: "L", densityKgPerUnit: 0.983284, cvKJperKg: 40752,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 3.17492, co2eByYear: { 2022: 3.18, 2023: 3.17, 2024: 3.17493, 2025: 3.17492 },
+    typicalPricePerUnit: 62,
+  },
+  marineHfoVlsfo: {
+    id: "marineHfoVlsfo", label: "Marine Heavy Fuel Oil (VLSFO)", unit: "L",
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 3.10202, co2eByYear: { 2022: 3.11, 2023: 3.1, 2024: 3.10202, 2025: 3.10202 },
+    typicalPricePerUnit: 62,
+  },
+  marineHfoHsfo: {
+    id: "marineHfoHsfo", label: "Marine Heavy Fuel Oil (HSFO)", unit: "L",
+    renewable: false, efSource: "IMO", excelCategory: "liquid",
+    co2eFactor: 3.1251428, co2eByYear: {},
+    typicalPricePerUnit: 60,
+  },
+  marineLfoUlsfo: {
+    id: "marineLfoUlsfo", label: "Marine Light Fuel Oil (ULSFO)", unit: "L",
+    renewable: false, efSource: "IMO", excelCategory: "liquid",
+    co2eFactor: 2.9952936, co2eByYear: {},
+    typicalPricePerUnit: 62,
+  },
+  marineLfoVlsfo: {
+    id: "marineLfoVlsfo", label: "Marine Light Fuel Oil (VLSFO)", unit: "L",
+    renewable: false, efSource: "IMO", excelCategory: "liquid",
+    co2eFactor: 2.9952936, co2eByYear: {},
+    typicalPricePerUnit: 62,
+  },
+  marineGasOil: {
+    id: "marineGasOil", label: "Marine Gas Oil (ULSGO)", unit: "L",
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.77139, co2eByYear: { 2022: 2.78, 2023: 2.77, 2024: 2.77139, 2025: 2.77139 },
+    typicalPricePerUnit: 62,
+  },
+  jetFuel: {
+    id: "jetFuel", label: "Jet Fuel (Aviation Turbine Fuel)", unit: "L", densityKgPerUnit: 0.800, cvKJperKg: 43905,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.54269, co2eByYear: { 2022: 2.55, 2023: 2.54, 2024: 2.54269, 2025: 2.54269 },
+    typicalPricePerUnit: 80,
+  },
+  aviationGasoline: {
+    id: "aviationGasoline", label: "Aviation Gasoline (Aviation Spirit)", unit: "L", densityKgPerUnit: 0.729927, cvKJperKg: 44797,
+    renewable: false, efSource: "DEFRA", excelCategory: "liquid",
+    co2eFactor: 2.33116, co2eByYear: { 2022: 2.33, 2023: 2.33, 2024: 2.33116, 2025: 2.33116 },
+    typicalPricePerUnit: 80,
+  },
+  biodiesel: {
+    id: "biodiesel", label: "Biodiesel", unit: "t",
+    renewable: true, efSource: "IPCC", excelCategory: "liquid",
+    co2eFactor: 1924.62, co2eByYear: {},
+    typicalPricePerUnit: 78000,
+  },
+
+  /* ---- App-only liquid fuels (no Excel row — not shown in Activity tab) ---- */
   ldo: {
     id: "ldo", label: "Light diesel oil (LDO)", unit: "L", densityKgPerUnit: 0.86, cvKJperKg: 42000, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.7595, co2eByYear: { 2022: 2.7595, 2023: 2.7595, 2024: 2.7595, 2025: 2.7595 }, typicalPricePerUnit: 85,
-  },
-  kerosene: {
-    id: "kerosene", label: "Kerosene / SKO", unit: "L", densityKgPerUnit: 0.802568, cvKJperKg: 43865, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2.54016, co2eByYear: { 2022: 2.54, 2023: 2.54, 2024: 2.54015, 2025: 2.54016 }, typicalPricePerUnit: 78,
   },
   naphtha: {
     id: "naphtha", label: "Naphtha", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 44500, renewable: false, efSource: "DEFRA",
     co2eFactor: 3.1313, co2eByYear: { 2022: 3.1313, 2023: 3.1313, 2024: 3.1313, 2025: 3.1313 }, typicalPricePerUnit: 70,
   },
 
-  /* ---- Gaseous fossil fuels ---- */
+  /* ---- Gaseous fuels — workbook "Fuels - Gas" ---- */
   lpg: {
-    id: "lpg", label: "LPG", unit: "L", densityKgPerUnit: 0.529749, cvKJperKg: 45944, renewable: false, efSource: "DEFRA",
-    co2eFactor: 1.55713, co2eByYear: { 2022: 1.56, 2023: 1.56, 2024: 1.55713, 2025: 1.55713 }, typicalPricePerUnit: 58,
+    id: "lpg", label: "Liquefied Petroleum Gases (LPG)", unit: "L", densityKgPerUnit: 0.529749, cvKJperKg: 45944,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 1.55713, co2eByYear: { 2022: 1.56, 2023: 1.56, 2024: 1.55713, 2025: 1.55713 },
+    typicalPricePerUnit: 58,
   },
   propane: {
-    id: "propane", label: "Propane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 46300, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2.99711, co2eByYear: { 2022: 2.99711, 2023: 2.99711, 2024: 2.99711, 2025: 2.99711 }, typicalPricePerUnit: 80,
+    id: "propane", label: "Propane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 46300,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 2.99711, co2eByYear: { 2022: 2.99711, 2023: 2.99711, 2024: 2.99711, 2025: 2.99711 },
+    typicalPricePerUnit: 80,
   },
   butane: {
-    id: "butane", label: "Butane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45750, renewable: false, efSource: "DEFRA",
-    co2eFactor: 3.03307, co2eByYear: { 2022: 3.03307, 2023: 3.03307, 2024: 3.03307, 2025: 3.03307 }, typicalPricePerUnit: 80,
+    id: "butane", label: "Butane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45750,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 3.03307, co2eByYear: { 2022: 3.03307, 2023: 3.03307, 2024: 3.03307, 2025: 3.03307 },
+    typicalPricePerUnit: 80,
   },
   cng: {
-    id: "cng", label: "CNG", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45745, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2.69952, co2eByYear: { 2022: 2.69952, 2023: 2.69952, 2024: 2.69952, 2025: 2.69952 }, typicalPricePerUnit: 88,
+    id: "cng", label: "Compressed Natural Gas (CNG) - KG", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45745,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 2.69952, co2eByYear: { 2022: 2.69952, 2023: 2.69952, 2024: 2.69952, 2025: 2.69952 },
+    typicalPricePerUnit: 88,
   },
   png: {
-    id: "png", label: "Piped / natural gas (PNG)", unit: "m3", densityKgPerUnit: 0.802, cvKJperKg: 45745, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2.06672, co2eByYear: { 2022: 2.02, 2023: 2.04, 2024: 2.04542, 2025: 2.06672 }, typicalPricePerUnit: 50,
+    id: "png", label: "Piped Natural Gas (PNG)", unit: "m3", densityKgPerUnit: 0.802, cvKJperKg: 45745,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 2.06672, co2eByYear: { 2022: 2.02, 2023: 2.04, 2024: 2.04542, 2025: 2.06672 },
+    typicalPricePerUnit: 50,
   },
-
-  /* ---- Solid fossil fuels (kgCO2e per tonne) ---- */
-  coal: {
-    id: "coal", label: "Coal (steam / industrial)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 25405, renewable: false, efSource: "DEFRA",
-    co2eFactor: 2395.28994, co2eByYear: { 2022: 2411.43, 2023: 2396.48, 2024: 2399.43994, 2025: 2395.28994 }, typicalPricePerUnit: 6000,
+  lng: {
+    id: "lng", label: "Liquefied Natural Gas (LNG)", unit: "L", densityKgPerUnit: 0.452489, cvKJperKg: 45745,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 1.17797, co2eByYear: { 2022: 1.56, 2023: 1.17, 2024: 1.17216, 2025: 1.17797 },
+    typicalPricePerUnit: 62,
   },
-  cokingCoal: {
-    id: "cokingCoal", label: "Coking coal (metallurgical)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 28300, renewable: false, efSource: "DEFRA",
-    co2eFactor: 3165.24, co2eByYear: { 2022: 3165.24, 2023: 3165.24, 2024: 3165.24, 2025: 3165.24 }, typicalPricePerUnit: 20000,
+  cngScm: {
+    id: "cngScm", label: "Compressed Natural Gas (CNG) - SCM", unit: "m3", densityKgPerUnit: 0.175, cvKJperKg: 45745,
+    renewable: false, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 0.4507, co2eByYear: { 2022: 0.44, 2023: 0.45, 2024: 0.44942, 2025: 0.4507 },
+    typicalPricePerUnit: 50,
   },
-  lignite: {
-    id: "lignite", label: "Lignite (brown coal)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 11900, renewable: false, efSource: "DEFRA",
-    co2eFactor: 1185.62, co2eByYear: { 2022: 1185.62, 2023: 1185.62, 2024: 1185.62, 2025: 1185.62 }, typicalPricePerUnit: 3200,
-  },
-  petcoke: {
-    id: "petcoke", label: "Petroleum coke (petcoke)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 32000, renewable: false, efSource: "DEFRA",
-    co2eFactor: 3386.4, co2eByYear: { 2022: 3386.4, 2023: 3386.4, 2024: 3386.4, 2025: 3386.4 }, typicalPricePerUnit: 14000,
-  },
-
-  /* ---- Biomass / renewable fuels ----
-     The combustion CO₂ is biogenic (carbon recently absorbed by the plant), so under
-     the GHG Protocol / BRSR it is reported SEPARATELY and excluded from gross Scope 1.
-     Only the CH₄ and N₂O from combustion stay in Scope 1 — that is `co2eFactor` here.
-     `biogenicCO2ePerUnit` carries the biogenic CO₂ for transparent reporting. */
   biogas: {
-    id: "biogas", label: "Biogas", unit: "m3", densityKgPerUnit: 1.15, cvKJperKg: 20000, renewable: true, efSource: "DEFRA",
+    id: "biogas", label: "Biogas", unit: "m3", densityKgPerUnit: 1.15, cvKJperKg: 20000,
+    renewable: true, efSource: "DEFRA", excelCategory: "gas",
     co2eFactor: 0.02262, co2eByYear: { 2022: 0.02262, 2023: 0.02262, 2024: 0.02262, 2025: 0.02262 },
     biogenicCO2ePerUnit: 1.1908, typicalPricePerUnit: 25,
   },
+  landfillGas: {
+    id: "landfillGas", label: "Landfill gas", unit: "t",
+    renewable: true, efSource: "DEFRA", excelCategory: "gas",
+    co2eFactor: 0.69696, co2eByYear: { 2025: 0.69696 },
+    typicalPricePerUnit: 25,
+  },
+
+  /* ---- App-only gaseous fuels ---- */
   bioCng: {
     id: "bioCng", label: "Bio-CNG (compressed biogas)", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 48000, renewable: true, efSource: "DEFRA",
     co2eFactor: 0.1209, co2eByYear: { 2022: 0.1209, 2023: 0.1209, 2024: 0.1209, 2025: 0.1209 },
     biogenicCO2ePerUnit: 2.6086, typicalPricePerUnit: 75,
   },
+
+  /* ---- Solid fuels — workbook "Fuels - Solid" (kgCO2e per tonne unless noted) ---- */
+  coal: {
+    id: "coal", label: "Coal (Industrial)", unit: "t", cvKJperKg: 25405,
+    renewable: false, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 2395.28994, co2eByYear: { 2022: 2411.43, 2023: 2396.48, 2024: 2399.43994, 2025: 2395.28994 },
+    typicalPricePerUnit: 6000,
+  },
+  cokingCoal: {
+    id: "cokingCoal", label: "Coal - Coking", unit: "t", cvKJperKg: 30240,
+    renewable: false, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 3164.65002, co2eByYear: { 2022: 3165.24, 2023: 3164.65, 2024: 3164.65002, 2025: 3164.65002 },
+    typicalPricePerUnit: 20000,
+  },
+  lignite: {
+    id: "lignite", label: "Coal - Lignite", unit: "t",
+    renewable: false, efSource: "IPCC", excelCategory: "solid",
+    co2eFactor: 1210.72, co2eByYear: {},
+    typicalPricePerUnit: 3200,
+  },
+  petcoke: {
+    id: "petcoke", label: "Petroleum Coke", unit: "t", cvKJperKg: 33972,
+    renewable: false, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 3386.57168, co2eByYear: { 2022: 3386.87, 2023: 3386.57, 2024: 3386.57168, 2025: 3386.57168 },
+    typicalPricePerUnit: 14000,
+  },
+  coalAnthracite: {
+    id: "coalAnthracite", label: "Coal - Anthracite", unit: "t",
+    renewable: false, efSource: "IPCC", excelCategory: "solid",
+    co2eFactor: 2643.09, co2eByYear: {},
+    typicalPricePerUnit: 6000,
+  },
+  coalBituminous: {
+    id: "coalBituminous", label: "Coal - Bituminous", unit: "t",
+    renewable: false, efSource: "IPCC", excelCategory: "solid",
+    co2eFactor: 2458.88, co2eByYear: {},
+    typicalPricePerUnit: 6000,
+  },
+  coalBriquettes: {
+    id: "coalBriquettes", label: "Coal - Briquettes", unit: "t",
+    renewable: false, efSource: "IPCC", excelCategory: "solid",
+    // No DEFRA or IPCC factor in the workbook; use IPCC bituminous coal as proxy (2458.88)
+    co2eFactor: 2458.88, co2eByYear: {},
+    typicalPricePerUnit: 6000,
+  },
+  coalElectricity: {
+    id: "coalElectricity", label: "Coal (Electricity Generation)", unit: "t", cvKJperKg: 23826,
+    renewable: false, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 2225.22448, co2eByYear: { 2022: 2270.45, 2023: 2199.33, 2024: 2262.11448, 2025: 2225.22448 },
+    typicalPricePerUnit: 6000,
+  },
+  woodPellets: {
+    id: "woodPellets", label: "Wood Pellets", unit: "t", densityKgPerUnit: 650, cvKJperKg: 17280,
+    renewable: true, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 55.19389, co2eByYear: { 2022: 50.55459, 2023: 51.56192, 2024: 54.33654, 2025: 55.19389 },
+    typicalPricePerUnit: 8000,
+  },
+  woodChips: {
+    id: "woodChips", label: "Wood Chips", unit: "t", densityKgPerUnit: 253, cvKJperKg: 13600,
+    renewable: true, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 43.43964, co2eByYear: { 2022: 39.78833, 2023: 40.58114, 2024: 42.76487, 2025: 43.43964 },
+    typicalPricePerUnit: 5000,
+  },
+  woodLogs: {
+    id: "woodLogs", label: "Wood Logs", unit: "t", densityKgPerUnit: 425, cvKJperKg: 14710,
+    renewable: true, efSource: "DEFRA", excelCategory: "solid",
+    co2eFactor: 46.98508, co2eByYear: { 2022: 43.03576, 2023: 43.89327, 2024: 46.25524, 2025: 46.98508 },
+    typicalPricePerUnit: 5000,
+  },
   bioBriquettes: {
-    id: "bioBriquettes", label: "Bio-briquettes / pellets", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 16200, renewable: true, efSource: "DEFRA",
+    id: "bioBriquettes", label: "Bio Briquettes", unit: "t", cvKJperKg: 16200,
+    renewable: true, efSource: "DEFRA", excelCategory: "solid",
     co2eFactor: 28.0, co2eByYear: { 2022: 28.0, 2023: 28.0, 2024: 28.0, 2025: 28.0 },
     biogenicCO2ePerUnit: 1560.0, typicalPricePerUnit: 8000,
   },
+
+  /* ---- App-only solid / biomass fuels ---- */
   biomass: {
     id: "biomass", label: "Biomass (wood / agro-residue)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 15000, renewable: true, efSource: "DEFRA",
     co2eFactor: 32.0, co2eByYear: { 2022: 32.0, 2023: 32.0, 2024: 32.0, 2025: 32.0 },

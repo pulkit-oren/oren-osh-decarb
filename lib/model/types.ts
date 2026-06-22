@@ -28,7 +28,13 @@ export type FuelId =
   | "bioBriquettes"
   | "biomass"
   | "bagasse"
-  | "riceHusk";
+  | "riceHusk"
+  // Added from Emission Factor 2025 workbook
+  | "lubricants" | "residualFuelOil" | "marineHfoVlsfo" | "marineHfoHsfo"
+  | "marineLfoUlsfo" | "marineLfoVlsfo" | "marineGasOil" | "jetFuel" | "aviationGasoline"
+  | "biodiesel" | "lng" | "cngScm" | "landfillGas"
+  | "coalAnthracite" | "coalBituminous" | "coalBriquettes" | "coalElectricity"
+  | "woodPellets" | "woodChips" | "woodLogs";
 
 export type AltFuelId = "biodiesel" | "ethanol" | "biogas" | "bioCng" | "biomass";
 

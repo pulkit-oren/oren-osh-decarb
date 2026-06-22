@@ -118,4 +118,22 @@ describe("efFor source fallback", () => {
     expect(ef.sourceYear).toBe(2025);
     expect(ef.exact).toBe(false);
   });
+  it("falls back to IMO for a marine fuel with no DEFRA factor", () => {
+    const ef = efFor("marineHfoHsfo", 2025);
+    expect(ef.source).toBe("IMO");
+    expect(ef.value).toBeCloseTo(3.1251428, 5);
+  });
+  it("falls back to IPCC for anthracite", () => {
+    const ef = efFor("coalAnthracite", 2025);
+    expect(ef.source).toBe("IPCC");
+    expect(ef.value).toBeCloseTo(2643.09, 2);
+  });
+});
+
+describe("FUELS completeness (Task 2)", () => {
+  it("every Excel-listed fuel has a category and an EF source", () => {
+    const listed = Object.values(FUELS).filter((f) => f.excelCategory);
+    expect(listed.length).toBe(35);
+    for (const f of listed) expect(["DEFRA", "IPCC", "IMO"]).toContain(f.efSource);
+  });
 });
