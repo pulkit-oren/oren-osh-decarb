@@ -44,6 +44,7 @@ interface StoreShape {
   addCombustionAsset: (year: number, asset: CombustionAsset) => void;
 
   addRefrigeration: (year: number) => void;
+  addRefrigerationSystem: (year: number, system: RefrigerationSystem) => void;
   delRefrigeration: (year: number, id: string) => void;
   updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
   copyRefrigeration: (fromYear: number, toYear: number) => void;
@@ -197,6 +198,10 @@ export function ScenarioProvider({
       return { ...p, bySystem: { ...p.bySystem, [line.id]: defaultSystemActions(line) } };
     });
   };
+  const addRefrigerationSystem = (year: number, system: RefrigerationSystem) => {
+    setRefrigeration((prev) => ({ ...prev, [year]: [...(prev[year] ?? []), system] }));
+    setSettingsState((p) => (p.bySystem[system.id] ? p : { ...p, bySystem: { ...p.bySystem, [system.id]: defaultSystemActions(system) } }));
+  };
   const delRefrigeration = (year: number, id: string) =>
     setRefrigeration((prev) => ({ ...prev, [year]: (prev[year] ?? []).filter((s) => s.id !== id) }));
   const updateRefrigeration = (year: number, id: string, patch: Partial<RefrigerationSystem>) =>
@@ -246,14 +251,14 @@ export function ScenarioProvider({
   const selectedAssets = useMemo(() => resolveCombustion(combustion, selectedYear), [combustion, selectedYear]);
   const selectedSystems = useMemo(() => resolveRefrigeration(refrigeration, selectedYear), [refrigeration, selectedYear]);
 
-  const result = useMemo(() => compute(baseAssets.filter((a) => !a.excluded), baseSystems, settings, baseYear), [baseAssets, baseSystems, settings, baseYear]);
-  const selectedBaseline = useMemo(() => baselineScope1(selectedAssets.filter((a) => !a.excluded), selectedSystems), [selectedAssets, selectedSystems]);
+  const result = useMemo(() => compute(baseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), settings, baseYear), [baseAssets, baseSystems, settings, baseYear]);
+  const selectedBaseline = useMemo(() => baselineScope1(selectedAssets.filter((a) => !a.excluded), selectedSystems.filter((s) => !s.excluded)), [selectedAssets, selectedSystems]);
 
   const value: StoreShape = {
     combustion, refrigeration, settings, scenarios, selectedYear, baseYear,
     setSelectedYear, setBaseYear,
     addCombustion, delCombustion, updateCombustion, copyCombustion, importCombustion, addCombustionAsset,
-    addRefrigeration, delRefrigeration, updateRefrigeration, copyRefrigeration,
+    addRefrigeration, addRefrigerationSystem, delRefrigeration, updateRefrigeration, copyRefrigeration,
     setSettings, updateAction, updateSystemAction, updateAssumptions, resetSettings, saveScenario, deleteScenario,
     result, baseAssets, baseSystems, selectedAssets, selectedSystems, selectedBaseline,
   };

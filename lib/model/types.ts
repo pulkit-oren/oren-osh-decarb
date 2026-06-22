@@ -162,6 +162,10 @@ export interface RefrigerationSystem {
    *  IS the annual fugitive loss. */
   toppedUpKg: number;
   gasCostPerKg: number;
+  /** Business unit this entry belongs to. Absent ⇒ Central (consolidated). */
+  bu?: string;
+  /** When true, excluded from all footprint totals (a non-aggregated BU). */
+  excluded?: boolean;
 }
 
 /* ---------- Per-asset action plans (the "Switch" scenario) ---------- */
