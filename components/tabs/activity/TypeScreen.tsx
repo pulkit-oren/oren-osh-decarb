@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, ChevronRight, Settings } from "lucide-react";
-import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, type Nav, type CatDef, unitLabel, showNum } from "./shared";
+import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, type Nav, type CatDef, type Sel, unitLabel, showNum } from "./shared";
 import { fmt, cn } from "@/lib/utils";
 import { Zap } from "lucide-react";
 import { FUELS } from "@/lib/model/factors";
@@ -13,6 +13,7 @@ import type { Facility } from "@/lib/scope2/model/types";
 type Props = {
   nav: Nav & { level: "type" };
   setNav: (n: Nav) => void;
+  setSel: (s: Sel) => void;
   year: number;
   buReg: { mode: "central" | "bu"; units: { name: string; aggregate: boolean }[] };
   typesFor: (d: CatDef) => { key: string; label: string; gridEf?: number; gwp?: number }[];
@@ -31,7 +32,7 @@ type Props = {
   updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
 };
 
-export function TypeScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, entryFor, emOfEntry, openEntry, ensureEntry, ensureRefrigEntry, combById, facById, refrigSysById, selectedSystems, updateCombustion, updateFacility, updateRefrigeration }: Props) {
+export function TypeScreen({ nav, setNav, setSel, year, buReg, typesFor, typeAggTotal, entryFor, emOfEntry, openEntry, ensureEntry, ensureRefrigEntry, combById, facById, refrigSysById, selectedSystems, updateCombustion, updateFacility, updateRefrigeration }: Props) {
   const def = CAT_DEFS.find((c) => c.key === nav.key)!;
   const t = typesFor(def).find((x) => x.key === nav.typeKey);
   if (!t) { setNav({ level: "cat", key: nav.key }); return null; }
@@ -138,7 +139,7 @@ export function TypeScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, e
                     <button
                       onClick={() => {
                         const id = ensureRefrigEntry(t.key as RefrigerantId, u.name, u.aggregate);
-                        setNav({ level: "entry", kind: "combustion", id });
+                        setSel({ kind: "refrigerant", id });
                       }}
                       aria-label={`${u.name} details`}
                       className="p-1.5 rounded-lg text-ink-faint hover:text-brand-600 hover:bg-brand-50"

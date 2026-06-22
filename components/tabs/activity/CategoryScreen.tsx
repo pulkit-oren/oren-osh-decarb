@@ -2,12 +2,11 @@
 
 import { ArrowLeft, ChevronRight, ChevronDown, Check } from "lucide-react";
 import { useState } from "react";
-import { CAT_DEFS, META, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, ScopeBadge, type Nav, type CatKey, type CatDef, type Sel } from "./shared";
+import { CAT_DEFS, META, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, ScopeBadge, type Nav, type CatKey, type CatDef } from "./shared";
 import { FUELS, FUELS_BY_CATEGORY } from "@/lib/model/factors";
 import { fuelFamily, type FuelFamily } from "@/lib/activity-groups";
 import { fmt, cn } from "@/lib/utils";
-import { DetailPanel } from "../DataInputTab";
-import type { FuelId, RefrigerationSystem } from "@/lib/model/types";
+import type { FuelId } from "@/lib/model/types";
 import { Zap } from "lucide-react";
 import { IconTile, unitLabel } from "./shared";
 
@@ -16,22 +15,15 @@ type Props = {
   setNav: (n: Nav) => void;
   year: number;
   buReg: { mode: "central" | "bu"; units: { name: string; aggregate: boolean }[] };
-  sel: Sel;
-  setSel: (s: Sel) => void;
   typesFor: (d: CatDef) => { key: string; label: string; gridEf?: number; gwp?: number }[];
   typeAggTotal: (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") => number;
   catTotal: (d: CatDef) => number;
   nWithData: (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") => number;
   // gas list passed from container
   refrigGases: { key: string; label: string; gwp: number }[];
-  // store access for refrigerant ops
-  selectedSystems: RefrigerationSystem[];
-  updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
-  delRefrigeration: (year: number, id: string) => void;
-  co2Ref: (id: string) => number;
 };
 
-export function CategoryScreen({ nav, setNav, year, buReg, sel, setSel, typesFor, typeAggTotal, catTotal, nWithData, refrigGases, selectedSystems, updateRefrigeration, delRefrigeration, co2Ref }: Props) {
+export function CategoryScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, catTotal, nWithData, refrigGases }: Props) {
   const [catMode, setCatMode] = useState<"stationary" | "mobile">("stationary");
   const [fuelFilter, setFuelFilter] = useState<Set<string>>(new Set());
   const [fuelMenuOpen, setFuelMenuOpen] = useState(false);
@@ -152,10 +144,6 @@ export function CategoryScreen({ nav, setNav, year, buReg, sel, setSel, typesFor
         );
       })()}
 
-      {sel?.kind === "refrigerant" && (() => {
-        const sys = selectedSystems.find((s) => s.id === sel.id);
-        return sys ? <DetailPanel onClose={() => setSel(null)} refrigerant={sys} year={year} /> : null;
-      })()}
     </div>
   );
 }

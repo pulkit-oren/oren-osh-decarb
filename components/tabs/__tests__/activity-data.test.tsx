@@ -215,4 +215,20 @@ describe("ActivityDataTab — refrigerant gas-card flow", () => {
     const emCells = screen.getAllByText(/\d\s*t$/);
     expect(emCells.length).toBeGreaterThan(0);
   });
+
+  it("toggling the central control on a refrigerant BU row excludes it from the total", async () => {
+    renderActivityInCategory("refrigerants");
+    // Navigate to R-404A type screen
+    fireEvent.click(await screen.findByText(/R-404A/));
+    // Type a kg value in the Pune row to create the entry
+    const input = await screen.findByLabelText("Pune R-404A (HFC) topped up");
+    fireEvent.change(input, { target: { value: "6" } });
+    // "Excluded from total" must NOT appear before the toggle
+    expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
+    // Click the central toggle to exclude Pune
+    const toggle = screen.getByLabelText("Include Pune in central total");
+    fireEvent.click(toggle);
+    // "Excluded from total" should now appear
+    expect(screen.getByText(/Excluded from total/)).toBeTruthy();
+  });
 });

@@ -19,6 +19,7 @@ import { CategoryScreen } from "./activity/CategoryScreen";
 import { TypeScreen } from "./activity/TypeScreen";
 import { EntryScreen } from "./activity/EntryScreen";
 import { ScopeScreen } from "./activity/ScopeScreen";
+import { DetailPanel } from "./DataInputTab";
 
 export function ActivityDataTab() {
   const s1 = useScenario();
@@ -170,26 +171,33 @@ export function ActivityDataTab() {
 
   if (nav.level === "type") {
     return (
-      <TypeScreen
-        nav={nav}
-        setNav={setNav}
-        buReg={buReg}
-        year={year}
-        typesFor={typesFor}
-        typeAggTotal={typeAggTotal}
-        entryFor={entryFor}
-        emOfEntry={emOfEntry}
-        openEntry={openEntry}
-        ensureEntry={ensureEntry}
-        ensureRefrigEntry={ensureRefrigEntry}
-        combById={combById}
-        facById={facById}
-        refrigSysById={refrigSysById}
-        selectedSystems={s1.selectedSystems}
-        updateCombustion={s1.updateCombustion}
-        updateFacility={s2.updateFacility}
-        updateRefrigeration={s1.updateRefrigeration}
-      />
+      <>
+        <TypeScreen
+          nav={nav}
+          setNav={setNav}
+          setSel={setSel}
+          buReg={buReg}
+          year={year}
+          typesFor={typesFor}
+          typeAggTotal={typeAggTotal}
+          entryFor={entryFor}
+          emOfEntry={emOfEntry}
+          openEntry={openEntry}
+          ensureEntry={ensureEntry}
+          ensureRefrigEntry={ensureRefrigEntry}
+          combById={combById}
+          facById={facById}
+          refrigSysById={refrigSysById}
+          selectedSystems={s1.selectedSystems}
+          updateCombustion={s1.updateCombustion}
+          updateFacility={s2.updateFacility}
+          updateRefrigeration={s1.updateRefrigeration}
+        />
+        {sel?.kind === "refrigerant" && (() => {
+          const sys = refrigSysById(sel.id);
+          return sys ? <DetailPanel refrigerant={sys} year={year} onClose={() => setSel(null)} /> : null;
+        })()}
+      </>
     );
   }
 
@@ -200,17 +208,11 @@ export function ActivityDataTab() {
         setNav={setNav}
         year={year}
         buReg={buReg}
-        sel={sel}
-        setSel={setSel}
         typesFor={typesFor}
         typeAggTotal={typeAggTotal}
         catTotal={catTotal}
         nWithData={nWithData}
         refrigGases={refrigGases}
-        selectedSystems={s1.selectedSystems}
-        updateRefrigeration={s1.updateRefrigeration}
-        delRefrigeration={s1.delRefrigeration}
-        co2Ref={co2Ref}
       />
     );
   }
