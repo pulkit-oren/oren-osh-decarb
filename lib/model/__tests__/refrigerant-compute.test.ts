@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { compute } from "../index";
 import type { LeverSettings, RefrigerationSystem, SystemActions } from "../types";
 
-/** R-404A (GWP 3,922) system: base fugitive = 100 kg topped up × 3922 / 1000 = 392.2 t/yr. */
+/** R-404A (GWP 3,943) system: base fugitive = 100 kg topped up × 3943 / 1000 = 394.3 t/yr. */
 const system: RefrigerationSystem = {
   id: "s1", name: "Test cold store", systemType: "industrialColdStorage",
   refrigerant: "R404A", toppedUpKg: 100, gasCostPerKg: 1000,
@@ -24,11 +24,11 @@ describe("compute — per-system refrigerant", () => {
       leakFix: { enabled: true, leakImprovementPct: 50, startYear: 2026, targetYear: 2028 },
     }), 2025);
     const lever = r.levers.find((l) => l.id === "refrigerant")!;
-    expect(lever.abatementT).toBeCloseTo(196.1, 1); // 392.2 × 50%
+    expect(lever.abatementT).toBeCloseTo(197.15, 1); // 394.3 × 50%
     expect(lever.capex).toBe(0);
     // gas saving: 100 kg leaked × 50% × ₹1000 = ₹50,000/yr saving
     expect(lever.annualOpexDelta).toBeCloseTo(-50_000, 0);
-    expect(r.segments.find((s) => s.key === "ref-leak")?.abatementT).toBeCloseTo(196.1, 1);
+    expect(r.segments.find((s) => s.key === "ref-leak")?.abatementT).toBeCloseTo(197.15, 1);
     expect(r.segments.find((s) => s.key === "ref-gas")).toBeUndefined();
   });
 
@@ -38,9 +38,9 @@ describe("compute — per-system refrigerant", () => {
       leakFix: leakOff,
     }), 2025);
     const lever = r.levers.find((l) => l.id === "refrigerant")!;
-    expect(lever.abatementT).toBeCloseTo(392.2, 1); // R-717 GWP = 0
+    expect(lever.abatementT).toBeCloseTo(394.3, 1); // R-717 GWP = 0
     expect(lever.capex).toBe(5_000_000);
-    expect(r.segments.find((s) => s.key === "ref-gas")?.abatementT).toBeCloseTo(392.2, 1);
+    expect(r.segments.find((s) => s.key === "ref-gas")?.abatementT).toBeCloseTo(394.3, 1);
     expect(r.segments.find((s) => s.key === "ref-leak")).toBeUndefined();
   });
 
@@ -51,8 +51,8 @@ describe("compute — per-system refrigerant", () => {
     }), 2025);
     const leak = r.segments.find((s) => s.key === "ref-leak")!.abatementT;
     const gas = r.segments.find((s) => s.key === "ref-gas")!.abatementT;
-    expect(leak).toBeCloseTo(196.1, 1); // leak fix on the CURRENT gas first
-    expect(gas).toBeCloseTo(196.1, 1); // gas switch removes what leak fix left
+    expect(leak).toBeCloseTo(197.15, 1); // leak fix on the CURRENT gas first
+    expect(gas).toBeCloseTo(197.15, 1); // gas switch removes what leak fix left
     const lever = r.levers.find((l) => l.id === "refrigerant")!;
     expect(leak + gas).toBeCloseTo(lever.abatementT, 4);
   });
@@ -74,6 +74,6 @@ describe("compute — per-system refrigerant", () => {
     }, 2000), 2025);
     const lever = r.levers.find((l) => l.id === "refrigerant")!;
     const carbon = lever.opexParts.find((p) => p.label === "Carbon-price value of abatement")!;
-    expect(carbon.amount).toBeCloseTo(-196.1 * 2000, 0);
+    expect(carbon.amount).toBeCloseTo(-197.15 * 2000, 0);
   });
 });

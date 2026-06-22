@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ALT_FUELS, ALT_FUELS_BY_FUEL, defraEF, FUELS, FUELS_BY_CATEGORY, maxBlendPctFor } from "../factors";
+import { ALT_FUELS, ALT_FUELS_BY_FUEL, defraEF, efFor, FUELS, FUELS_BY_CATEGORY, maxBlendPctFor } from "../factors";
 import { defaultAltFuelFor } from "../segments";
 import { combustionBreakdown, combustionCO2e } from "../baseline";
 import type { CombustionAsset } from "../types";
@@ -103,5 +103,65 @@ describe("alt-fuel engine matching & blend caps", () => {
     expect(ALT_FUELS_BY_FUEL.lignite).toEqual(["biomass"]);
     expect(ALT_FUELS_BY_FUEL.petcoke).toEqual(["biomass"]);
     expect(ALT_FUELS.biomass.maxBlendPct).toBe(50);
+  });
+});
+
+describe("efFor source fallback", () => {
+  it("uses DEFRA by year when present", () => {
+    const ef = efFor("diesel", 2025);
+    expect(ef.source).toBe("DEFRA");
+    expect(ef.value).toBeCloseTo(2.57082, 5);
+    expect(ef.exact).toBe(true);
+  });
+  it("clamps an out-of-range year for a DEFRA fuel", () => {
+    const ef = efFor("diesel", 2030);
+    expect(ef.sourceYear).toBe(2025);
+    expect(ef.exact).toBe(false);
+  });
+  it("falls back to IMO for a marine fuel with no DEFRA factor", () => {
+    const ef = efFor("marineHfoHsfo", 2025);
+    expect(ef.source).toBe("IMO");
+    expect(ef.value).toBeCloseTo(3.1251428, 5);
+  });
+  it("falls back to IPCC for anthracite", () => {
+    const ef = efFor("coalAnthracite", 2025);
+    expect(ef.source).toBe("IPCC");
+    expect(ef.value).toBeCloseTo(2643.09, 2);
+  });
+  it("returns real IPCC 2014 factor for coalBriquettes (2032.32, not bituminous proxy)", () => {
+    const ef = efFor("coalBriquettes", 2025);
+    expect(ef.source).toBe("IPCC");
+    expect(ef.value).toBeCloseTo(2032.32, 2);
+  });
+});
+
+describe("FUELS completeness (Task 2)", () => {
+  it("every Excel-listed fuel has a category and an EF source", () => {
+    const listed = Object.values(FUELS).filter((f) => f.excelCategory);
+    expect(listed.length).toBe(35);
+    for (const f of listed) expect(["DEFRA", "IPCC", "IMO"]).toContain(f.efSource);
+  });
+
+  it("bioBriquettes is categorised as liquid (workbook: Fuels - Liquid)", () => {
+    expect(FUELS.bioBriquettes.excelCategory).toBe("liquid");
+  });
+
+  it("cngScm densityKgPerUnit is the kg/m³ value (175), not kg/L (0.175)", () => {
+    expect(FUELS.cngScm.densityKgPerUnit).toBe(175);
+  });
+});
+
+import { REFRIGERANTS } from "../factors";
+describe("refrigerants from workbook", () => {
+  it("R404A GWP matches the workbook value", () => {
+    expect(REFRIGERANTS.R404A.gwp).toBe(3943);
+    expect(REFRIGERANTS.R404A.inExcel).toBe(true);
+  });
+  it("includes added workbook-only blends", () => {
+    expect(REFRIGERANTS.R401A?.gwp).toBe(18);
+    expect(REFRIGERANTS.R512A?.inExcel).toBe(true);
+  });
+  it("lists exactly 66 workbook refrigerants", () => {
+    expect(Object.values(REFRIGERANTS).filter((r) => r.inExcel).length).toBe(66);
   });
 });

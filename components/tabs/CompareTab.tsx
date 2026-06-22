@@ -34,7 +34,7 @@ export function CompareTab() {
         id: s.id,
         name: s.name,
         savedAt: s.savedAt,
-        result: compute(baseAssets, baseSystems, s.settings, baseYear),
+        result: compute(baseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), s.settings, baseYear),
       })),
   ];
 

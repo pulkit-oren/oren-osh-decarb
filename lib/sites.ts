@@ -1,4 +1,4 @@
-export function siteList(assets: { site?: string }[]): string[] {
+export function siteList<T extends { site?: string }>(assets: T[]): string[] {
   const set = new Set<string>();
   for (const a of assets) {
     const s = (a.site ?? "").trim();

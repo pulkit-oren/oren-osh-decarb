@@ -5,17 +5,18 @@
    reference per fuel. Every number traces to factors.ts. Spec §5.
    ============================================================ */
 
-import { defraEF, getFuel, getRefrigerant, type EFLookup } from "./factors";
+import { efFor, getFuel, getRefrigerant, type EFLookup } from "./factors";
 import type { CombustionAsset, RefrigerationSystem } from "./types";
 
 /** Combustion emissions for one asset, in tonnes CO2e/yr (uses the asset's FY factor). */
 export function combustionCO2e(a: CombustionAsset): number {
-  return (a.annualVolume * defraEF(a.fuelType, a.year).value) / 1000;
+  return (a.annualVolume * efFor(a.fuelType, a.year).value) / 1000;
 }
 
 /** Combustion energy for one asset, in kJ/yr. */
 export function combustionEnergyKJ(a: CombustionAsset): number {
   const f = getFuel(a.fuelType);
+  if (f.densityKgPerUnit == null || f.cvKJperKg == null) return 0;
   return a.annualVolume * f.densityKgPerUnit * f.cvKJperKg;
 }
 
@@ -82,7 +83,7 @@ export interface CombustionBreakdown {
 
 export function combustionBreakdown(a: CombustionAsset): CombustionBreakdown {
   const f = getFuel(a.fuelType);
-  const ef = defraEF(a.fuelType, a.year);
+  const ef = efFor(a.fuelType, a.year);
   const energyKJ = combustionEnergyKJ(a);
   return {
     kind: "combustion",
@@ -91,8 +92,8 @@ export function combustionBreakdown(a: CombustionAsset): CombustionBreakdown {
     year: a.year ?? ef.sourceYear,
     unit: a.unit,
     volume: a.annualVolume,
-    density: f.densityKgPerUnit,
-    cv: f.cvKJperKg,
+    density: f.densityKgPerUnit ?? 0,
+    cv: f.cvKJperKg ?? 0,
     ef,
     energyMJ: energyKJ / 1000,
     energyGJ: energyKJ / 1_000_000,

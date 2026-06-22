@@ -1,19 +1,18 @@
-import { describe, expect, it } from "vitest";
-import { fuelFamily, FAMILY_DEFAULT_FUEL } from "../activity-groups";
+import { describe, it, expect } from "vitest";
+import { fuelFamily, fuelsInExcelFamily } from "../activity-groups";
 
-describe("fuelFamily", () => {
-  it("classifies fuels by family", () => {
-    expect(fuelFamily("png")).toBe("gaseous");
-    expect(fuelFamily("cng")).toBe("gaseous");
+describe("fuelFamily by workbook category", () => {
+  it("maps diesel to liquid, png to gas, coal to solid", () => {
     expect(fuelFamily("diesel")).toBe("liquid");
+    expect(fuelFamily("png")).toBe("gas");
     expect(fuelFamily("coal")).toBe("solid");
-    expect(fuelFamily("biomass")).toBe("biomass");
-    expect(fuelFamily("bioCng")).toBe("biomass");
   });
-  it("has a valid default fuel per family", () => {
-    expect(fuelFamily(FAMILY_DEFAULT_FUEL.gaseous)).toBe("gaseous");
-    expect(fuelFamily(FAMILY_DEFAULT_FUEL.liquid)).toBe("liquid");
-    expect(fuelFamily(FAMILY_DEFAULT_FUEL.solid)).toBe("solid");
-    expect(fuelFamily(FAMILY_DEFAULT_FUEL.biomass)).toBe("biomass");
+  it("returns null for an app-only fuel not in the workbook", () => {
+    expect(fuelFamily("naphtha")).toBeNull();
+  });
+  it("lists biodiesel under liquid (renewable)", () => {
+    const liquid = fuelsInExcelFamily("liquid");
+    const bd = liquid.find((f) => f.id === "biodiesel");
+    expect(bd?.renewable).toBe(true);
   });
 });

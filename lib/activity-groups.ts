@@ -1,21 +1,23 @@
 import type { FuelId } from "@/lib/model/types";
 import { FUELS } from "@/lib/model/factors";
 
-export type FuelFamily = "gaseous" | "liquid" | "solid" | "biomass";
+export type FuelFamily = "liquid" | "gas" | "solid";
 
-const GASEOUS = new Set<FuelId>(["lpg", "propane", "butane", "cng", "png"]);
-const SOLID = new Set<FuelId>(["coal", "cokingCoal", "lignite", "petcoke"]);
+/** Workbook Column-A family for a fuel, or null when the fuel is app-only
+ *  (not listed in the Emission Factor 2025 workbook). */
+export function fuelFamily(id: FuelId): FuelFamily | null {
+  return FUELS[id]?.excelCategory ?? null;
+}
 
-export function fuelFamily(id: FuelId): FuelFamily {
-  if (FUELS[id]?.renewable) return "biomass";
-  if (GASEOUS.has(id)) return "gaseous";
-  if (SOLID.has(id)) return "solid";
-  return "liquid";
+/** All workbook-listed fuels in a family, in declaration order. */
+export function fuelsInExcelFamily(fam: FuelFamily): { id: FuelId; label: string; renewable: boolean }[] {
+  return (Object.keys(FUELS) as FuelId[])
+    .filter((id) => FUELS[id].excelCategory === fam)
+    .map((id) => ({ id, label: FUELS[id].label, renewable: FUELS[id].renewable }));
 }
 
 export const FAMILY_DEFAULT_FUEL: Record<FuelFamily, FuelId> = {
-  gaseous: "png",
   liquid: "diesel",
+  gas: "png",
   solid: "coal",
-  biomass: "biomass",
 };

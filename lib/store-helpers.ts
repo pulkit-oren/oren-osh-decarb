@@ -20,6 +20,7 @@ export function migrateRefrigeration(raw: unknown): RefrigerationByYear {
       return {
         id: s.id!, name: s.name ?? "System", systemType: s.systemType ?? "commercialHVAC",
         refrigerant: s.refrigerant ?? "R410A", toppedUpKg, gasCostPerKg: s.gasCostPerKg ?? 900,
+        bu: s.bu, excluded: s.excluded,
       };
     });
   }

@@ -28,7 +28,13 @@ export type FuelId =
   | "bioBriquettes"
   | "biomass"
   | "bagasse"
-  | "riceHusk";
+  | "riceHusk"
+  // Added from Emission Factor 2025 workbook
+  | "lubricants" | "residualFuelOil" | "marineHfoVlsfo" | "marineHfoHsfo"
+  | "marineLfoUlsfo" | "marineLfoVlsfo" | "marineGasOil" | "jetFuel" | "aviationGasoline"
+  | "biodiesel" | "lng" | "cngScm" | "landfillGas"
+  | "coalAnthracite" | "coalBituminous" | "coalBriquettes" | "coalElectricity"
+  | "woodPellets" | "woodChips" | "woodLogs";
 
 export type AltFuelId = "biodiesel" | "ethanol" | "biogas" | "bioCng" | "biomass";
 
@@ -41,7 +47,15 @@ export type RefrigerantId =
   | "R515B" | "R32" | "R454B" | "R455A" | "R152a"
   // future — ultra-low GWP HFOs + naturals
   | "R1234ze" | "R1234yf" | "R1233zd" | "R1336mzz" | "R600a" | "R1270" | "R290" | "R170"
-  | "R744" | "R717" | "R718";
+  | "R744" | "R717" | "R718"
+  // Added from Emission Factor 2025 workbook
+  | "R401A" | "R401B" | "R401C" | "R402A" | "R402B" | "R403A" | "R403B" | "R405A"
+  | "R407B" | "R407D" | "R407E" | "R410B" | "R411A" | "R411B" | "R412A" | "R413A"
+  | "R415A" | "R415B" | "R416A" | "R417B" | "R417C" | "R418A" | "R419A" | "R419B"
+  | "R420A" | "R421A" | "R421B" | "R422A" | "R422B" | "R422C" | "R422E" | "R423A"
+  | "R424A" | "R425A" | "R426A" | "R428A" | "R429A" | "R430A" | "R431A" | "R434A"
+  | "R435A" | "R437A" | "R439A" | "R440A" | "R442A" | "R444A" | "R445A" | "R500"
+  | "R503" | "R504" | "R508A" | "R508B" | "R509A" | "R511A" | "R512A";
 
 export type FuelUnit = "L" | "kg" | "m3" | "t";
 
@@ -49,15 +63,18 @@ export interface FuelFactor {
   id: FuelId;
   label: string;
   unit: FuelUnit;
-  /** kg of fuel per `unit` (L→density, m3→density, kg→1, t→1000). */
-  densityKgPerUnit: number;
-  /** Calorific value, kJ per kg. */
-  cvKJperKg: number;
-  /** Combustion emission factor, kgCO2e per `unit` (DEFRA latest = 2025).
-   *  For biomass fuels this is the Scope 1 (CH₄/N₂O) portion only. */
+  /** kg of fuel per `unit`. Absent when the workbook has no density (energy step hidden). */
+  densityKgPerUnit?: number;
+  /** Calorific value, kJ per kg. Absent when the workbook has none. */
+  cvKJperKg?: number;
+  /** Combustion emission factor, kgCO2e per `unit` (the chosen source's latest). */
   co2eFactor: number;
-  /** DEFRA emission factor by year (kgCO2e per `unit`). */
+  /** DEFRA emission factor by year (kgCO2e per `unit`). Empty for non-DEFRA fuels. */
   co2eByYear: Record<number, number>;
+  /** Which dataset `co2eFactor`/`co2eByYear` came from. */
+  efSource: "DEFRA" | "IPCC" | "IMO";
+  /** Workbook Column-A family this fuel is listed under; absent ⇒ app-only, hidden in Activity tab. */
+  excelCategory?: "liquid" | "gas" | "solid";
   renewable: boolean;
   /** Biogenic CO₂ per `unit` (kgCO2e) — reported separately under BRSR/GRI,
    *  NOT counted in Scope 1. Present only for biomass/renewable fuels. */
@@ -100,6 +117,8 @@ export interface RefrigerantFactor {
   volAdj: number;
   /** Short safety/handling note for the advisor. */
   note: string;
+  /** Listed in the Emission Factor 2025 workbook (selectable in the Activity tab). */
+  inExcel?: boolean;
 }
 
 /* ---------- Baseline assets (user data) ---------- */
@@ -143,6 +162,10 @@ export interface RefrigerationSystem {
    *  IS the annual fugitive loss. */
   toppedUpKg: number;
   gasCostPerKg: number;
+  /** Business unit this entry belongs to. Absent ⇒ Central (consolidated). */
+  bu?: string;
+  /** When true, excluded from all footprint totals (a non-aggregated BU). */
+  excluded?: boolean;
 }
 
 /* ---------- Per-asset action plans (the "Switch" scenario) ---------- */
