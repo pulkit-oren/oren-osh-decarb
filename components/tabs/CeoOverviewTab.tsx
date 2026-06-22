@@ -21,7 +21,7 @@ export function CeoOverviewTab() {
     ...baseSystems.map((s) => ({ grade: refrigerantGrade(s), co2eT: result.baseline.perRefrigeration.find((p) => p.id === s.id)?.co2eT ?? 0 })),
   ]);
   const variants = boardroomVariants(settings).map((v) => {
-    const r = compute(baseAssets, baseSystems, v.settings, baseYear);
+    const r = compute(baseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), v.settings, baseYear);
     return { ...v, reduction2030: r.kpis.reduction2030, totalCapex: r.kpis.totalCapex, onTrack: r.kpis.onTrack2030 };
   });
 
