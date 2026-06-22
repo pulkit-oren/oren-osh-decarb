@@ -256,4 +256,62 @@ describe("ActivityDataTab — Scope drill-down", () => {
     expect(screen.getAllByText(/Diesel/).length).toBeGreaterThan(0);
     expect(screen.getByText("Refrigerants")).toBeTruthy();
   });
+
+  it("null-family fuel (ldo) appears in Other Fuels group in Scope 1 drill-down", async () => {
+    // Seed the scope-1 planner store with an LDO combustion asset.
+    // LDO has no excelCategory so fuelFamily returns null — Fix 1 adds an
+    // "Other Fuels" group for exactly these assets.
+    const persisted = {
+      combustion: {
+        2025: [
+          {
+            id: "ldo-test",
+            name: "LDO boiler",
+            category: "stationary",
+            fuelType: "ldo",
+            unit: "L",
+            annualVolume: 50000,
+            opex: 4250000,
+            remainingLife: 8,
+            unitCount: 1,
+          },
+        ],
+      },
+      refrigeration: {},
+      settings: {
+        assumptions: {
+          gridEf: 0.71,
+          renewableSourcingPct: 50,
+          recCostPerTonne: 800,
+          carbonPricePerTonne: 2000,
+          infraCapex: 15000000,
+        },
+        byAsset: {
+          "ldo-test": {
+            electrify: { enabled: false, unitsToConvert: 0, capacityPct: 0, cop: 3, tariffPerKwh: 9, assetCapex: 0, startYear: 2026, targetYear: 2032 },
+            fuelSwitch: { enabled: false, altFuel: "biodiesel", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 78, retrofitCapex: 0, startYear: 2027, targetYear: 2033 },
+            flexFuel: { enabled: false, unitsToConvert: 0, altFuel: "biodiesel", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 78, retrofitCapex: 0, startYear: 2027, targetYear: 2033 },
+          },
+        },
+        bySystem: {},
+      },
+      scenarios: [],
+      baseYear: 2025,
+    };
+    window.localStorage.setItem("osh-scope1-planner-v4", JSON.stringify(persisted));
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to the Scope 1 drill-down
+    fireEvent.click(screen.getByRole("button", { name: /Scope 1 details/i }));
+
+    // Fix 1: "Other Fuels" group header must be visible
+    expect(await screen.findByText("Other Fuels")).toBeTruthy();
+    // Fix 1: The LDO fuel label must appear in the drill-down
+    expect(screen.getByText(/Light diesel oil/i)).toBeTruthy();
+  });
 });

@@ -28,7 +28,7 @@ export function ScopeScreen({
 }) {
   const groups: {
     label: string;
-    rows: { name: string; bu?: string; raw: string; t: number; excluded?: boolean }[];
+    rows: { id: string; name: string; bu?: string; raw: string; t: number; excluded?: boolean }[];
   }[] = [];
 
   if (scope === 1) {
@@ -36,6 +36,7 @@ export function ScopeScreen({
       const rows = s1.selectedAssets
         .filter((a) => fuelFamily(a.fuelType) === fam)
         .map((a) => ({
+          id: a.id,
           name: FUELS[a.fuelType].label,
           bu: a.bu,
           raw: `${fmt(a.annualVolume)} ${unitLabel(a.unit)}`,
@@ -46,7 +47,21 @@ export function ScopeScreen({
         groups.push({ label: `Fuels – ${fam[0].toUpperCase() + fam.slice(1)}`, rows });
       }
     }
+    const otherRows = s1.selectedAssets
+      .filter((a) => fuelFamily(a.fuelType) === null)
+      .map((a) => ({
+        id: a.id,
+        name: FUELS[a.fuelType].label,
+        bu: a.bu,
+        raw: `${fmt(a.annualVolume)} ${unitLabel(a.unit)}`,
+        t: combustionCO2e(a),
+        excluded: a.excluded,
+      }));
+    if (otherRows.length) {
+      groups.push({ label: "Other Fuels", rows: otherRows });
+    }
     const refRows = s1.selectedSystems.map((sy) => ({
+      id: sy.id,
       name: REFRIGERANTS[sy.refrigerant].label,
       bu: sy.bu,
       raw: `${fmt(sy.toppedUpKg)} kg`,
@@ -58,6 +73,7 @@ export function ScopeScreen({
     }
   } else {
     const rows = s2.selectedFacilities.map((f) => ({
+      id: f.id,
       name: f.name,
       bu: f.bu,
       raw: `${fmt(f.annualLoadKwh)} kWh`,
@@ -106,9 +122,9 @@ export function ScopeScreen({
             <div className="px-4 py-2.5 bg-gradient-to-r from-brand-50 to-transparent text-sm font-semibold text-ink">
               {g.label}
             </div>
-            {g.rows.map((r, i) => (
+            {g.rows.map((r) => (
               <div
-                key={i}
+                key={r.id}
                 className={cn(
                   "flex items-center gap-3 px-4 py-2.5 border-t border-line/40",
                   r.excluded && "opacity-50",
