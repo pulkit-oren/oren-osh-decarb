@@ -1,0 +1,217 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Oren / OSH design system — "refined organic luxury-tech".
+   Warm paper atmosphere, emerald anchor, Fraunces display type
+   over IBM Plex Sans data type, and a quiet motion language:
+   one orchestrated entrance per view, soft lifts everywhere else.
+   Tailwind v4: tokens live in @theme and generate utilities.
+   ============================================================ */
+@theme {
+  /* Primary emerald — anchor of the palette */
+  --color-brand-50:  #EAF7EF;
+  --color-brand-100: #D2F0DC;
+  --color-brand-200: #A5E0B9;
+  --color-brand-300: #74CE94;
+  --color-brand-400: #3FB76E;
+  --color-brand-500: #1F9E5A;
+  --color-brand-600: #188049;
+  --color-brand-700: #13633A;
+  --color-brand-800: #0E472A;
+  --color-brand-900: #0A301C;
+
+  /* Oren teal — secondary accent (Scope 2 family / links) */
+  --color-oren-50:  #E6F1F0;
+  --color-oren-100: #C7E2DF;
+  --color-oren-200: #94C5BF;
+  --color-oren-300: #5FA59E;
+  --color-oren-400: #308780;
+  --color-oren-500: #0F7873;
+  --color-oren-600: #0B6260;
+  --color-oren-700: #084D4B;
+  --color-oren-800: #063836;
+  --color-oren-900: #042624;
+
+  /* Signature 3-dot brand mark colours */
+  --color-dot-green:  #A8D480;
+  --color-dot-yellow: #F5C447;
+  --color-dot-orange: #F2924A;
+
+  /* Surfaces — warm paper, not office grey */
+  --color-surface:       #FFFFFF;
+  --color-surface-muted: #F4F4EF;
+  --color-surface-page:  #E7E9ED;
+
+  /* Ink (text scale) — deep forest-slate */
+  --color-ink:       #15201B;
+  --color-ink-soft:  #49564F;
+  --color-ink-faint: #93A09A;
+
+  /* Hairlines */
+  --color-line: #E3E2DA;
+
+  /* Status accents (data-quality + on/off-track) */
+  --color-good: #1F9E5A;   /* = brand-500, measured / on-track */
+  --color-warn: #F0A020;   /* estimated / off-track */
+  --color-bad:  #EF4444;   /* missing / dilutive */
+  --color-info: #6366F1;   /* CEO lens / "ahead of curve" */
+
+  /* Type — Inter everywhere; "display" resolves to the same face so
+     font-display usages simply inherit the body type. */
+  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-sans);
+
+  /* Radius */
+  --radius-xl2: 20px;
+  --radius-xl3: 28px;
+
+  /* Shadows — warm-tinted, soft */
+  --shadow-card: 0 1px 2px rgba(21,32,27,0.04), 0 6px 20px rgba(21,32,27,0.05);
+  --shadow-card-lg: 0 2px 4px rgba(21,32,27,0.05), 0 18px 44px rgba(21,32,27,0.10);
+
+  /* Motion language — one easing, two speeds */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html, body {
+  background: var(--color-surface-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+
+/* ---- Atmosphere: layered gradient mesh + grain over warm paper ---- */
+body {
+  background-image:
+    radial-gradient(1100px 700px at -8% -12%, rgba(31, 158, 90, 0.05), transparent 60%),
+    radial-gradient(900px 600px at 108% 0%, rgba(15, 120, 115, 0.04), transparent 55%),
+    radial-gradient(1000px 800px at 85% 110%, rgba(242, 146, 74, 0.035), transparent 60%);
+  background-attachment: fixed;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.028'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body > * { position: relative; z-index: 1; }
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+::selection { background: var(--color-brand-100); color: var(--color-brand-900); }
+
+/* ---- Recharts polish ---- */
+.recharts-text { font-family: var(--font-sans); }
+.recharts-cartesian-axis-tick text { fill: var(--color-ink-faint); font-size: 12px; }
+.recharts-default-tooltip {
+  border-radius: 12px !important;
+  border: 1px solid var(--color-line) !important;
+  box-shadow: 0 10px 30px rgba(21,32,27,0.08) !important;
+  padding: 10px 12px !important;
+}
+
+/* ---- Rounded scrollbar ---- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #CFCEC5; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #ABAA9F; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ============================================================
+   Motion — one orchestrated entrance per view, then calm.
+   ============================================================ */
+
+/* Tab switch: the view rises, its sections follow in a stagger. */
+.tab-fade { animation: fadeUp 320ms var(--ease-out-soft); }
+.tab-fade > * { animation: riseIn 520ms var(--ease-out-soft) backwards; }
+.tab-fade > *:nth-child(1) { animation-delay: 30ms; }
+.tab-fade > *:nth-child(2) { animation-delay: 80ms; }
+.tab-fade > *:nth-child(3) { animation-delay: 130ms; }
+.tab-fade > *:nth-child(4) { animation-delay: 180ms; }
+.tab-fade > *:nth-child(5) { animation-delay: 230ms; }
+.tab-fade > *:nth-child(6) { animation-delay: 280ms; }
+.tab-fade > *:nth-child(7) { animation-delay: 330ms; }
+.tab-fade > *:nth-child(n+8) { animation-delay: 380ms; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Drill-in screens slide in from the right. */
+.screen-in { animation: screenIn 360ms var(--ease-out-soft); }
+@keyframes screenIn {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Popover menus scale-fade in. */
+.pop-in { animation: popIn 160ms var(--ease-out-soft); transform-origin: top right; }
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Hero stats settle into place. */
+.stat-in { animation: statIn 640ms var(--ease-out-soft) backwards; animation-delay: 120ms; }
+@keyframes statIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Horizontal bars grow from the left, staggered via --bar-i. */
+.bar-in {
+  transform-origin: left center;
+  animation: barIn 700ms var(--ease-out-soft) backwards;
+  animation-delay: calc(140ms + var(--bar-i, 0) * 70ms);
+}
+@keyframes barIn {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Sparklines draw themselves once. */
+.draw-in {
+  stroke-dasharray: 700;
+  stroke-dashoffset: 700;
+  animation: drawIn 1100ms var(--ease-out-soft) 150ms forwards;
+}
+@keyframes drawIn { to { stroke-dashoffset: 0; } }
+
+/* Soft lift for cards and tiles. */
+.lift {
+  transition: box-shadow 280ms var(--ease-out-soft), transform 280ms var(--ease-out-soft);
+}
+.lift:hover { box-shadow: var(--shadow-card-lg); transform: translateY(-2px); }
+
+/* Tactile press on every button. */
+button { transition: transform 140ms ease, background-color 180ms ease, color 180ms ease, box-shadow 240ms var(--ease-out-soft); }
+button:active { transform: scale(0.97); }
+
+/* Visible keyboard focus */
+:focus-visible {
+  outline: 2.5px solid var(--color-oren-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, .tab-fade, .tab-fade > *, .stat-in, .bar-in, .draw-in {
+    animation: none !important;
+    transition: none !important;
+  }
+  .draw-in { stroke-dasharray: none; stroke-dashoffset: 0; }
+}
