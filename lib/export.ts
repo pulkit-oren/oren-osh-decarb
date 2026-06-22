@@ -43,8 +43,8 @@ export function inputsSheet(
 export function factorsSheet(settings: LeverSettings): SheetSpec {
   const rows: (string | number)[][] = [["Section", "Item", "Field", "Value", "Unit"]];
   for (const f of Object.values(FUELS)) {
-    rows.push(["Fuel", f.label, "Density", f.densityKgPerUnit, `kg/${f.unit}`]);
-    rows.push(["Fuel", f.label, "Calorific value", f.cvKJperKg, "kJ/kg"]);
+    rows.push(["Fuel", f.label, "Density", f.densityKgPerUnit ?? "", `kg/${f.unit}`]);
+    rows.push(["Fuel", f.label, "Calorific value", f.cvKJperKg ?? "", "kJ/kg"]);
     for (const y of DEFRA_YEARS) {
       rows.push(["Fuel", f.label, `EF ${y}`, f.co2eByYear[y] ?? f.co2eFactor, `kgCO2e/${f.unit}`]);
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ALT_FUELS, ALT_FUELS_BY_FUEL, defraEF, FUELS, FUELS_BY_CATEGORY, maxBlendPctFor } from "../factors";
+import { ALT_FUELS, ALT_FUELS_BY_FUEL, defraEF, efFor, FUELS, FUELS_BY_CATEGORY, maxBlendPctFor } from "../factors";
 import { defaultAltFuelFor } from "../segments";
 import { combustionBreakdown, combustionCO2e } from "../baseline";
 import type { CombustionAsset } from "../types";
@@ -103,5 +103,19 @@ describe("alt-fuel engine matching & blend caps", () => {
     expect(ALT_FUELS_BY_FUEL.lignite).toEqual(["biomass"]);
     expect(ALT_FUELS_BY_FUEL.petcoke).toEqual(["biomass"]);
     expect(ALT_FUELS.biomass.maxBlendPct).toBe(50);
+  });
+});
+
+describe("efFor source fallback", () => {
+  it("uses DEFRA by year when present", () => {
+    const ef = efFor("diesel", 2025);
+    expect(ef.source).toBe("DEFRA");
+    expect(ef.value).toBeCloseTo(2.57082, 5);
+    expect(ef.exact).toBe(true);
+  });
+  it("clamps an out-of-range year for a DEFRA fuel", () => {
+    const ef = efFor("diesel", 2030);
+    expect(ef.sourceYear).toBe(2025);
+    expect(ef.exact).toBe(false);
   });
 });

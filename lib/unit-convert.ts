@@ -11,7 +11,7 @@ export function displayUnits(fuelId: FuelId): FuelUnit[] {
   return out;
 }
 
-const kgPerRef = (fuelId: FuelId) => FUELS[fuelId].densityKgPerUnit;
+const kgPerRef = (fuelId: FuelId) => FUELS[fuelId].densityKgPerUnit ?? 1;
 
 /** Reference-unit quantity → display-unit quantity. */
 export function fromRef(valueRef: number, fuelId: FuelId, to: FuelUnit): number {

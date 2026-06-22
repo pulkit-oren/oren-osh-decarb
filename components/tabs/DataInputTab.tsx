@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2, Flame, Snowflake, Factory, SlidersHorizontal, X, Star, ArrowRight, Copy, Upload } from "lucide-react";
 import { useScenario } from "@/lib/store";
-import { FUELS, FUELS_BY_CATEGORY, REFRIGERANTS, defraEF } from "@/lib/model/factors";
+import { FUELS, FUELS_BY_CATEGORY, REFRIGERANTS, efFor } from "@/lib/model/factors";
 import { combustionBreakdown, refrigerantBreakdown } from "@/lib/model/baseline";
 import { CURRENCY } from "@/lib/defaults";
 import {
@@ -189,7 +189,7 @@ export function DataInputTab() {
             </table>
           </div>
         )}
-        <p className="text-[11px] text-ink-faint mt-2">Emissions use the <strong>DEFRA {defraEF("diesel", selectedYear).sourceYear}</strong> factor set{defraEF("diesel", selectedYear).exact ? "" : " (nearest available year)"}.</p>
+        <p className="text-[11px] text-ink-faint mt-2">Emissions use the <strong>{efFor("diesel", selectedYear).source} {efFor("diesel", selectedYear).sourceYear}</strong> factor set{efFor("diesel", selectedYear).exact ? "" : " (nearest available year)"}.</p>
       </Card>
 
       {/* refrigeration */}

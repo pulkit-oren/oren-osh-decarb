@@ -49,15 +49,18 @@ export interface FuelFactor {
   id: FuelId;
   label: string;
   unit: FuelUnit;
-  /** kg of fuel per `unit` (L→density, m3→density, kg→1, t→1000). */
-  densityKgPerUnit: number;
-  /** Calorific value, kJ per kg. */
-  cvKJperKg: number;
-  /** Combustion emission factor, kgCO2e per `unit` (DEFRA latest = 2025).
-   *  For biomass fuels this is the Scope 1 (CH₄/N₂O) portion only. */
+  /** kg of fuel per `unit`. Absent when the workbook has no density (energy step hidden). */
+  densityKgPerUnit?: number;
+  /** Calorific value, kJ per kg. Absent when the workbook has none. */
+  cvKJperKg?: number;
+  /** Combustion emission factor, kgCO2e per `unit` (the chosen source's latest). */
   co2eFactor: number;
-  /** DEFRA emission factor by year (kgCO2e per `unit`). */
+  /** DEFRA emission factor by year (kgCO2e per `unit`). Empty for non-DEFRA fuels. */
   co2eByYear: Record<number, number>;
+  /** Which dataset `co2eFactor`/`co2eByYear` came from. */
+  efSource: "DEFRA" | "IPCC" | "IMO";
+  /** Workbook Column-A family this fuel is listed under; absent ⇒ app-only, hidden in Activity tab. */
+  excelCategory?: "liquid" | "gas" | "solid";
   renewable: boolean;
   /** Biogenic CO₂ per `unit` (kgCO2e) — reported separately under BRSR/GRI,
    *  NOT counted in Scope 1. Present only for biomass/renewable fuels. */

@@ -24,67 +24,67 @@ export const DEFRA_YEARS = [2022, 2023, 2024, 2025];
 export const FUELS: Record<FuelId, FuelFactor> = {
   /* ---- Liquid fossil fuels (DEFRA 2022–2025, kgCO2e per litre) ---- */
   diesel: {
-    id: "diesel", label: "Diesel (HSD)", unit: "L", densityKgPerUnit: 0.83057, cvKJperKg: 42839, renewable: false,
+    id: "diesel", label: "Diesel (HSD)", unit: "L", densityKgPerUnit: 0.83057, cvKJperKg: 42839, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.57082, co2eByYear: { 2022: 2.56, 2023: 2.51, 2024: 2.51279, 2025: 2.57082 }, typicalPricePerUnit: 92,
   },
   petrol: {
-    id: "petrol", label: "Petrol", unit: "L", densityKgPerUnit: 0.746204, cvKJperKg: 43061, renewable: false,
+    id: "petrol", label: "Petrol", unit: "L", densityKgPerUnit: 0.746204, cvKJperKg: 43061, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.06916, co2eByYear: { 2022: 2.16, 2023: 2.1, 2024: 2.0844, 2025: 2.06916 }, typicalPricePerUnit: 105,
   },
   fuelOil: {
-    id: "fuelOil", label: "Furnace / fuel oil (FO)", unit: "L", densityKgPerUnit: 0.983284, cvKJperKg: 40752, renewable: false,
+    id: "fuelOil", label: "Furnace / fuel oil (FO)", unit: "L", densityKgPerUnit: 0.983284, cvKJperKg: 40752, renewable: false, efSource: "DEFRA",
     co2eFactor: 3.17492, co2eByYear: { 2022: 3.18, 2023: 3.17, 2024: 3.17493, 2025: 3.17492 }, typicalPricePerUnit: 62,
   },
   ldo: {
-    id: "ldo", label: "Light diesel oil (LDO)", unit: "L", densityKgPerUnit: 0.86, cvKJperKg: 42000, renewable: false,
+    id: "ldo", label: "Light diesel oil (LDO)", unit: "L", densityKgPerUnit: 0.86, cvKJperKg: 42000, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.7595, co2eByYear: { 2022: 2.7595, 2023: 2.7595, 2024: 2.7595, 2025: 2.7595 }, typicalPricePerUnit: 85,
   },
   kerosene: {
-    id: "kerosene", label: "Kerosene / SKO", unit: "L", densityKgPerUnit: 0.802568, cvKJperKg: 43865, renewable: false,
+    id: "kerosene", label: "Kerosene / SKO", unit: "L", densityKgPerUnit: 0.802568, cvKJperKg: 43865, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.54016, co2eByYear: { 2022: 2.54, 2023: 2.54, 2024: 2.54015, 2025: 2.54016 }, typicalPricePerUnit: 78,
   },
   naphtha: {
-    id: "naphtha", label: "Naphtha", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 44500, renewable: false,
+    id: "naphtha", label: "Naphtha", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 44500, renewable: false, efSource: "DEFRA",
     co2eFactor: 3.1313, co2eByYear: { 2022: 3.1313, 2023: 3.1313, 2024: 3.1313, 2025: 3.1313 }, typicalPricePerUnit: 70,
   },
 
   /* ---- Gaseous fossil fuels ---- */
   lpg: {
-    id: "lpg", label: "LPG", unit: "L", densityKgPerUnit: 0.529749, cvKJperKg: 45944, renewable: false,
+    id: "lpg", label: "LPG", unit: "L", densityKgPerUnit: 0.529749, cvKJperKg: 45944, renewable: false, efSource: "DEFRA",
     co2eFactor: 1.55713, co2eByYear: { 2022: 1.56, 2023: 1.56, 2024: 1.55713, 2025: 1.55713 }, typicalPricePerUnit: 58,
   },
   propane: {
-    id: "propane", label: "Propane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 46300, renewable: false,
+    id: "propane", label: "Propane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 46300, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.99711, co2eByYear: { 2022: 2.99711, 2023: 2.99711, 2024: 2.99711, 2025: 2.99711 }, typicalPricePerUnit: 80,
   },
   butane: {
-    id: "butane", label: "Butane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45750, renewable: false,
+    id: "butane", label: "Butane", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45750, renewable: false, efSource: "DEFRA",
     co2eFactor: 3.03307, co2eByYear: { 2022: 3.03307, 2023: 3.03307, 2024: 3.03307, 2025: 3.03307 }, typicalPricePerUnit: 80,
   },
   cng: {
-    id: "cng", label: "CNG", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45745, renewable: false,
+    id: "cng", label: "CNG", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 45745, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.69952, co2eByYear: { 2022: 2.69952, 2023: 2.69952, 2024: 2.69952, 2025: 2.69952 }, typicalPricePerUnit: 88,
   },
   png: {
-    id: "png", label: "Piped / natural gas (PNG)", unit: "m3", densityKgPerUnit: 0.802, cvKJperKg: 45745, renewable: false,
+    id: "png", label: "Piped / natural gas (PNG)", unit: "m3", densityKgPerUnit: 0.802, cvKJperKg: 45745, renewable: false, efSource: "DEFRA",
     co2eFactor: 2.06672, co2eByYear: { 2022: 2.02, 2023: 2.04, 2024: 2.04542, 2025: 2.06672 }, typicalPricePerUnit: 50,
   },
 
   /* ---- Solid fossil fuels (kgCO2e per tonne) ---- */
   coal: {
-    id: "coal", label: "Coal (steam / industrial)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 25405, renewable: false,
+    id: "coal", label: "Coal (steam / industrial)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 25405, renewable: false, efSource: "DEFRA",
     co2eFactor: 2395.28994, co2eByYear: { 2022: 2411.43, 2023: 2396.48, 2024: 2399.43994, 2025: 2395.28994 }, typicalPricePerUnit: 6000,
   },
   cokingCoal: {
-    id: "cokingCoal", label: "Coking coal (metallurgical)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 28300, renewable: false,
+    id: "cokingCoal", label: "Coking coal (metallurgical)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 28300, renewable: false, efSource: "DEFRA",
     co2eFactor: 3165.24, co2eByYear: { 2022: 3165.24, 2023: 3165.24, 2024: 3165.24, 2025: 3165.24 }, typicalPricePerUnit: 20000,
   },
   lignite: {
-    id: "lignite", label: "Lignite (brown coal)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 11900, renewable: false,
+    id: "lignite", label: "Lignite (brown coal)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 11900, renewable: false, efSource: "DEFRA",
     co2eFactor: 1185.62, co2eByYear: { 2022: 1185.62, 2023: 1185.62, 2024: 1185.62, 2025: 1185.62 }, typicalPricePerUnit: 3200,
   },
   petcoke: {
-    id: "petcoke", label: "Petroleum coke (petcoke)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 32000, renewable: false,
+    id: "petcoke", label: "Petroleum coke (petcoke)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 32000, renewable: false, efSource: "DEFRA",
     co2eFactor: 3386.4, co2eByYear: { 2022: 3386.4, 2023: 3386.4, 2024: 3386.4, 2025: 3386.4 }, typicalPricePerUnit: 14000,
   },
 
@@ -94,32 +94,32 @@ export const FUELS: Record<FuelId, FuelFactor> = {
      Only the CH₄ and N₂O from combustion stay in Scope 1 — that is `co2eFactor` here.
      `biogenicCO2ePerUnit` carries the biogenic CO₂ for transparent reporting. */
   biogas: {
-    id: "biogas", label: "Biogas", unit: "m3", densityKgPerUnit: 1.15, cvKJperKg: 20000, renewable: true,
+    id: "biogas", label: "Biogas", unit: "m3", densityKgPerUnit: 1.15, cvKJperKg: 20000, renewable: true, efSource: "DEFRA",
     co2eFactor: 0.02262, co2eByYear: { 2022: 0.02262, 2023: 0.02262, 2024: 0.02262, 2025: 0.02262 },
     biogenicCO2ePerUnit: 1.1908, typicalPricePerUnit: 25,
   },
   bioCng: {
-    id: "bioCng", label: "Bio-CNG (compressed biogas)", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 48000, renewable: true,
+    id: "bioCng", label: "Bio-CNG (compressed biogas)", unit: "kg", densityKgPerUnit: 1, cvKJperKg: 48000, renewable: true, efSource: "DEFRA",
     co2eFactor: 0.1209, co2eByYear: { 2022: 0.1209, 2023: 0.1209, 2024: 0.1209, 2025: 0.1209 },
     biogenicCO2ePerUnit: 2.6086, typicalPricePerUnit: 75,
   },
   bioBriquettes: {
-    id: "bioBriquettes", label: "Bio-briquettes / pellets", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 16200, renewable: true,
+    id: "bioBriquettes", label: "Bio-briquettes / pellets", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 16200, renewable: true, efSource: "DEFRA",
     co2eFactor: 28.0, co2eByYear: { 2022: 28.0, 2023: 28.0, 2024: 28.0, 2025: 28.0 },
     biogenicCO2ePerUnit: 1560.0, typicalPricePerUnit: 8000,
   },
   biomass: {
-    id: "biomass", label: "Biomass (wood / agro-residue)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 15000, renewable: true,
+    id: "biomass", label: "Biomass (wood / agro-residue)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 15000, renewable: true, efSource: "DEFRA",
     co2eFactor: 32.0, co2eByYear: { 2022: 32.0, 2023: 32.0, 2024: 32.0, 2025: 32.0 },
     biogenicCO2ePerUnit: 1450.0, typicalPricePerUnit: 5000,
   },
   bagasse: {
-    id: "bagasse", label: "Bagasse (sugarcane)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 9600, renewable: true,
+    id: "bagasse", label: "Bagasse (sugarcane)", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 9600, renewable: true, efSource: "DEFRA",
     co2eFactor: 24.0, co2eByYear: { 2022: 24.0, 2023: 24.0, 2024: 24.0, 2025: 24.0 },
     biogenicCO2ePerUnit: 950.0, typicalPricePerUnit: 2800,
   },
   riceHusk: {
-    id: "riceHusk", label: "Rice husk", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 13200, renewable: true,
+    id: "riceHusk", label: "Rice husk", unit: "t", densityKgPerUnit: 1000, cvKJperKg: 13200, renewable: true, efSource: "DEFRA",
     co2eFactor: 35.0, co2eByYear: { 2022: 35.0, 2023: 35.0, 2024: 35.0, 2025: 35.0 },
     biogenicCO2ePerUnit: 1380.0, typicalPricePerUnit: 4000,
   },
@@ -267,18 +267,31 @@ export function getRefrigerant(id: RefrigerantId): RefrigerantFactor {
 export interface EFLookup {
   value: number;
   sourceYear: number;
-  exact: boolean; // true if the requested year had its own DEFRA factor
+  exact: boolean; // true if the requested year had its own factor
+  source: "DEFRA" | "IPCC" | "IMO";
 }
 
-/** DEFRA emission factor for a fuel in a given year, clamped to the
- *  available range (e.g. 2021 → 2022, 2027 → 2025) with a flag. */
-export function defraEF(fuelId: FuelId, year: number = LATEST_DEFRA_YEAR): EFLookup {
+/** Non-DEFRA reference years for the badge. */
+const SOURCE_YEAR: Record<"IPCC" | "IMO", number> = { IPCC: 2014, IMO: 2024 };
+
+/** Emission factor for a fuel in a given year. DEFRA fuels clamp to the
+ *  available DEFRA range; IPCC/IMO fuels return their single year-independent
+ *  factor. */
+export function efFor(fuelId: FuelId, year: number = LATEST_DEFRA_YEAR): EFLookup {
   const f = FUELS[fuelId];
+  if (f.efSource !== "DEFRA") {
+    return { value: f.co2eFactor, sourceYear: SOURCE_YEAR[f.efSource], exact: false, source: f.efSource };
+  }
   const min = DEFRA_YEARS[0];
   const max = DEFRA_YEARS[DEFRA_YEARS.length - 1];
   const clamped = Math.max(min, Math.min(max, year));
   const value = f.co2eByYear[clamped] ?? f.co2eFactor;
-  return { value, sourceYear: clamped, exact: clamped === year && f.co2eByYear[year] != null };
+  return { value, sourceYear: clamped, exact: clamped === year && f.co2eByYear[year] != null, source: "DEFRA" };
+}
+
+/** @deprecated Use `efFor` instead. Kept for backward compatibility. */
+export function defraEF(fuelId: FuelId, year: number = LATEST_DEFRA_YEAR): EFLookup {
+  return efFor(fuelId, year);
 }
 
 /** Family colour sequence (warm = hardest to abate → cool = easy win). */
