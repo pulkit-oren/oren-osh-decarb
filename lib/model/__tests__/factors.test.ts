@@ -128,6 +128,11 @@ describe("efFor source fallback", () => {
     expect(ef.source).toBe("IPCC");
     expect(ef.value).toBeCloseTo(2643.09, 2);
   });
+  it("returns real IPCC 2014 factor for coalBriquettes (2032.32, not bituminous proxy)", () => {
+    const ef = efFor("coalBriquettes", 2025);
+    expect(ef.source).toBe("IPCC");
+    expect(ef.value).toBeCloseTo(2032.32, 2);
+  });
 });
 
 describe("FUELS completeness (Task 2)", () => {

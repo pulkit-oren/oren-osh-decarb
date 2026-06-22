@@ -221,8 +221,7 @@ export const FUELS: Record<FuelId, FuelFactor> = {
   coalBriquettes: {
     id: "coalBriquettes", label: "Coal - Briquettes", unit: "t",
     renewable: false, efSource: "IPCC", excelCategory: "solid",
-    // No DEFRA or IPCC factor in the workbook; use IPCC bituminous coal as proxy (2458.88)
-    co2eFactor: 2458.88, co2eByYear: {},
+    co2eFactor: 2032.32, co2eByYear: {},
     typicalPricePerUnit: 6000,
   },
   coalElectricity: {

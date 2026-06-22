@@ -6,7 +6,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 830.565,
-    "densKgL": null,
+    "densKgL": 0.8305650000000001,
     "cv": 42839,
     "defra": {
       "2022": 2.56,
@@ -24,7 +24,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 746.204,
-    "densKgL": null,
+    "densKgL": 0.746204,
     "cv": 43061,
     "defra": {
       "2022": 2.16,
@@ -42,7 +42,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 983.284,
-    "densKgL": null,
+    "densKgL": 0.983284,
     "cv": 40752,
     "defra": {
       "2022": 3.18,
@@ -60,7 +60,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 864.304,
-    "densKgL": null,
+    "densKgL": 0.864304,
     "cv": 40752,
     "defra": {
       "2022": 2.75,
@@ -78,7 +78,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 802.568,
-    "densKgL": null,
+    "densKgL": 0.802568,
     "cv": 43865,
     "defra": {
       "2022": 2.54,
@@ -96,7 +96,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 983.284,
-    "densKgL": null,
+    "densKgL": 0.983284,
     "cv": 40752,
     "defra": {
       "2022": 3.18,
@@ -204,7 +204,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 800,
-    "densKgL": null,
+    "densKgL": 0.8,
     "cv": 43905,
     "defra": {
       "2022": 2.55,
@@ -222,7 +222,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 729.927,
-    "densKgL": null,
+    "densKgL": 0.729927,
     "cv": 44797,
     "defra": {
       "2022": 2.33,
@@ -240,7 +240,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 452.489,
-    "densKgL": null,
+    "densKgL": 0.452489,
     "cv": 45745,
     "defra": {
       "2022": 1.56,
@@ -258,7 +258,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 529.749,
-    "densKgL": null,
+    "densKgL": 0.529749,
     "cv": 45944,
     "defra": {
       "2022": 1.56,
@@ -276,7 +276,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 575.374,
-    "densKgL": null,
+    "densKgL": 0.575374,
     "cv": 45300,
     "defra": {
       "2022": 1.75,
@@ -294,7 +294,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/l)",
     "densKgM3": 514.933,
-    "densKgL": null,
+    "densKgL": 0.514933,
     "cv": 46400,
     "defra": {
       "2022": 1.54,
@@ -312,7 +312,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/m3)",
     "densKgM3": 175,
-    "densKgL": null,
+    "densKgL": 0.175,
     "cv": 45745,
     "defra": {
       "2022": 0.44,
@@ -330,7 +330,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/kg)",
     "densKgM3": 175,
-    "densKgL": null,
+    "densKgL": 0.175,
     "cv": 45745,
     "defra": {
       "2022": 0.44,
@@ -348,7 +348,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/m3)",
     "densKgM3": 0.802,
-    "densKgL": null,
+    "densKgL": 0.0008020000000000001,
     "cv": 45745,
     "defra": {
       "2022": 2.02,
@@ -464,7 +464,7 @@
       "2024": null,
       "2025": null
     },
-    "ipcc2014": null,
+    "ipcc2014": 2032.3200000000002,
     "imo2024": null
   },
   {
@@ -510,7 +510,7 @@
     "renewable": true,
     "unitStr": "Co2e (kg/tonne)",
     "densKgM3": 650,
-    "densKgL": null,
+    "densKgL": 0.65,
     "cv": 17280,
     "defra": {
       "2022": 50.55459,
@@ -528,7 +528,7 @@
     "renewable": true,
     "unitStr": "Co2e (kg/tonne)",
     "densKgM3": 253,
-    "densKgL": null,
+    "densKgL": 0.253,
     "cv": 13600,
     "defra": {
       "2022": 39.78833,
@@ -546,7 +546,7 @@
     "renewable": true,
     "unitStr": "Co2e (kg/tonne)",
     "densKgM3": 425,
-    "densKgL": null,
+    "densKgL": 0.425,
     "cv": 14710,
     "defra": {
       "2022": 43.03576,
@@ -564,7 +564,7 @@
     "renewable": true,
     "unitStr": "Co2 (kg/tonne)",
     "densKgM3": 890,
-    "densKgL": null,
+    "densKgL": 0.89,
     "cv": 37200,
     "defra": {
       "2022": null,
@@ -600,7 +600,7 @@
     "renewable": true,
     "unitStr": "Co2e (kg/tonne)",
     "densKgM3": 1.15,
-    "densKgL": null,
+    "densKgL": 0.00115,
     "cv": 20000,
     "defra": {
       "2022": 1.21919,
@@ -618,7 +618,7 @@
     "renewable": true,
     "unitStr": "Co2e (kg/tonne)",
     "densKgM3": 1.3,
-    "densKgL": null,
+    "densKgL": 0.0013,
     "cv": 12300,
     "defra": {
       "2022": null,
@@ -654,7 +654,7 @@
     "renewable": false,
     "unitStr": "Co2e (kg/kg)",
     "densKgM3": 0.716,
-    "densKgL": null,
+    "densKgL": 0.000716,
     "cv": 50000,
     "defra": {
       "2022": null,

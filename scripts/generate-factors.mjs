@@ -12,7 +12,7 @@ ws.eachRow((row, r) => {
   if (r < 3) return;
   const a = row.getCell(1).value, b = row.getCell(2).value;
   if (!b) return;
-  const num = (c) => { const v = row.getCell(c).value; return typeof v === "number" ? v : null; };
+  const num = (c) => { const v = row.getCell(c).value; if (typeof v === "number") return v; if (v && typeof v === "object" && typeof v.result === "number") return v.result; return null; };
   rows.push({
     r, type: String(a ?? "").trim(), item: String(b).trim(),
     renewable: String(row.getCell(3).value ?? "").trim() === "Renewable",
