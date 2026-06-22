@@ -93,8 +93,8 @@ export function TypeScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, e
                     <button
                       onClick={() => {
                         const id = ensureEntry(def, t, cat, u.name, u.aggregate);
-                        const cur = facById(id);
-                        updateFacility(year, id, { excluded: !cur?.excluded });
+                        const cur = facById(id) ?? { excluded: !u.aggregate };
+                        updateFacility(year, id, { excluded: !cur.excluded });
                       }}
                       aria-label={`Include ${u.name} in central total`}
                       title={ex && !ex.excluded ? "Counted in the company total — click to exclude" : "Not in the company total — click to include"}
@@ -139,8 +139,8 @@ export function TypeScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, e
                     <button
                       onClick={() => {
                         const id = ensureEntry(def, t, cat, u.name, u.aggregate);
-                        const cur = combById(id);
-                        updateCombustion(year, id, { excluded: !cur?.excluded });
+                        const cur = combById(id) ?? { excluded: !u.aggregate };
+                        updateCombustion(year, id, { excluded: !cur.excluded });
                       }}
                       aria-label={`Include ${u.name} in central total`}
                       title={ex && !ex.excluded ? "Counted in the company total — click to exclude" : "Not in the company total — click to include"}

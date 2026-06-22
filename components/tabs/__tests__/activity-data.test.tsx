@@ -135,11 +135,49 @@ describe("ActivityDataTab — inline BU row interactions", () => {
     const toggle = screen.getByLabelText("Include Pune in central total");
     expect(toggle).toBeTruthy();
 
+    // "Excluded from total" must NOT be shown before the toggle
+    expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
+
     // Click to exclude
     fireEvent.click(toggle);
 
     // The "Excluded from total" marker should appear
     // getByText throws if not found — this is the assertion
     expect(screen.getByText(/Excluded from total/)).toBeTruthy();
+  });
+
+  it("toggling the central control on a NON-aggregate BU flips it to included (bug fix)", async () => {
+    // Seed a non-aggregate BU "Goa"
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Goa", aggregate: false }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to Diesel type screen
+    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
+    fireEvent.click(catBtn);
+    const fuelBtn = screen.getByText("Diesel").closest("button")!;
+    fireEvent.click(fuelBtn);
+
+    // Type a value to create the entry (ensureEntry is called with aggregate: false)
+    const input = await screen.findByLabelText("Goa Diesel consumption");
+    fireEvent.change(input, { target: { value: "50000" } });
+
+    // Entry is now created with excluded: true (aggregate: false → excluded: !false = true)
+    // "Excluded from total" should be visible
+    expect(screen.getByText(/Excluded from total/)).toBeTruthy();
+
+    // Click the central toggle — should flip excluded from true → false (include it)
+    const toggle = screen.getByLabelText("Include Goa in central total");
+    fireEvent.click(toggle);
+
+    // After the toggle, "Excluded from total" should be gone
+    expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
   });
 });
