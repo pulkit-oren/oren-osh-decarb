@@ -141,4 +141,12 @@ describe("FUELS completeness (Task 2)", () => {
     expect(listed.length).toBe(35);
     for (const f of listed) expect(["DEFRA", "IPCC", "IMO"]).toContain(f.efSource);
   });
+
+  it("bioBriquettes is categorised as liquid (workbook: Fuels - Liquid)", () => {
+    expect(FUELS.bioBriquettes.excelCategory).toBe("liquid");
+  });
+
+  it("cngScm densityKgPerUnit is the kg/m³ value (175), not kg/L (0.175)", () => {
+    expect(FUELS.cngScm.densityKgPerUnit).toBe(175);
+  });
 });

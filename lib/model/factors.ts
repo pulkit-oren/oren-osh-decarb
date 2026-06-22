@@ -156,7 +156,7 @@ export const FUELS: Record<FuelId, FuelFactor> = {
     typicalPricePerUnit: 62,
   },
   cngScm: {
-    id: "cngScm", label: "Compressed Natural Gas (CNG) - SCM", unit: "m3", densityKgPerUnit: 0.175, cvKJperKg: 45745,
+    id: "cngScm", label: "Compressed Natural Gas (CNG) - SCM", unit: "m3", densityKgPerUnit: 175, cvKJperKg: 45745,
     renewable: false, efSource: "DEFRA", excelCategory: "gas",
     co2eFactor: 0.4507, co2eByYear: { 2022: 0.44, 2023: 0.45, 2024: 0.44942, 2025: 0.4507 },
     typicalPricePerUnit: 50,
@@ -250,7 +250,7 @@ export const FUELS: Record<FuelId, FuelFactor> = {
   },
   bioBriquettes: {
     id: "bioBriquettes", label: "Bio Briquettes", unit: "t", cvKJperKg: 16200,
-    renewable: true, efSource: "DEFRA", excelCategory: "solid",
+    renewable: true, efSource: "DEFRA", excelCategory: "liquid",
     co2eFactor: 28.0, co2eByYear: { 2022: 28.0, 2023: 28.0, 2024: 28.0, 2025: 28.0 },
     biogenicCO2ePerUnit: 1560.0, typicalPricePerUnit: 8000,
   },
