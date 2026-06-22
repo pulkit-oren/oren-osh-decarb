@@ -43,10 +43,9 @@ const ICON_COLOR: Record<string, string> = {
 
 type CatKey = FuelFamily | "refrigerants" | "electricity";
 const CAT_DEFS: { key: CatKey; label: string; scope: 1 | 2; meta: string; kind: "fuel" | "refrigerant" | "electricity" }[] = [
-  { key: "gaseous", label: "Fuels – Gaseous", scope: 1, meta: "gaseous", kind: "fuel" },
   { key: "liquid", label: "Fuels – Liquid", scope: 1, meta: "liquid", kind: "fuel" },
+  { key: "gas", label: "Fuels – Gas", scope: 1, meta: "gaseous", kind: "fuel" },
   { key: "solid", label: "Fuels – Solid", scope: 1, meta: "solid", kind: "fuel" },
-  { key: "biomass", label: "Biomass & biofuels", scope: 1, meta: "biomass", kind: "fuel" },
   { key: "refrigerants", label: "Refrigerants & cooling", scope: 1, meta: "refrigerant", kind: "refrigerant" },
   { key: "electricity", label: "Electricity", scope: 2, meta: "electricity", kind: "electricity" },
 ];
@@ -155,7 +154,7 @@ export function ActivityDataTab() {
 
   const assetsByFamily = (fam: FuelFamily) => s1.selectedAssets.filter((a) => fuelFamily(a.fuelType) === fam);
   const fuelsInFamily = (fam: FuelFamily) => (Object.keys(FUELS) as FuelId[]).filter((id) => fuelFamily(id) === fam).map((id) => ({ id, label: FUELS[id].label }));
-  const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : assetsByFamily(key).length;
+  const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : (key === "liquid" || key === "gas" || key === "solid") ? assetsByFamily(key).length : 0;
 
   const typesFor = (d: CatDef): { key: string; label: string; gridEf?: number }[] =>
     d.kind === "electricity"
@@ -258,8 +257,8 @@ export function ActivityDataTab() {
     const a = combById(nav.id);
     if (!a) { setNav({ level: "home" }); return null; }
     const disp = a.displayUnit ?? a.unit;
-    const fam = fuelFamily(a.fuelType);
-    const Icon = CAT_ICON[fam];
+    const fam = fuelFamily(a.fuelType) ?? "liquid";
+    const Icon = CAT_ICON[fam] ?? CAT_ICON.liquid;
     const catLabel = CAT_DEFS.find((c) => c.key === fam)?.label ?? "fuels";
     return (
       <div key={`entry-${a.id}`} className="screen-in flex flex-col gap-5">
@@ -625,7 +624,7 @@ export function ActivityDataTab() {
           <div className="relative mt-auto pt-5 border-t border-white/20 grid grid-cols-3 gap-2 text-center">
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Measured</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{Math.round(confidence.measuredPct * 100)}%</p></div>
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Sources</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{totalSources}</p></div>
-            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Categories</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{CAT_DEFS.filter((d) => countOf(d.key) > 0).length}<span className="text-sm font-medium text-white/70">/6</span></p></div>
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Categories</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{CAT_DEFS.filter((d) => countOf(d.key) > 0).length}<span className="text-sm font-medium text-white/70">/5</span></p></div>
           </div>
         </aside>
       </div>

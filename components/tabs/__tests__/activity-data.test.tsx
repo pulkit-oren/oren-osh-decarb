@@ -17,7 +17,9 @@ describe("ActivityDataTab", () => {
       </CompanyProvider>,
     );
     expect(html).toContain("Activity data");
-    expect(html).toContain("Fuels – Gaseous");
+    expect(html).toContain("Fuels – Liquid");
+    expect(html).toContain("Fuels – Gas");
+    expect(html).toContain("Fuels – Solid");
     expect(html).toContain("Electricity");
     expect(html).toContain("Total footprint");
     expect(html).toContain("Scope 1");
