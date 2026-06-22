@@ -218,7 +218,7 @@ export function ActivityDataTab() {
   }
 
   if (nav.level === "scope") {
-    return <ScopeScreen scope={nav.scope} onBack={() => setNav({ level: "home" })} />;
+    return <ScopeScreen scope={nav.scope} s1={s1} s2={s2} year={year} onBack={() => setNav({ level: "home" })} />;
   }
 
   // home

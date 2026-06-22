@@ -232,3 +232,28 @@ describe("ActivityDataTab — refrigerant gas-card flow", () => {
     expect(screen.getByText(/Excluded from total/)).toBeTruthy();
   });
 });
+
+// ── Scope drill-down tests ────────────────────────────────────────────────────
+
+describe("ActivityDataTab — Scope drill-down", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  function renderActivityHomeWithData() {
+    // Seed store-independent state — just render; the default store seeds diesel + R-404A
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+  }
+
+  it("clicking Scope 1 opens a drill-down listing sources by category", async () => {
+    renderActivityHomeWithData();
+    fireEvent.click(screen.getByRole("button", { name: /Scope 1 details/i }));
+    expect(await screen.findByText("Fuels – Liquid")).toBeTruthy();
+    expect(screen.getAllByText(/Diesel/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Refrigerants")).toBeTruthy();
+  });
+});

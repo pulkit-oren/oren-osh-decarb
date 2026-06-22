@@ -90,16 +90,16 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
           <p className="relative mt-3 text-[44px] leading-none font-extrabold tabular-nums">{fmt(total)} <span className="text-lg font-semibold text-white/80">tCO₂e</span></p>
           <p className="relative mt-1 text-xs text-white/70">Scope 1 + Scope 2, this financial year</p>
           <div className="relative mt-6 flex flex-col gap-3">
-            <div className="rounded-2xl bg-white/12 backdrop-blur-sm px-4 py-3">
+            <button onClick={() => setNav({ level: "scope", scope: 1 })} aria-label="Scope 1 details" className="rounded-2xl bg-white/12 backdrop-blur-sm px-4 py-3 text-left w-full cursor-pointer hover:bg-white/20 transition-colors">
               <div className="flex items-center justify-between"><span className="text-sm font-bold">Scope 1</span><span className="text-xs text-white/75">{share(scope1T)}%</span></div>
               <div className="text-2xl font-extrabold tabular-nums mt-0.5">{fmt(scope1T)} <span className="text-xs font-medium text-white/75">tCO₂e</span></div>
               <div className="mt-2 h-1.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-white transition-all duration-500" style={{ width: `${share(scope1T)}%` }} /></div>
-            </div>
-            <div className="rounded-2xl bg-white/12 backdrop-blur-sm px-4 py-3">
+            </button>
+            <button onClick={() => setNav({ level: "scope", scope: 2 })} aria-label="Scope 2 details" className="rounded-2xl bg-white/12 backdrop-blur-sm px-4 py-3 text-left w-full cursor-pointer hover:bg-white/20 transition-colors">
               <div className="flex items-center justify-between"><span className="text-sm font-bold">Scope 2</span><span className="text-xs text-white/75">{share(scope2T)}%</span></div>
               <div className="text-2xl font-extrabold tabular-nums mt-0.5">{fmt(scope2T)} <span className="text-xs font-medium text-white/75">tCO₂e</span></div>
               <div className="mt-2 h-1.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-white transition-all duration-500" style={{ width: `${share(scope2T)}%` }} /></div>
-            </div>
+            </button>
           </div>
           <div className="relative mt-auto pt-5 border-t border-white/20 grid grid-cols-3 gap-2 text-center">
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Measured</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{Math.round(confidence.measuredPct * 100)}%</p></div>
