@@ -1,11 +1,76 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { describe, expect, it, beforeEach } from "vitest";
 import { renderToString } from "react-dom/server";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "../ActivityDataTab";
 
+// ── Provider wrapper ─────────────────────────────────────────────────────────
+
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <CompanyProvider>
+      <ScenarioProvider>
+        <Scope2Provider>
+          {children}
+        </Scope2Provider>
+      </ScenarioProvider>
+    </CompanyProvider>
+  );
+}
+
+// ── renderActivityInTypeScreen ────────────────────────────────────────────────
+// Seeds localStorage for BU mode with one BU "Pune" (aggregate: true),
+// then renders ActivityDataTab and navigates to the given fuel's type screen
+// by clicking the category card then the fuel card.
+
+interface TypeScreenOpts {
+  family: "liquid" | "gas" | "solid";
+  fuel: string;   // e.g. "diesel" (matches the button label search)
+  fuelLabel: string; // e.g. "Diesel"
+  bus: string[];  // BU names
+  value?: number; // optionally pre-seed a value via the input
+}
+
+function renderActivityInTypeScreen(opts: TypeScreenOpts) {
+  // Seed BU config before mount — the default active company id is "c-0"
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: opts.bus.map((name) => ({ name, aggregate: true })) }),
+  );
+
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+
+  // Category labels map
+  const catLabel: Record<string, string> = {
+    liquid: "Fuels – Liquid",
+    gas: "Fuels – Gas",
+    solid: "Fuels – Solid",
+  };
+
+  // Click the category card (button containing the label text)
+  const catBtn = screen.getByText(catLabel[opts.family]).closest("button")!;
+  fireEvent.click(catBtn);
+
+  // Now we're on CategoryScreen — click the fuel card (button containing fuelLabel)
+  const fuelBtn = screen.getByText(opts.fuelLabel).closest("button")!;
+  fireEvent.click(fuelBtn);
+}
+
+// ── Existing smoke test (SSR, kept intact) ───────────────────────────────────
+
 describe("ActivityDataTab", () => {
+  beforeEach(() => {
+    // Clear BU state so SSR test isn't affected by BU config
+    window.localStorage.removeItem("osh-bus-v3::c-0");
+  });
+
   it("renders the unified categories and total footprint", () => {
     const html = renderToString(
       <CompanyProvider>
@@ -24,5 +89,57 @@ describe("ActivityDataTab", () => {
     expect(html).toContain("Total footprint");
     expect(html).toContain("Scope 1");
     expect(html).toContain("Scope 2");
+  });
+});
+
+// ── Interactive BU row tests ──────────────────────────────────────────────────
+
+describe("ActivityDataTab — inline BU row interactions", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("typing a value on a BU row creates the entry and shows emissions", async () => {
+    renderActivityInTypeScreen({
+      family: "liquid",
+      fuel: "diesel",
+      fuelLabel: "Diesel",
+      bus: ["Pune"],
+    });
+
+    // The inline input should now be visible with the BU's aria-label
+    const input = await screen.findByLabelText("Pune Diesel consumption");
+    expect(input).toBeTruthy();
+
+    // Type a consumption value
+    fireEvent.change(input, { target: { value: "100000" } });
+
+    // Emissions cell should now show a value ending in "t"
+    const emCells = screen.getAllByText(/\d.*t$/);
+    expect(emCells.length).toBeGreaterThan(0);
+  });
+
+  it("toggling the central control excludes the BU from the total", async () => {
+    renderActivityInTypeScreen({
+      family: "liquid",
+      fuel: "diesel",
+      fuelLabel: "Diesel",
+      bus: ["Pune"],
+    });
+
+    // First type a value so the entry exists
+    const input = await screen.findByLabelText("Pune Diesel consumption");
+    fireEvent.change(input, { target: { value: "100000" } });
+
+    // The central toggle button should be present
+    const toggle = screen.getByLabelText("Include Pune in central total");
+    expect(toggle).toBeTruthy();
+
+    // Click to exclude
+    fireEvent.click(toggle);
+
+    // The "Excluded from total" marker should appear
+    // getByText throws if not found — this is the assertion
+    expect(screen.getByText(/Excluded from total/)).toBeTruthy();
   });
 });

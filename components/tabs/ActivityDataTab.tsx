@@ -83,19 +83,24 @@ export function ActivityDataTab() {
   const nWithData = (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") =>
     buReg.units.filter((u) => entryFor(d, t, cat, u.name)).length;
 
-  const openEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean) => {
+  // Returns the entry id for (type, category, bu), creating it if missing WITHOUT navigating.
+  const ensureEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean): string => {
     if (d.kind === "electricity") {
       let ex = s2.selectedFacilities.find((f) => (f.bu ?? "") === bu && f.name === t.label);
       if (!ex) { const rec = blankFac(bu, t, 0, agg); s2.addFacilityRecord(year, rec); ex = rec; }
-      setNav({ level: "entry", kind: "facility", id: ex.id });
-    } else {
-      const fuelId = t.key as FuelId;
-      const ex = s1.selectedAssets.find((a) => (a.bu ?? "") === bu && a.fuelType === fuelId && (!cat || a.category === cat));
-      if (ex) { setNav({ level: "entry", kind: "combustion", id: ex.id }); return; }
-      const id = newId("c");
-      s1.addCombustionAsset(year, { id, name: bu ? `${FUELS[fuelId].label} — ${bu}` : FUELS[fuelId].label, category: cat ?? "stationary", fuelType: fuelId, unit: FUELS[fuelId].unit, annualVolume: 0, opex: 0, remainingLife: 10, unitCount: 1, bu: bu || undefined, excluded: bu ? !agg : false });
-      setNav({ level: "entry", kind: "combustion", id });
+      return ex.id;
     }
+    const fuelId = t.key as FuelId;
+    const ex = s1.selectedAssets.find((a) => (a.bu ?? "") === bu && a.fuelType === fuelId && (!cat || a.category === cat));
+    if (ex) return ex.id;
+    const id = newId("c");
+    s1.addCombustionAsset(year, { id, name: bu ? `${FUELS[fuelId].label} — ${bu}` : FUELS[fuelId].label, category: cat ?? "stationary", fuelType: fuelId, unit: FUELS[fuelId].unit, annualVolume: 0, opex: 0, remainingLife: 10, unitCount: 1, bu: bu || undefined, excluded: bu ? !agg : false });
+    return id;
+  };
+
+  const openEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean) => {
+    const id = ensureEntry(d, t, cat, bu, agg);
+    setNav({ level: "entry", kind: d.kind === "electricity" ? "facility" : "combustion", id });
   };
 
   const combById = (id: string) => s1.selectedAssets.find((a) => a.id === id);
@@ -136,11 +141,17 @@ export function ActivityDataTab() {
         nav={nav}
         setNav={setNav}
         buReg={buReg}
+        year={year}
         typesFor={typesFor}
         typeAggTotal={typeAggTotal}
         entryFor={entryFor}
         emOfEntry={emOfEntry}
         openEntry={openEntry}
+        ensureEntry={ensureEntry}
+        combById={combById}
+        facById={facById}
+        updateCombustion={s1.updateCombustion}
+        updateFacility={s2.updateFacility}
       />
     );
   }
