@@ -150,3 +150,18 @@ describe("FUELS completeness (Task 2)", () => {
     expect(FUELS.cngScm.densityKgPerUnit).toBe(175);
   });
 });
+
+import { REFRIGERANTS } from "../factors";
+describe("refrigerants from workbook", () => {
+  it("R404A GWP matches the workbook value", () => {
+    expect(REFRIGERANTS.R404A.gwp).toBe(3943);
+    expect(REFRIGERANTS.R404A.inExcel).toBe(true);
+  });
+  it("includes added workbook-only blends", () => {
+    expect(REFRIGERANTS.R401A?.gwp).toBe(18);
+    expect(REFRIGERANTS.R512A?.inExcel).toBe(true);
+  });
+  it("lists exactly 66 workbook refrigerants", () => {
+    expect(Object.values(REFRIGERANTS).filter((r) => r.inExcel).length).toBe(66);
+  });
+});

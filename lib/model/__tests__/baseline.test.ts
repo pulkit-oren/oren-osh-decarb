@@ -29,17 +29,17 @@ describe("baseline", () => {
   });
 
   it("refrigerant CO2e = topped-up kg × gwp (tonnes)", () => {
-    // 120 kg topped up × 3922 ÷ 1000 = 470.64 t
-    expect(refrigerantCO2e(chiller)).toBeCloseTo((120 * 3922) / 1000, 1);
+    // 120 kg topped up × 3943 ÷ 1000 = 473.16 t
+    expect(refrigerantCO2e(chiller)).toBeCloseTo((120 * 3943) / 1000, 1);
   });
 
   it("baseline sums both pools", () => {
     const b = baselineScope1([genset], [chiller]);
-    expect(b.totalT).toBeCloseTo(642.7 + 470.6, 0);
+    expect(b.totalT).toBeCloseTo(642.7 + 473.2, 0);
     expect(b.combustionT).toBeGreaterThan(0);
     expect(b.refrigerantT).toBeGreaterThan(0);
     expect(b.perCombustion[0].co2eT).toBeCloseTo(642.7, 0);
-    expect(b.perRefrigeration[0].co2eT).toBeCloseTo(470.6, 0);
+    expect(b.perRefrigeration[0].co2eT).toBeCloseTo(473.2, 0);
   });
 
   it("empty baseline is zero", () => {

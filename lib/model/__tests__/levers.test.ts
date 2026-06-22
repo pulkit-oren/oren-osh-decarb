@@ -40,7 +40,7 @@ describe("electrification", () => {
 
 describe("refrigerant", () => {
   it("full transition to R-290 + leak fix cuts fugitive sharply", () => {
-    const base = (120 * 3922) / 1000;
+    const base = (120 * 3943) / 1000;
     const r = applyRefrigerant(chiller, { transitionPct: 100, altRefrigerant: "R290", leakImprovementPct: 50 });
     expect(r.newFugitiveT).toBeLessThan(base * 0.01);
     expect(r.abatementT).toBeCloseTo(base - r.newFugitiveT, 3);
