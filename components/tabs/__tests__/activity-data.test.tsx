@@ -233,6 +233,39 @@ describe("ActivityDataTab — refrigerant gas-card flow", () => {
   });
 });
 
+// ── New workbook fuels visibility test ───────────────────────────────────────
+// Regression: FUELS_BY_CATEGORY never included the 20 new workbook fuels
+// (jetFuel, marineDiesel*, aviationGasoline, biodiesel, lng, etc.), so the
+// old filter hid them from the fuel-card grid.  After the fix (filter dropped),
+// every fuel with excelCategory === "liquid" must appear as a selectable card.
+
+describe("ActivityDataTab — new workbook fuels are selectable", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('shows "Jet Fuel (Aviation Turbine Fuel)" card in Fuels – Liquid (was hidden by old FUELS_BY_CATEGORY filter)', () => {
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to the Fuels – Liquid category screen
+    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
+    fireEvent.click(catBtn);
+
+    // Jet Fuel has excelCategory "liquid" so fuelsInFamily("liquid") includes it.
+    // Without the fix the old filter removed it; with the fix it must be visible.
+    expect(screen.getByText("Jet Fuel (Aviation Turbine Fuel)")).toBeTruthy();
+  });
+});
+
 // ── Scope drill-down tests ────────────────────────────────────────────────────
 
 describe("ActivityDataTab — Scope drill-down", () => {
