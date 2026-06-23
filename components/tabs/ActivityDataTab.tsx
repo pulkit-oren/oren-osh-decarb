@@ -53,7 +53,7 @@ export function ActivityDataTab() {
 
   const assetsByFamily = (fam: FuelFamily) => s1.selectedAssets.filter((a) => fuelFamily(a.fuelType) === fam);
   const fuelsInFamily = (fam: FuelFamily) => (Object.keys(FUELS) as FuelId[]).filter((id) => fuelFamily(id) === fam).map((id) => ({ id, label: FUELS[id].label }));
-  const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : (key === "liquid" || key === "gas" || key === "solid") ? assetsByFamily(key).length : 0;
+  const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : (key === "liquid" || key === "gas" || key === "solid" || key === "biofuels") ? assetsByFamily(key).length : 0;
 
   // Gases from the Excel workbook (inExcel: true)
   const refrigGases = (Object.values(REFRIGERANTS) as RefrigerantFactor[])

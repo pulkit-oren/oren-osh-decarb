@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Plug } from "lucide-react";
+import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Plug, Leaf } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FuelFamily } from "@/lib/activity-groups";
 import type { Facility } from "@/lib/scope2/model/types";
@@ -27,6 +27,7 @@ export const CAT_DEFS: CatDef[] = [
   { key: "liquid", label: "Fuels – Liquid", scope: 1, meta: "liquid", kind: "fuel" },
   { key: "gas", label: "Fuels – Gas", scope: 1, meta: "gaseous", kind: "fuel" },
   { key: "solid", label: "Fuels – Solid", scope: 1, meta: "solid", kind: "fuel" },
+  { key: "biofuels", label: "Bio Fuels", scope: 1, meta: "biomass", kind: "fuel" },
   { key: "refrigerants", label: "Refrigerants & cooling", scope: 1, meta: "refrigerant", kind: "refrigerant" },
   { key: "electricity", label: "Electricity", scope: 2, meta: "electricity", kind: "electricity" },
 ];
@@ -62,11 +63,11 @@ export const GRAD: Record<string, string> = {
 };
 
 export const CAT_ICON: Record<string, React.ElementType> = {
-  gaseous: Flame, liquid: Droplets, solid: Mountain, refrigerant: Snowflake, electricity: Zap,
+  gaseous: Flame, liquid: Droplets, solid: Mountain, biomass: Leaf, refrigerant: Snowflake, electricity: Zap,
 };
 
 export const ICON_COLOR: Record<string, string> = {
-  gaseous: "#B45309", liquid: "#0369A1", solid: "#475569", refrigerant: "#0E7490", electricity: "#0F7873",
+  gaseous: "#B45309", liquid: "#0369A1", solid: "#475569", biomass: "#15803D", refrigerant: "#0E7490", electricity: "#0F7873",
 };
 
 // ─── Small utilities ───────────────────────────────────────────────────────

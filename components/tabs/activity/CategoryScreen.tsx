@@ -3,7 +3,7 @@
 import { ArrowLeft, ChevronRight, ChevronDown, Check } from "lucide-react";
 import { useState } from "react";
 import { CAT_DEFS, META, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, ScopeBadge, type Nav, type CatKey, type CatDef } from "./shared";
-import { FUELS } from "@/lib/model/factors";
+import { FUELS, FUELS_BY_CATEGORY } from "@/lib/model/factors";
 import { fuelFamily, type FuelFamily } from "@/lib/activity-groups";
 import { fmt, cn } from "@/lib/utils";
 import type { FuelId } from "@/lib/model/types";
@@ -90,7 +90,7 @@ export function CategoryScreen({ nav, setNav, year, buReg, typesFor, typeAggTota
           </div>
         </>
       ) : (() => {
-        const famFuels = fuelsInFamily(def.key as FuelFamily);
+        const famFuels = fuelsInFamily(def.key as FuelFamily).filter((f) => FUELS_BY_CATEGORY[catMode].includes(f.id));
         const shown = fuelFilter.size === 0 ? famFuels : famFuels.filter((f) => fuelFilter.has(f.id));
         return (
           <>

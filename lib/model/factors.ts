@@ -447,12 +447,17 @@ export const RECOMMENDED_ALT_BY_SYSTEM: Record<RefrigerationSystem["systemType"]
 /** Which fuels are relevant to each asset category — mobile (vehicles) burn a
  *  different set than stationary (boilers, gensets, process). */
 export const FUELS_BY_CATEGORY: Record<"stationary" | "mobile", FuelId[]> = {
-  mobile: ["diesel", "petrol", "cng", "lpg", "propane", "butane", "bioCng"],
+  mobile: [
+    "diesel", "petrol", "cng", "lpg", "propane", "butane", "biodiesel",
+    "marineHfoVlsfo", "marineHfoHsfo", "marineLfoUlsfo", "marineLfoVlsfo", "marineGasOil",
+    "jetFuel", "aviationGasoline", "bioCng",
+  ],
   stationary: [
-    "diesel", "fuelOil", "ldo", "kerosene", "naphtha",
-    "png", "lpg", "propane", "butane", "cng",
-    "coal", "cokingCoal", "lignite", "petcoke",
-    "biogas", "bioCng", "bioBriquettes", "biomass", "bagasse", "riceHusk",
+    "diesel", "fuelOil", "residualFuelOil", "lubricants", "ldo", "kerosene", "naphtha",
+    "png", "lng", "cng", "cngScm", "lpg", "propane", "butane",
+    "coal", "cokingCoal", "lignite", "petcoke", "coalAnthracite", "coalBituminous", "coalBriquettes", "coalElectricity",
+    "biogas", "landfillGas", "biodiesel", "bioBriquettes", "biomass", "bagasse", "riceHusk",
+    "woodPellets", "woodChips", "woodLogs",
   ],
 };
 
