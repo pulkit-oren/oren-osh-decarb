@@ -598,6 +598,39 @@ describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
   });
 });
 
+// ── Refrigerant gear → full screen (Task 5) ──────────────────────────────────
+
+async function openR404aBuRow() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Navigate: home → Refrigerants & cooling category → R-404A type screen
+  const catBtn = screen.getByText("Refrigerants & cooling").closest("button")!;
+  fireEvent.click(catBtn);
+  fireEvent.click(await screen.findByText(/R-404A/));
+  // Now on the R-404A type screen with BU "Pune" row visible
+}
+
+describe("ActivityDataTab — refrigerant gear opens full entry screen (Task 5)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("refrigerant gear opens the full refrigerant entry screen", async () => {
+    await openR404aBuRow(); // refrigerants → R-404A → BU mode row visible
+    fireEvent.click(screen.getByLabelText("Pune details")); // the gear
+    // full screen: Details for the scenario modeller + collapsible calc, NOT a side panel
+    expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
+    expect(screen.getByText(/Details for the scenario modeller/i)).toBeTruthy();
+  });
+});
+
 // ── Electricity BU-first 4-box flow tests (Task 4) ───────────────────────────
 
 async function openElectricityCategory() {

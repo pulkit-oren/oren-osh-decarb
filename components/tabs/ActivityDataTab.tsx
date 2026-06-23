@@ -11,7 +11,7 @@ import { combustionGrade, refrigerantGrade, facilityGrade, confidenceOf } from "
 import { FY_YEARS, type CombustionAsset, type FuelId, type RefrigerantId, type RefrigerantFactor } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
 
-import { CAT_DEFS, ELEC_TYPES, facCO2e, newId, type Nav, type CatKey, type CatDef, type Sel } from "./activity/shared";
+import { CAT_DEFS, ELEC_TYPES, facCO2e, newId, type Nav, type CatKey, type CatDef } from "./activity/shared";
 import { useBuConfig } from "./activity/useBuConfig";
 import { HomeScreen } from "./activity/HomeScreen";
 import { BusinessUnitsScreen } from "./activity/BusinessUnitsScreen";
@@ -20,14 +20,12 @@ import { ElectricityBuScreen } from "./activity/ElectricityBuScreen";
 import { TypeScreen } from "./activity/TypeScreen";
 import { EntryScreen } from "./activity/EntryScreen";
 import { ScopeScreen } from "./activity/ScopeScreen";
-import { DetailPanel } from "./DataInputTab";
 
 export function ActivityDataTab() {
   const s1 = useScenario();
   const s2 = useScope2();
   const { activeId } = useCompany();
   const [nav, setNav] = useState<Nav>({ level: "home" });
-  const [sel, setSel] = useState<Sel>(null);
   const { buReg, addBu, removeBu, setMode } = useBuConfig(activeId);
 
   const year = s1.selectedYear;
@@ -120,11 +118,6 @@ export function ActivityDataTab() {
 
   // Returns the entry id for (type, category, bu), creating it if missing WITHOUT navigating.
   const ensureEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean): string => {
-    if (d.kind === "electricity") {
-      let ex = s2.selectedFacilities.find((f) => (f.bu ?? "") === bu && f.name === t.label);
-      if (!ex) { const rec = blankFac(bu, t, 0, agg); s2.addFacilityRecord(year, rec); ex = rec; }
-      return ex.id;
-    }
     const fuelId = t.key as FuelId;
     const ex = s1.selectedAssets.find((a) => (a.bu ?? "") === bu && a.fuelType === fuelId && (!cat || a.category === cat));
     if (ex) return ex.id;
@@ -193,33 +186,24 @@ export function ActivityDataTab() {
 
   if (nav.level === "type") {
     return (
-      <>
-        <TypeScreen
-          nav={nav}
-          setNav={setNav}
-          setSel={setSel}
-          buReg={buReg}
-          year={year}
-          typesFor={typesFor}
-          typeAggTotal={typeAggTotal}
-          entryFor={entryFor}
-          emOfEntry={emOfEntry}
-          openEntry={openEntry}
-          ensureEntry={ensureEntry}
-          ensureRefrigEntry={ensureRefrigEntry}
-          combById={combById}
-          facById={facById}
-          refrigSysById={refrigSysById}
-          selectedSystems={s1.selectedSystems}
-          updateCombustion={s1.updateCombustion}
-          updateFacility={s2.updateFacility}
-          updateRefrigeration={s1.updateRefrigeration}
-        />
-        {sel?.kind === "refrigerant" && (() => {
-          const sys = refrigSysById(sel.id);
-          return sys ? <DetailPanel refrigerant={sys} year={year} onClose={() => setSel(null)} /> : null;
-        })()}
-      </>
+      <TypeScreen
+        nav={nav}
+        setNav={setNav}
+        buReg={buReg}
+        year={year}
+        typesFor={typesFor}
+        typeAggTotal={typeAggTotal}
+        entryFor={entryFor}
+        emOfEntry={emOfEntry}
+        openEntry={openEntry}
+        ensureEntry={ensureEntry}
+        ensureRefrigEntry={ensureRefrigEntry}
+        combById={combById}
+        refrigSysById={refrigSysById}
+        selectedSystems={s1.selectedSystems}
+        updateCombustion={s1.updateCombustion}
+        updateRefrigeration={s1.updateRefrigeration}
+      />
     );
   }
 
