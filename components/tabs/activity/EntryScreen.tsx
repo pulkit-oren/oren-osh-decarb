@@ -39,7 +39,7 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
     const gas = REFRIGERANTS[s.refrigerant];
     return (
       <div key={`ref-${s.id}`} className="screen-in flex flex-col gap-5">
-        <button onClick={() => setNav({ level: "type", key: "refrigerants", typeKey: s.refrigerant })} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit"><ArrowLeft size={16} /> Back to {gas.label}</button>
+        <button onClick={() => setNav({ level: "cat", key: "refrigerants" })} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit"><ArrowLeft size={16} /> Back to Refrigerants &amp; cooling</button>
         <div style={{ background: GRAD.refrigerant }} className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 flex items-center gap-4">
           <span className="w-14 h-14 rounded-2xl bg-white/55 backdrop-blur-sm grid place-items-center shrink-0"><Snowflake size={28} strokeWidth={1.9} style={{ color: ICON_COLOR.refrigerant }} /></span>
           <div className="min-w-0 flex-1">
@@ -118,7 +118,7 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
   const catLabel = CAT_DEFS.find((c) => c.key === fam)?.label ?? "fuels";
   return (
     <div key={`entry-${a.id}`} className="screen-in flex flex-col gap-5">
-      <button onClick={() => setNav({ level: "type", key: fam, typeKey: a.fuelType, cat: a.category })} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit"><ArrowLeft size={16} /> Back to {FUELS[a.fuelType].label}</button>
+      <button onClick={() => setNav({ level: "cat", key: fam })} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit"><ArrowLeft size={16} /> Back to {catLabel}</button>
       <div style={{ background: GRAD[fam] }} className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 flex items-center gap-4">
         <span className="w-14 h-14 rounded-2xl bg-white/55 backdrop-blur-sm grid place-items-center shrink-0"><Icon size={28} strokeWidth={1.9} style={{ color: ICON_COLOR[fam] }} /></span>
         <div className="min-w-0 flex-1">
