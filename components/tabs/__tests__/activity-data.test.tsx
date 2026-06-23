@@ -368,4 +368,20 @@ describe("ActivityDataTab — SourceListScreen (Task 1)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
     expect(screen.getAllByText("Diesel gensets").length).toBeGreaterThan(0);
   });
+
+  it("excluded source shows an always-visible 'Excluded from total' badge on the row", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(await screen.findByText("Fuels – Liquid"));
+    // Add a source
+    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+    fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Excluded Genset" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    // Badge should not be visible yet (source is included by default)
+    expect(screen.queryByText(/Excluded from total/i)).toBeFalsy();
+    // Toggle excluded via the central button (it's inside hover group but still clickable)
+    const toggleBtn = screen.getByRole("button", { name: /Include Excluded Genset in central total/i });
+    fireEvent.click(toggleBtn);
+    // Now the always-visible badge must appear
+    expect(screen.getByText(/Excluded from total/i)).toBeTruthy();
+  });
 });

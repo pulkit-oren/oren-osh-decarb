@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, Plus, Trash2, ChevronRight } from "lucide-react";
 import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, newId, type Nav, type CatKey, type CatDef } from "./shared";
 import { FUELS, FUELS_BY_CATEGORY, REFRIGERANTS } from "@/lib/model/factors";
-import { fuelsInExcelFamily } from "@/lib/activity-groups";
+import { fuelsInExcelFamily, fuelFamily, type FuelFamily } from "@/lib/activity-groups";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { fmt, cn } from "@/lib/utils";
 import type { CombustionAsset, FuelId, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
@@ -53,14 +53,7 @@ export function SourceListScreen({
 
   const CatIcon = CAT_ICON[def.meta];
   const isRefrigerant = def.kind === "refrigerant";
-  const family = def.key as "liquid" | "gas" | "solid" | "biofuels";
-
-  // Available fuels for the current type (stationary/mobile) filtered by family
-  const availableFuels = isRefrigerant
-    ? []
-    : fuelsInExcelFamily(family).filter((f) =>
-        FUELS_BY_CATEGORY[fuelType].includes(f.id)
-      );
+  const family = def.key as FuelFamily;
 
   // Available refrigerant gases (inExcel only)
   const availableGases = isRefrigerant
@@ -71,10 +64,12 @@ export function SourceListScreen({
   const handleOpenForm = () => {
     setSourceName("");
     setFuelType("stationary");
-    const fuels = fuelsInExcelFamily(isRefrigerant ? "liquid" : family).filter(
-      (f) => FUELS_BY_CATEGORY["stationary"].includes(f.id)
-    );
-    setSelectedFuel(fuels[0]?.id ?? "");
+    if (!isRefrigerant) {
+      const fuels = fuelsInExcelFamily(family).filter(
+        (f) => FUELS_BY_CATEGORY["stationary"].includes(f.id)
+      );
+      setSelectedFuel(fuels[0]?.id ?? "");
+    }
     const gases = (Object.values(REFRIGERANTS) as typeof REFRIGERANTS[keyof typeof REFRIGERANTS][]).filter((r) => r.inExcel);
     setSelectedGas(gases[0]?.id ?? "");
     setSystemType("commercialHVAC");
@@ -91,32 +86,15 @@ export function SourceListScreen({
     setSelectedFuel(fuels[0]?.id ?? "");
   };
 
-  // Sources for this category
+  // Sources for this category — use shared fuelFamily helper
   const sources = isRefrigerant
     ? refrigerationSystems
-    : combustionAssets.filter((a) => {
-        const fam = (() => {
-          const f = FUELS[a.fuelType];
-          if (!f?.excelCategory) return null;
-          return f.renewable ? "biofuels" : f.excelCategory;
-        })();
-        return fam === family;
-      });
+    : combustionAssets.filter((a) => fuelFamily(a.fuelType) === family);
 
-  // Total emissions for the category (non-excluded)
+  // Total emissions for the category (non-excluded) — derived from the already-filtered sources array
   const totalEmissions = isRefrigerant
     ? refrigerationSystems.filter((s) => !s.excluded).reduce((sum, s) => sum + refrigerantCO2e(s), 0)
-    : combustionAssets
-        .filter((a) => {
-          if (a.excluded) return false;
-          const fam = (() => {
-            const f = FUELS[a.fuelType];
-            if (!f?.excelCategory) return null;
-            return f.renewable ? "biofuels" : f.excelCategory;
-          })();
-          return fam === family;
-        })
-        .reduce((sum, a) => sum + combustionCO2e(a), 0);
+    : (sources as CombustionAsset[]).filter((a) => !a.excluded).reduce((sum, a) => sum + combustionCO2e(a), 0);
 
   const handleAdd = () => {
     if (!sourceName.trim()) return;
@@ -188,7 +166,7 @@ export function SourceListScreen({
 
       {/* Source list */}
       {sources.length > 0 && (
-        <div className="rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden">
+        <div className="rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden divide-y divide-line/40">
           {sources.map((source) => {
             const isComb = !isRefrigerant;
             const asset = source as CombustionAsset;
@@ -203,7 +181,7 @@ export function SourceListScreen({
             return (
               <div
                 key={source.id}
-                className="group flex items-center gap-3 px-4 py-3 border-t border-line/40 hover:bg-brand-50/30 transition-colors cursor-pointer"
+                className="group flex items-center gap-3 px-4 py-3 hover:bg-brand-50/30 transition-colors cursor-pointer"
                 onClick={() =>
                   setNav({
                     level: "entry",
@@ -213,7 +191,14 @@ export function SourceListScreen({
                 }
               >
                 <div className="min-w-0 flex-1">
-                  <span className="block font-medium text-ink">{source.name}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="block font-medium text-ink">{source.name}</span>
+                    {excluded && (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
+                        Excluded from total
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[11px] text-ink-soft">{subLabel}</span>
                 </div>
                 <span className="w-20 text-right text-sm font-semibold tabular-nums shrink-0">
@@ -387,7 +372,8 @@ export function SourceListScreen({
             </button>
             <button
               onClick={handleAdd}
-              className="px-4 py-2 text-sm font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              disabled={!sourceName.trim()}
+              className="px-4 py-2 text-sm font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Add
             </button>
