@@ -26,7 +26,7 @@ export function ActivityDataTab() {
   const s2 = useScope2();
   const { activeId } = useCompany();
   const [nav, setNav] = useState<Nav>({ level: "home" });
-  const { buReg, addBu, removeBu, setMode } = useBuConfig(activeId);
+  const { buReg, addBu, removeBu } = useBuConfig(activeId);
 
   const year = s1.selectedYear;
   const setYear = (y: number) => { s1.setSelectedYear(y); s2.setSelectedYear(y); };
@@ -118,7 +118,6 @@ export function ActivityDataTab() {
         buReg={buReg}
         addBu={addBu}
         removeBu={removeBu}
-        setMode={setMode}
       />
     );
   }

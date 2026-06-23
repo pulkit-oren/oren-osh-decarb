@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-type BuConfig = { mode: "central" | "bu"; units: { name: string; aggregate: boolean }[] };
+type BuConfig = { units: { name: string; aggregate: boolean }[] };
 
 export type BuReg = BuConfig;
 
@@ -10,12 +10,12 @@ export function useBuConfig(activeId: string) {
   const buKey = `osh-bus-v3::${activeId}`;
 
   const [buReg, setBuReg] = useState<BuConfig>(() => {
-    if (typeof window === "undefined") return { mode: "central", units: [] };
+    if (typeof window === "undefined") return { units: [] };
     try {
       const v = JSON.parse(window.localStorage.getItem(buKey) || "");
-      return v && v.mode ? v : { mode: "central", units: [] };
+      return v && Array.isArray(v.units) ? { units: v.units } : { units: [] };
     } catch {
-      return { mode: "central", units: [] };
+      return { units: [] };
     }
   });
 
@@ -24,13 +24,10 @@ export function useBuConfig(activeId: string) {
   }, [buReg, buKey]);
 
   const addBu = (name: string, aggregate: boolean) =>
-    setBuReg((prev) => prev.units.some((b) => b.name === name) ? prev : { ...prev, units: [...prev.units, { name, aggregate }] });
+    setBuReg((prev) => prev.units.some((b) => b.name === name) ? prev : { units: [...prev.units, { name, aggregate }] });
 
   const removeBu = (name: string) =>
-    setBuReg((prev) => ({ ...prev, units: prev.units.filter((b) => b.name !== name) }));
+    setBuReg((prev) => ({ units: prev.units.filter((b) => b.name !== name) }));
 
-  const setMode = (mode: "central" | "bu") =>
-    setBuReg((prev) => ({ ...prev, mode }));
-
-  return { buReg, addBu, removeBu, setMode };
+  return { buReg, addBu, removeBu };
 }

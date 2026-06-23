@@ -350,6 +350,28 @@ describe("ActivityDataTab — Electricity BU-first flow (Task 4)", () => {
   });
 });
 
+// ── Task 2: BU mode removal tests ────────────────────────────────────────────
+
+describe("ActivityDataTab — Task 2: BU mode removal", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("Business Units screen has no central/by-BU mode and lists units", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(screen.getByRole("button", { name: /Business units/i }));
+    expect(screen.queryByText(/How is the data collected/i)).toBeFalsy(); // mode radio gone
+    expect(screen.getByText("Pune")).toBeTruthy();
+  });
+
+  it("electricity shows a Company-wide row plus each BU", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(await screen.findByText("Electricity"));
+    expect(screen.getByText(/Company-wide/i)).toBeTruthy();
+    expect(screen.getByText("Pune")).toBeTruthy();
+  });
+});
+
 // ── SourceListScreen tests (Task 1) ──────────────────────────────────────────
 
 describe("ActivityDataTab — SourceListScreen (Task 1)", () => {

@@ -20,7 +20,7 @@ type Props = {
   biogenicT: number;
   confidence: { measuredPct: number };
   totalSources: number;
-  buReg: { mode: "central" | "bu"; units: { name: string; aggregate: boolean }[] };
+  buReg: { units: { name: string; aggregate: boolean }[] };
 };
 
 export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, catTotal, scope1T, scope2T, biogenicRows, biogenicT, confidence, totalSources, buReg }: Props) {
@@ -36,7 +36,7 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setNav({ level: "bus" })} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-line bg-surface px-3 py-1.5 hover:border-brand-300 transition-colors">
-            🏢 Business units{buReg.mode === "bu" && buReg.units.length > 0 ? ` · ${buReg.units.length}` : ""}
+            🏢 Business units{buReg.units.length > 0 ? ` · ${buReg.units.length}` : ""}
           </button>
           <label className="flex items-center gap-2">
             <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Financial year</span>
