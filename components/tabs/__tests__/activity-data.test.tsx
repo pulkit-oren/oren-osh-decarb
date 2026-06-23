@@ -523,3 +523,47 @@ describe("Collapsible", () => {
     expect(screen.getByText("BODY-MARKER")).toBeTruthy();
   });
 });
+
+// ── Entry screen calc-collapsed test (Task 3 TDD) ────────────────────────────
+// Navigates to the Diesel BU entry screen and verifies the "How this is
+// calculated" block is collapsed by default, then expands on click.
+
+async function openDieselBuEntry() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Navigate: home → Fuels – Liquid category → Diesel type screen
+  const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
+  fireEvent.click(catBtn);
+  const fuelBtn = screen.getByText("Diesel").closest("button")!;
+  fireEvent.click(fuelBtn);
+  // Type a value to create the Pune Diesel entry
+  const input = await screen.findByLabelText("Pune Diesel consumption");
+  fireEvent.change(input, { target: { value: "100000" } });
+  // Click the gear/details button on the Pune row to open the entry screen
+  const detailsBtn = screen.getByLabelText("Pune details");
+  fireEvent.click(detailsBtn);
+}
+
+describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("entry screen hides the calculation until expanded", async () => {
+    await openDieselBuEntry();
+    // The "How this is calculated" button must exist (it's the Collapsible toggle)
+    expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
+    // But the calc body (Energy step) should be hidden by default
+    expect(screen.queryByText(/Energy/i)).toBeFalsy();
+    // After clicking the Collapsible header, the body should appear
+    fireEvent.click(screen.getByRole("button", { name: /How this is calculated/i }));
+    expect(screen.getAllByText(/tCO₂e|GJ|Emission factor/i).length).toBeGreaterThan(0);
+  });
+});

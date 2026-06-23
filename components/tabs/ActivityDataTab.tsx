@@ -150,8 +150,10 @@ export function ActivityDataTab() {
         year={year}
         combById={combById}
         facById={facById}
+        refrigSysById={refrigSysById}
         updateCombustion={s1.updateCombustion}
         updateFacility={s2.updateFacility}
+        updateRefrigeration={s1.updateRefrigeration}
         co2Fac={co2Fac}
       />
     );

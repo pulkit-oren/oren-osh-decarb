@@ -396,7 +396,7 @@ function LabeledNum({ label, hint, value, suffix, onChange, footer }: {
   );
 }
 
-export function CombustionDetails({ a, year, showCalc = true, showSource = true }: { a: CombustionAsset; year: number; showCalc?: boolean; showSource?: boolean }) {
+export function CombustionDetails({ a, year, showCalc = true, showSource = true, showFuel = true }: { a: CombustionAsset; year: number; showCalc?: boolean; showSource?: boolean; showFuel?: boolean }) {
   const { updateCombustion } = useScenario();
   const price = FUELS[a.fuelType].typicalPricePerUnit ?? 0;
   const avgOpex = Math.round(a.annualVolume * price);
@@ -424,6 +424,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true 
               <option value="mobile">Mobile</option>
             </select>
           </label>
+          {showFuel && (
           <label className="block">
             <span className="text-xs font-medium text-ink-soft">Fuel</span>
             <select
@@ -435,6 +436,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true 
               {FUELS_BY_CATEGORY[a.category].map((id) => <option key={id} value={id}>{FUELS[id].label}</option>)}
             </select>
           </label>
+          )}
         </div>
       </div>
       )}
@@ -569,6 +571,16 @@ export function CombustionCalc({ a }: { a: CombustionAsset }) {
       )}
     </div>
   );
+}
+
+/** Exported thin wrapper — renders the RefrigerantDetails panel for use in EntryScreen. */
+export function RefrigerantDetailsPanel({ s, year }: { s: RefrigerationSystem; year: number }) {
+  return <RefrigerantDetails s={s} year={year} />;
+}
+
+/** Exported thin wrapper — renders the RefrigerantCalc block for use in EntryScreen. */
+export function RefrigerantCalcBlock({ s }: { s: RefrigerationSystem }) {
+  return <RefrigerantCalc s={s} />;
 }
 
 function RefrigerantCalc({ s }: { s: RefrigerationSystem }) {
