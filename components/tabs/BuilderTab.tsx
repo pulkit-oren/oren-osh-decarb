@@ -18,6 +18,7 @@ import { Card, CardHeader } from "../ui/Card";
 import { Slider } from "../ui/Slider";
 import { InfoTip } from "../ui/InfoTip";
 import { DeltaPill } from "../ui/DeltaPill";
+import { Collapsible } from "@/components/tabs/activity/Collapsible";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
 
@@ -37,6 +38,12 @@ const ERA_BADGE: Record<RefrigerantEra, { label: string; cls: string }> = {
   legacy: { label: "legacy", cls: "bg-amber-50 text-amber-700" },
   current: { label: "current", cls: "bg-surface-muted text-ink-soft" },
   future: { label: "future", cls: "bg-brand-50 text-brand-700" },
+};
+
+const groupByBu = <T extends { bu?: string }>(rows: T[]) => {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) { const k = r.bu ?? ""; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(r); }
+  return [...groups.entries()].sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b))); // Company-wide first
 };
 
 export function BuilderTab() {
@@ -119,7 +126,13 @@ export function BuilderTab() {
           {segAssets.length === 0 ? (
             <Card><p className="text-sm text-ink-faint">No {SEG_META[seg].label.toLowerCase()} assets yet — add them in Data input.</p></Card>
           ) : (
-            segAssets.map((a) => <AssetActionCard key={a.id} asset={a} />)
+            groupByBu(segAssets).map(([bu, assets]) => (
+              <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
+                <div className="flex flex-col gap-4">
+                  {assets.map((a) => <AssetActionCard key={a.id} asset={a} />)}
+                </div>
+              </Collapsible>
+            ))
           )}
         </>
       )}
@@ -178,10 +191,15 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
 
   if (!acts) {
     return (
-      <Card>
+      <Card className={cn(asset.excluded && "opacity-60")}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-ink">{asset.name}</h3>
+            {asset.excluded && (
+              <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 mt-1">
+                Excluded from totals
+              </span>
+            )}
             <p className="text-sm text-ink-soft">No plan yet for this asset.</p>
           </div>
           <button
@@ -204,14 +222,21 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   const eColor = FAMILY_COLORS[isMobile ? 5 : 6];
 
   return (
-    <Card>
+    <Card className={cn(asset.excluded && "opacity-60")}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${eColor}1A` }}>
             {isMobile ? <Truck size={22} style={{ color: eColor }} /> : <Factory size={22} style={{ color: eColor }} />}
           </div>
           <div>
-            <h2 className="text-lg font-extrabold leading-tight text-ink">{asset.name}</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-extrabold leading-tight text-ink">{asset.name}</h2>
+              {asset.excluded && (
+                <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+                  Excluded from totals
+                </span>
+              )}
+            </div>
             <p className="text-sm text-ink-soft mt-0.5">
               {isMobile ? `${asset.unitCount} vehicles` : "1 unit"} · {fmt(asset.annualVolume)} {asset.unit}/yr
             </p>
@@ -463,7 +488,13 @@ function RefrigerantControls() {
       {baseSystems.length === 0 ? (
         <Card><p className="text-sm text-ink-faint">No cooling systems yet — add them in Data input.</p></Card>
       ) : (
-        baseSystems.map((sys) => <SystemActionCard key={sys.id} system={sys} />)
+        groupByBu(baseSystems).map(([bu, systems]) => (
+          <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
+            <div className="flex flex-col gap-4">
+              {systems.map((sys) => <SystemActionCard key={sys.id} system={sys} />)}
+            </div>
+          </Collapsible>
+        ))
       )}
     </>
   );
@@ -476,10 +507,15 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
 
   if (!acts) {
     return (
-      <Card>
+      <Card className={cn(system.excluded && "opacity-60")}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-ink">{system.name}</h3>
+            {system.excluded && (
+              <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 mt-1">
+                Excluded from totals
+              </span>
+            )}
             <p className="text-sm text-ink-soft">No plan yet for this system.</p>
           </div>
           <button
@@ -513,14 +549,21 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
   const gasSaving = system.toppedUpKg * ((lf.enabled ? lf.leakImprovementPct : 0) / 100) * system.gasCostPerKg;
 
   return (
-    <Card>
+    <Card className={cn(system.excluded && "opacity-60")}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${color}1A` }}>
             <Snowflake size={22} style={{ color }} />
           </div>
           <div>
-            <h2 className="text-lg font-extrabold leading-tight text-ink">{system.name}</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-extrabold leading-tight text-ink">{system.name}</h2>
+              {system.excluded && (
+                <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+                  Excluded from totals
+                </span>
+              )}
+            </div>
             <p className="text-sm text-ink-soft mt-0.5 flex items-center gap-2 flex-wrap">
               {SYSTEM_TYPE_LABELS[system.systemType]} · {fmt(system.toppedUpKg)} kg topped up/yr
               <span className="font-medium text-ink">{current.label} · GWP {fmt(current.gwp)}</span>
