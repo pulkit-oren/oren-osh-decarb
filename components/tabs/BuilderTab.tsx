@@ -19,6 +19,7 @@ import { Slider } from "../ui/Slider";
 import { InfoTip } from "../ui/InfoTip";
 import { DeltaPill } from "../ui/DeltaPill";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
+import { groupByBu } from "@/lib/group-by-bu";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
 
@@ -38,12 +39,6 @@ const ERA_BADGE: Record<RefrigerantEra, { label: string; cls: string }> = {
   legacy: { label: "legacy", cls: "bg-amber-50 text-amber-700" },
   current: { label: "current", cls: "bg-surface-muted text-ink-soft" },
   future: { label: "future", cls: "bg-brand-50 text-brand-700" },
-};
-
-const groupByBu = <T extends { bu?: string }>(rows: T[]) => {
-  const groups = new Map<string, T[]>();
-  for (const r of rows) { const k = r.bu ?? ""; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(r); }
-  return [...groups.entries()].sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b))); // Company-wide first
 };
 
 export function BuilderTab() {
