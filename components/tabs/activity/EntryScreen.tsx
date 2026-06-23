@@ -142,7 +142,7 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
       </div>
       <div className={SECTION}>
         <div className={`${LABEL} mb-4`}>Details for the scenario modeller</div>
-        <CombustionDetails a={a} year={year} showCalc={false} showSource={true} showFuel={false} />
+        <CombustionDetails a={a} year={year} showCalc={false} modellerOnly />
       </div>
       <Collapsible title="How this is calculated">
         <CombustionCalc a={a} />

@@ -372,6 +372,47 @@ describe("ActivityDataTab — Task 2: BU mode removal", () => {
   });
 });
 
+// ── Task 3: Fuel entry screen shows modeller fields only ─────────────────────
+// Verifies the fuel entry "Details for the scenario modeller" section shows
+// only Annual spend, Number of units, and Remaining life — no Category control,
+// no Site / location, no Metered volume / spend toggle.
+
+async function openDieselSourceEntry() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row
+  fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Diesel gensets" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+  // Click the source row to open the entry screen
+  const nameSpan = screen.getAllByText("Diesel gensets").find((el) => el.tagName === "SPAN");
+  fireEvent.click(nameSpan!.closest("div")!);
+}
+
+describe("ActivityDataTab — Task 3: fuel entry modeller fields only", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("fuel entry details show modeller fields only (no stationary/mobile, no site)", async () => {
+    await openDieselSourceEntry(); // helper: add 'Diesel gensets', click it
+    expect(screen.getByLabelText(/Number of units/i)).toBeTruthy();
+    expect(screen.getByText(/Annual spend/i)).toBeTruthy();
+    expect(screen.queryByText(/Site \/ location/i)).toBeFalsy();
+    expect(screen.queryByText(/Metered volume/i)).toBeFalsy();   // inputMode toggle gone
+    // category control absent in details
+    expect(screen.queryByText(/^Category$/i)).toBeFalsy();
+  });
+});
+
 // ── SourceListScreen tests (Task 1) ──────────────────────────────────────────
 
 describe("ActivityDataTab — SourceListScreen (Task 1)", () => {

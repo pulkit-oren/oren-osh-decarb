@@ -208,7 +208,6 @@ export function FacilityDetailContent({ f, year, locationT }: { f: Facility; yea
             <div className="text-[11px] uppercase tracking-wide text-ink-faint font-bold mb-3">On-site solar potential</div>
             <div className="grid grid-cols-2 gap-3">
               <NumField label="Roof space (m²)" value={f.roofSpaceM2} onChange={(v) => updateFacility(year, f.id, { roofSpaceM2: v })} suffix="m²" />
-              <NumField label="Peak load (kW)" value={f.peakLoadKw} onChange={(v) => updateFacility(year, f.id, { peakLoadKw: v })} suffix="kW" />
               <NumField label="Solar yield (kWh/kWp/yr)" value={f.irradiance} onChange={(v) => updateFacility(year, f.id, { irradiance: v })} />
             </div>
             <p className="text-[11px] text-ink-faint mt-2 flex items-center gap-1.5">
