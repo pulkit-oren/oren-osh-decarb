@@ -411,6 +411,53 @@ describe("ActivityDataTab — Mobile tab fuel restriction", () => {
   });
 });
 
+// ── RefrigerantDetailsPanel showCalc=false test (Task 3) ─────────────────────
+// Verifies that RefrigerantDetailsPanel (used in EntryScreen) does NOT render
+// the "How this is calculated" section — it must live only in the Collapsible.
+
+import { RefrigerantDetailsPanel } from "@/components/tabs/DataInputTab";
+import type { RefrigerationSystem } from "@/lib/model/types";
+
+const STUB_REFRIGERANT_SYSTEM: RefrigerationSystem = {
+  id: "r-test",
+  name: "Test AC",
+  systemType: "commercialHVAC",
+  refrigerant: "R404A",
+  toppedUpKg: 5,
+  gasCostPerKg: 400,
+};
+
+describe("RefrigerantDetailsPanel — showCalc=false", () => {
+  it("does NOT render 'How this is calculated' when used via RefrigerantDetailsPanel", () => {
+    render(
+      <Wrapper>
+        <RefrigerantDetailsPanel s={STUB_REFRIGERANT_SYSTEM} year={2025} />
+      </Wrapper>,
+    );
+    // The calc section heading must NOT appear (showCalc=false)
+    expect(screen.queryByText(/How this is calculated/i)).toBeFalsy();
+    // The inputs section must still be present (the panel body is unchanged)
+    expect(screen.getByText(/Inputs/i)).toBeTruthy();
+  });
+});
+
+// ── ELEC_TYPES shape test ─────────────────────────────────────────────────────
+
+import { ELEC_TYPES } from "@/components/tabs/activity/shared";
+
+describe("ELEC_TYPES (4 fixed instruments)", () => {
+  it("has grid, vppa, solar, irec with Solar onsite labelled and clean EFs zero", () => {
+    expect(ELEC_TYPES.map((t) => t.key)).toEqual(["grid", "vppa", "solar", "irec"]);
+    const solar = ELEC_TYPES.find((t) => t.key === "solar");
+    expect(solar?.label).toBe("Solar onsite");
+    expect(solar?.gridEf).toBe(0);
+    expect(ELEC_TYPES.find((t) => t.key === "vppa")?.gridEf).toBe(0);
+    expect(ELEC_TYPES.find((t) => t.key === "irec")?.gridEf).toBe(0);
+    expect(ELEC_TYPES.find((t) => t.key === "grid")?.gridEf).toBe(0.71);
+    expect(ELEC_TYPES.some((t) => t.key === "any")).toBe(false);
+  });
+});
+
 // ── Scope drill-down tests ────────────────────────────────────────────────────
 
 describe("ActivityDataTab — Scope drill-down", () => {
@@ -491,5 +538,144 @@ describe("ActivityDataTab — Scope drill-down", () => {
     expect(await screen.findByText("Other Fuels")).toBeTruthy();
     // Fix 1: The LDO fuel label must appear in the drill-down
     expect(screen.getByText(/Light diesel oil/i)).toBeTruthy();
+  });
+});
+
+// ── Collapsible component tests ──────────────────────────────────────────────
+
+import { Collapsible } from "@/components/tabs/activity/Collapsible";
+
+describe("Collapsible", () => {
+  it("hides content until the header is clicked", () => {
+    render(<Collapsible title="How this is calculated"><p>BODY-MARKER</p></Collapsible>);
+    expect(screen.queryByText("BODY-MARKER")).toBeFalsy();
+    fireEvent.click(screen.getByRole("button", { name: /How this is calculated/i }));
+    expect(screen.getByText("BODY-MARKER")).toBeTruthy();
+  });
+});
+
+// ── Entry screen calc-collapsed test (Task 3 TDD) ────────────────────────────
+// Navigates to the Diesel BU entry screen and verifies the "How this is
+// calculated" block is collapsed by default, then expands on click.
+
+async function openDieselBuEntry() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Navigate: home → Fuels – Liquid category → Diesel type screen
+  const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
+  fireEvent.click(catBtn);
+  const fuelBtn = screen.getByText("Diesel").closest("button")!;
+  fireEvent.click(fuelBtn);
+  // Type a value to create the Pune Diesel entry
+  const input = await screen.findByLabelText("Pune Diesel consumption");
+  fireEvent.change(input, { target: { value: "100000" } });
+  // Click the gear/details button on the Pune row to open the entry screen
+  const detailsBtn = screen.getByLabelText("Pune details");
+  fireEvent.click(detailsBtn);
+}
+
+describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("entry screen hides the calculation until expanded", async () => {
+    await openDieselBuEntry();
+    // The "How this is calculated" button must exist (it's the Collapsible toggle)
+    expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
+    // But the calc body (Energy step) should be hidden by default
+    expect(screen.queryByText(/Energy/i)).toBeFalsy();
+    // After clicking the Collapsible header, the body should appear
+    fireEvent.click(screen.getByRole("button", { name: /How this is calculated/i }));
+    expect(screen.getAllByText(/tCO₂e|GJ|Emission factor/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ── Refrigerant gear → full screen (Task 5) ──────────────────────────────────
+
+async function openR404aBuRow() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Navigate: home → Refrigerants & cooling category → R-404A type screen
+  const catBtn = screen.getByText("Refrigerants & cooling").closest("button")!;
+  fireEvent.click(catBtn);
+  fireEvent.click(await screen.findByText(/R-404A/));
+  // Now on the R-404A type screen with BU "Pune" row visible
+}
+
+describe("ActivityDataTab — refrigerant gear opens full entry screen (Task 5)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("refrigerant gear opens the full refrigerant entry screen", async () => {
+    await openR404aBuRow(); // refrigerants → R-404A → BU mode row visible
+    fireEvent.click(screen.getByLabelText("Pune details")); // the gear
+    // full screen: Details for the scenario modeller + collapsible calc, NOT a side panel
+    expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
+    expect(screen.getByText(/Details for the scenario modeller/i)).toBeTruthy();
+  });
+});
+
+// ── Electricity BU-first 4-box flow tests (Task 4) ───────────────────────────
+
+async function openElectricityCategory() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Click the Electricity category card
+  const catBtn = screen.getByText("Electricity").closest("button")!;
+  fireEvent.click(catBtn);
+}
+
+async function openPuneElectricity() {
+  await openElectricityCategory();
+  // Click the "Pune" row to navigate to the BU electricity screen
+  const puneBtn = screen.getByText("Pune").closest("button")!;
+  fireEvent.click(puneBtn);
+}
+
+describe("ActivityDataTab — Electricity BU-first flow (Task 4)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("electricity goes straight to the BU list (no instrument cards)", async () => {
+    await openElectricityCategory(); // helper: bu mode w/ a unit "Pune", click Electricity card
+    expect(screen.queryByText("Virtual PPA")).toBeFalsy();   // no instrument card on the cat screen
+    expect(screen.getByText("Pune")).toBeTruthy();           // BU row present
+  });
+
+  it("a BU electricity screen has 4 boxes; only Purchased drives emissions", async () => {
+    await openPuneElectricity();   // helper: ...→ click the Pune row
+    const purchased = screen.getByLabelText("Pune Purchased electricity");
+    const vppa = screen.getByLabelText("Pune Virtual PPA");
+    expect(screen.getByLabelText("Pune Solar onsite")).toBeTruthy();
+    expect(screen.getByLabelText("Pune I-REC")).toBeTruthy();
+    fireEvent.change(purchased, { target: { value: "200000" } });
+    // 200000 * 0.71 / 1000 = 142
+    expect(screen.getAllByText(/142/).length).toBeGreaterThan(0);
+    fireEvent.change(vppa, { target: { value: "50000" } });
+    expect(screen.getAllByText(/142/).length).toBeGreaterThan(0); // unchanged — vppa is clean
   });
 });

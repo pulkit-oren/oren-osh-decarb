@@ -1,9 +1,8 @@
 "use client";
 
 import { ArrowLeft, ChevronRight, Settings } from "lucide-react";
-import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, type Nav, type CatDef, type Sel, unitLabel, showNum } from "./shared";
+import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, type Nav, type CatDef, unitLabel, showNum } from "./shared";
 import { fmt, cn } from "@/lib/utils";
-import { Zap } from "lucide-react";
 import { FUELS } from "@/lib/model/factors";
 import { refrigerantCO2e } from "@/lib/model/baseline";
 import { fromRef, toRef } from "@/lib/unit-convert";
@@ -13,7 +12,6 @@ import type { Facility } from "@/lib/scope2/model/types";
 type Props = {
   nav: Nav & { level: "type" };
   setNav: (n: Nav) => void;
-  setSel: (s: Sel) => void;
   year: number;
   buReg: { mode: "central" | "bu"; units: { name: string; aggregate: boolean }[] };
   typesFor: (d: CatDef) => { key: string; label: string; gridEf?: number; gwp?: number }[];
@@ -24,20 +22,18 @@ type Props = {
   ensureEntry: (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean) => string;
   ensureRefrigEntry: (gasId: RefrigerantId, bu: string, agg: boolean) => string;
   combById: (id: string) => CombustionAsset | undefined;
-  facById: (id: string) => Facility | undefined;
   refrigSysById: (id: string) => RefrigerationSystem | undefined;
   selectedSystems: RefrigerationSystem[];
   updateCombustion: (year: number, id: string, patch: Partial<CombustionAsset>) => void;
-  updateFacility: (year: number, id: string, patch: Partial<Facility>) => void;
   updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
 };
 
-export function TypeScreen({ nav, setNav, setSel, year, buReg, typesFor, typeAggTotal, entryFor, emOfEntry, openEntry, ensureEntry, ensureRefrigEntry, combById, facById, refrigSysById, selectedSystems, updateCombustion, updateFacility, updateRefrigeration }: Props) {
+export function TypeScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, entryFor, emOfEntry, openEntry, ensureEntry, ensureRefrigEntry, combById, refrigSysById, selectedSystems, updateCombustion, updateRefrigeration }: Props) {
   const def = CAT_DEFS.find((c) => c.key === nav.key)!;
   const t = typesFor(def).find((x) => x.key === nav.typeKey);
   if (!t) { setNav({ level: "cat", key: nav.key }); return null; }
 
-  const TIcon = def.kind === "electricity" ? (ELEC_TYPES.find((e) => e.key === t.key)?.icon ?? Zap) : CAT_ICON[def.meta];
+  const TIcon = CAT_ICON[def.meta];
   const cat = nav.cat;
   const totalEm = typeAggTotal(def, t, cat);
   const central = buReg.mode === "central";
@@ -139,7 +135,7 @@ export function TypeScreen({ nav, setNav, setSel, year, buReg, typesFor, typeAgg
                     <button
                       onClick={() => {
                         const id = ensureRefrigEntry(t.key as RefrigerantId, u.name, u.aggregate);
-                        setSel({ kind: "refrigerant", id });
+                        setNav({ level: "entry", kind: "refrigerant", id });
                       }}
                       aria-label={`${u.name} details`}
                       className="p-1.5 rounded-lg text-ink-faint hover:text-brand-600 hover:bg-brand-50"
@@ -169,52 +165,7 @@ export function TypeScreen({ nav, setNav, setSel, year, buReg, typesFor, typeAgg
             <span className="text-sm font-semibold text-ink">{buReg.units.length} business unit{buReg.units.length === 1 ? "" : "s"}</span>
             <span className="text-xs text-ink-faint">{withData} with {t.label} data</span>
           </div>
-          {def.kind === "electricity" ? (
-            // ── Electricity BU rows ─────────────────────────────────────────
-            unitRows.map(({ u, has, co2 }) => {
-              const ex = entryFor(def, t, cat, u.name) as Facility | undefined;
-              const shownVal = ex ? showNum(ex.annualLoadKwh) : 0;
-              return (
-                <div key={u.name} className="group flex items-center gap-3 px-4 py-3 border-t border-line/40 hover:bg-brand-50/30 transition-colors">
-                  <span className="w-8 h-8 rounded-lg bg-surface-muted grid place-items-center text-ink-soft font-bold text-xs shrink-0">{u.name.charAt(0).toUpperCase()}</span>
-                  <span className="min-w-0 flex-1 font-medium text-ink truncate">{u.name}</span>
-                  <input
-                    type="number"
-                    value={shownVal}
-                    onChange={(e) => {
-                      const id = ensureEntry(def, t, cat, u.name, u.aggregate);
-                      updateFacility(year, id, { annualLoadKwh: Number(e.target.value) });
-                    }}
-                    className="w-28 text-right tabular-nums rounded-lg border border-brand-200 bg-brand-50/50 px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400 focus:bg-white"
-                    aria-label={`${u.name} ${t.label} consumption`}
-                  />
-                  <span className="text-xs text-ink-faint w-12 shrink-0">kWh</span>
-                  <span className="w-20 text-right text-sm font-semibold tabular-nums shrink-0">{has ? `${fmt(co2)} t` : "—"}</span>
-                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => {
-                        const id = ensureEntry(def, t, cat, u.name, u.aggregate);
-                        const cur = facById(id) ?? { excluded: !u.aggregate };
-                        updateFacility(year, id, { excluded: !cur.excluded });
-                      }}
-                      aria-label={`Include ${u.name} in central total`}
-                      title={ex && !ex.excluded ? "Counted in the company total — click to exclude" : "Not in the company total — click to include"}
-                      className={cn("text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-1 border", ex && !ex.excluded ? "bg-brand-50 text-brand-700 border-brand-200" : "bg-surface-muted text-ink-faint border-line")}
-                    >{ex && !ex.excluded ? "✓ central" : "central"}</button>
-                    <button
-                      onClick={() => {
-                        const id = ensureEntry(def, t, cat, u.name, u.aggregate);
-                        setNav({ level: "entry", kind: "facility", id });
-                      }}
-                      aria-label={`${u.name} details`}
-                      className="p-1.5 rounded-lg text-ink-faint hover:text-brand-600 hover:bg-brand-50"
-                    ><Settings size={15} /></button>
-                  </div>
-                  {ex?.excluded && <span className="text-[10px] text-amber-700 shrink-0">Excluded from total</span>}
-                </div>
-              );
-            })
-          ) : (
+          {(
             // ── Fuel BU rows ────────────────────────────────────────────────
             unitRows.map(({ u, has, co2 }) => {
               const ex = entryFor(def, t, cat, u.name) as CombustionAsset | undefined;

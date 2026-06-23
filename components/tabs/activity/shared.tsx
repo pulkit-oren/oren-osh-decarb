@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Plug, Leaf } from "lucide-react";
+import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Sun, Leaf } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FuelFamily } from "@/lib/activity-groups";
 import type { Facility } from "@/lib/scope2/model/types";
@@ -15,7 +15,8 @@ export type Nav =
   | { level: "scope"; scope: 1 | 2 }
   | { level: "cat"; key: CatKey }
   | { level: "type"; key: CatKey; typeKey: string; cat?: "stationary" | "mobile" }
-  | { level: "entry"; kind: "combustion" | "facility"; id: string };
+  | { level: "elecbu"; bu: string }
+  | { level: "entry"; kind: "combustion" | "facility" | "refrigerant"; id: string };
 
 export type Sel = { kind: "refrigerant"; id: string } | null;
 
@@ -35,10 +36,10 @@ export const CAT_DEFS: CatDef[] = [
 // ─── Electricity sub-types ─────────────────────────────────────────────────
 
 export const ELEC_TYPES: { key: string; label: string; gridEf: number; sub: string; icon: React.ElementType }[] = [
-  { key: "grid", label: "Grid electricity purchased", gridEf: 0.71, sub: "Metered grid supply (location-based)", icon: Zap },
-  { key: "vppa", label: "Virtual PPA (VPPA)", gridEf: 0, sub: "Contractual renewable — market-based", icon: Wind },
-  { key: "irec", label: "I-REC / REC", gridEf: 0, sub: "Renewable energy certificates", icon: Award },
-  { key: "any", label: "Other / Any", gridEf: 0.71, sub: "Any other electricity source", icon: Plug },
+  { key: "grid", label: "Purchased electricity", gridEf: 0.71, sub: "Metered grid supply (location-based)", icon: Zap },
+  { key: "vppa", label: "Virtual PPA", gridEf: 0, sub: "Contractual renewable — market-based", icon: Wind },
+  { key: "solar", label: "Solar onsite", gridEf: 0, sub: "On-site solar generation, self-consumed", icon: Sun },
+  { key: "irec", label: "I-REC", gridEf: 0, sub: "Renewable energy certificates", icon: Award },
 ];
 
 // ─── Visual maps ───────────────────────────────────────────────────────────
