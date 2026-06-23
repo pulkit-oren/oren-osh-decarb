@@ -23,13 +23,21 @@ const PROC_COLOR = FAMILY_COLORS[3];
 export function Scope2BuilderTab() {
   const { baseFacilities, levers, result, updateFacilityAction, updateProcurement, baseYear } = useScope2();
   const [selId, setSelId] = useState<string | null>(null);
-  const facility = baseFacilities.find((f) => f.id === selId) ?? baseFacilities[0];
+  // Only Purchased/grid facilities (gridEf > 0) are valid targets for the
+  // efficiency and generation levers. VPPA/Solar/I-REC (gridEf 0) are
+  // procurement instruments and must not be offered here.
+  const gridFacilities = baseFacilities.filter((f) => f.gridEf > 0);
+  // If selId points at a gridEf-0 record (or is unset), fall back to the first grid facility.
+  const facility =
+    gridFacilities.find((f) => f.id === selId) ??
+    gridFacilities[0] ??
+    baseFacilities[0];
 
   if (!facility) {
     return <Card>No facilities in the base year — add them on the Data input tab first.</Card>;
   }
 
-  const facilityGroups = groupByBu(baseFacilities);
+  const facilityGroups = groupByBu(gridFacilities);
   const acts = levers.byFacility[facility.id] ?? defaultFacilityActions(facility);
   const eff = acts.efficiency;
   const gen = acts.generation;

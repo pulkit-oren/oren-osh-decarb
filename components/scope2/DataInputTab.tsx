@@ -210,6 +210,9 @@ export function FacilityDetailContent({ f, year, locationT }: { f: Facility; yea
               <NumField label="Roof space (m²)" value={f.roofSpaceM2} onChange={(v) => updateFacility(year, f.id, { roofSpaceM2: v })} suffix="m²" />
               <NumField label="Solar yield (kWh/kWp/yr)" value={f.irradiance} onChange={(v) => updateFacility(year, f.id, { irradiance: v })} />
             </div>
+            {f.roofSpaceM2 === 0 && (
+              <p className="text-[11px] text-amber-700 mt-1">Set roof space to size the on-site solar option.</p>
+            )}
             <p className="text-[11px] text-ink-faint mt-2 flex items-center gap-1.5">
               Roof headroom for new solar ≈ <strong className="text-ink">{fmt(roofCapKwp)} kWp</strong> ({M2_PER_KW} m²/kW{f.existingSolarKwp ? `, after ${fmt(f.existingSolarKwp)} kWp installed` : ""})
               <InfoTip text="Solar yield is geography-specific: sunny Pune ≈ 1,500; cloudy London ≈ 950." />
