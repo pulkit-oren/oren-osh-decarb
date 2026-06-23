@@ -1,0 +1,116 @@
+// @vitest-environment jsdom
+// Task 4: BU grouping + excluded badge in BuilderTab
+import { describe, expect, it, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { ScenarioProvider } from "@/lib/store";
+import { CompanyProvider } from "@/lib/company/store";
+import { BuilderTab } from "../BuilderTab";
+
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <CompanyProvider>
+      <ScenarioProvider>
+        {children}
+      </ScenarioProvider>
+    </CompanyProvider>
+  );
+}
+
+// Seed store with two mobile assets: Pune (included) and Mumbai (excluded)
+function seedMobileAssets() {
+  const persisted = {
+    combustion: {
+      2025: [
+        {
+          id: "mobile-pune",
+          name: "Pune Fleet",
+          category: "mobile",
+          fuelType: "diesel",
+          unit: "L",
+          annualVolume: 100000,
+          opex: 8500000,
+          remainingLife: 5,
+          unitCount: 10,
+          bu: "Pune",
+        },
+        {
+          id: "mobile-mumbai",
+          name: "Mumbai Fleet",
+          category: "mobile",
+          fuelType: "diesel",
+          unit: "L",
+          annualVolume: 50000,
+          opex: 4250000,
+          remainingLife: 5,
+          unitCount: 5,
+          bu: "Mumbai",
+          excluded: true,
+        },
+      ],
+    },
+    refrigeration: {},
+    settings: {
+      assumptions: {
+        gridEf: 0.71,
+        renewableSourcingPct: 50,
+        recCostPerTonne: 800,
+        carbonPricePerTonne: 2000,
+        infraCapex: 15000000,
+      },
+      byAsset: {
+        "mobile-pune": {
+          electrify: { enabled: false, unitsToConvert: 0, capacityPct: 0, cop: 3, tariffPerKwh: 9, assetCapex: 0, startYear: 2026, targetYear: 2032 },
+          fuelSwitch: { enabled: false, altFuel: "biodiesel", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 78, retrofitCapex: 0, startYear: 2027, targetYear: 2033 },
+        },
+        "mobile-mumbai": {
+          electrify: { enabled: false, unitsToConvert: 0, capacityPct: 0, cop: 3, tariffPerKwh: 9, assetCapex: 0, startYear: 2026, targetYear: 2032 },
+          fuelSwitch: { enabled: false, altFuel: "biodiesel", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 78, retrofitCapex: 0, startYear: 2027, targetYear: 2033 },
+        },
+      },
+      bySystem: {},
+    },
+    scenarios: [],
+    baseYear: 2025,
+  };
+  window.localStorage.setItem("osh-scope1-planner-v4", JSON.stringify(persisted));
+}
+
+describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("renders BU group headers for both Pune and Mumbai when on Mobile segment", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    // BuilderTab defaults to Mobile segment — both BU groups must appear
+    expect(screen.getByText("Pune")).toBeTruthy();
+    expect(screen.getByText("Mumbai")).toBeTruthy();
+  });
+
+  it("renders an 'Excluded from totals' badge on the Mumbai (excluded) card", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    expect(screen.getByText(/Excluded from totals/i)).toBeTruthy();
+  });
+
+  it("does NOT show excluded badge for the non-excluded Pune asset", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    // There should be exactly one excluded badge (Mumbai only)
+    const badges = screen.queryAllByText(/Excluded from totals/i);
+    expect(badges.length).toBe(1);
+  });
+});

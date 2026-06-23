@@ -16,6 +16,7 @@ import { applyRefrigerant } from "@/lib/model/levers";
 import { applyAssetActions } from "@/lib/model/segments";
 import { CURRENCY } from "@/lib/defaults";
 import { cn, fmt, fmtMoney, fmtNum, pct } from "@/lib/utils";
+import { groupByBu } from "@/lib/group-by-bu";
 import type { ComputeResult } from "@/lib/model";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
@@ -23,8 +24,9 @@ import { InfoTip } from "../ui/InfoTip";
 import { KpiCard } from "../ui/KpiCard";
 import { WedgeChart } from "../charts/WedgeChart";
 import { LeverBars } from "../charts/LeverBars";
+import { Collapsible } from "@/components/tabs/activity/Collapsible";
 
-interface PlanItem { label: string; detail: string; tonnes: number; color: string; icon: React.ElementType; }
+interface PlanItem { label: string; detail: string; tonnes: number; color: string; icon: React.ElementType; bu?: string; }
 
 export function ActionPlanTab() {
   const { settings, setSettings, result, scenarios, baseAssets, baseSystems } = useScenario();
@@ -34,8 +36,9 @@ export function ActionPlanTab() {
   const barItems = result.segments.map((s) => ({ label: s.label, value: s.abatementT, color: FAMILY_COLORS[s.colorIdx] }));
 
   // "What this plan does" — one line per active action, with its abatement.
+  // Only include NON-excluded sources so that the rows sum to the headline KPIs.
   const planItems: PlanItem[] = [];
-  for (const a of baseAssets) {
+  for (const a of baseAssets.filter((x) => !x.excluded)) {
     const acts = settings.byAsset[a.id];
     if (!acts) continue;
     const res = applyAssetActions(a, acts, settings.assumptions);
@@ -45,7 +48,7 @@ export function ActionPlanTab() {
         detail: a.category === "mobile"
           ? `${acts.electrify.unitsToConvert} of ${a.unitCount} vehicles go electric by ${acts.electrify.targetYear}`
           : `electrify ${acts.electrify.capacityPct}% of capacity by ${acts.electrify.targetYear}`,
-        tonnes: res.scope1AbatementT, color: FAMILY_COLORS[a.category === "mobile" ? 5 : 6], icon: Zap,
+        tonnes: res.scope1AbatementT, color: FAMILY_COLORS[a.category === "mobile" ? 5 : 6], icon: Zap, bu: a.bu,
       });
     }
     const dropInT = res.fuelAbatementT - res.flexAbatementT;
@@ -53,20 +56,20 @@ export function ActionPlanTab() {
       planItems.push({
         label: a.name,
         detail: `blend ${acts.fuelSwitch.blendPct}% ${ALT_FUELS[acts.fuelSwitch.altFuel].label} by ${acts.fuelSwitch.targetYear}`,
-        tonnes: dropInT, color: FAMILY_COLORS[2], icon: Fuel,
+        tonnes: dropInT, color: FAMILY_COLORS[2], icon: Fuel, bu: a.bu,
       });
     }
     if (acts.flexFuel?.enabled && res.flexAbatementT > 0) {
       planItems.push({
         label: a.name,
         detail: `${acts.flexFuel.unitsToConvert} of ${a.unitCount} vehicles → flex-fuel (${ALT_FUELS[acts.flexFuel.altFuel].label} ${acts.flexFuel.highBlendPct}%) by ${acts.flexFuel.targetYear}`,
-        tonnes: res.flexAbatementT, color: FAMILY_COLORS[3], icon: Fuel,
+        tonnes: res.flexAbatementT, color: FAMILY_COLORS[3], icon: Fuel, bu: a.bu,
       });
     }
   }
   const refLever = result.levers.find((l) => l.id === "refrigerant");
   if (refLever && refLever.abatementT > 0) {
-    for (const sys of baseSystems) {
+    for (const sys of baseSystems.filter((x) => !x.excluded)) {
       const acts = settings.bySystem[sys.id];
       if (!acts) continue;
       const gasOn = acts.gasSwitch.enabled && acts.gasSwitch.transitionPct > 0;
@@ -81,7 +84,7 @@ export function ActionPlanTab() {
         ...(gasOn ? [`move ${acts.gasSwitch.transitionPct}% to ${REFRIGERANTS[acts.gasSwitch.altRefrigerant].label}`] : []),
         ...(leakOn ? [`cut leaks ${acts.leakFix.leakImprovementPct}%`] : []),
       ];
-      planItems.push({ label: sys.name, detail: parts.join(" · "), tonnes: r.abatementT, color: FAMILY_COLORS[1], icon: Snowflake });
+      planItems.push({ label: sys.name, detail: parts.join(" · "), tonnes: r.abatementT, color: FAMILY_COLORS[1], icon: Snowflake, bu: sys.bu });
     }
   }
   planItems.sort((a, b) => b.tonnes - a.tonnes);
@@ -185,20 +188,26 @@ export function ActionPlanTab() {
           {planItems.length === 0 ? (
             <p className="text-sm text-ink-faint">No actions switched on yet — build the plan in the Scenario Modeller (step 2).</p>
           ) : (
-            <div className="space-y-2.5">
-              {planItems.map((p, i) => {
-                const Icon = p.icon;
-                return (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg grid place-items-center shrink-0" style={{ background: `${p.color}1A` }}><Icon size={15} style={{ color: p.color }} /></div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-ink truncate">{p.label}</div>
-                      <div className="text-xs text-ink-faint truncate">{p.detail}</div>
-                    </div>
-                    <div className="text-sm font-bold text-ink tabular-nums shrink-0">−{fmt(p.tonnes)} <span className="text-ink-faint font-normal text-xs">t/yr</span></div>
+            <div className="space-y-3">
+              {groupByBu(planItems).map(([bu, items]) => (
+                <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
+                  <div className="space-y-2.5 pt-2">
+                    {items.map((p, i) => {
+                      const Icon = p.icon;
+                      return (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg grid place-items-center shrink-0" style={{ background: `${p.color}1A` }}><Icon size={15} style={{ color: p.color }} /></div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-ink truncate">{p.label}</div>
+                            <div className="text-xs text-ink-faint truncate">{p.detail}</div>
+                          </div>
+                          <div className="text-sm font-bold text-ink tabular-nums shrink-0">−{fmt(p.tonnes)} <span className="text-ink-faint font-normal text-xs">t/yr</span></div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                </Collapsible>
+              ))}
             </div>
           )}
         </Card>

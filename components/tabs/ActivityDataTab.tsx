@@ -17,7 +17,7 @@ import { HomeScreen } from "./activity/HomeScreen";
 import { BusinessUnitsScreen } from "./activity/BusinessUnitsScreen";
 import { CategoryScreen } from "./activity/CategoryScreen";
 import { ElectricityBuScreen } from "./activity/ElectricityBuScreen";
-import { TypeScreen } from "./activity/TypeScreen";
+import { SourceListScreen } from "./activity/SourceListScreen";
 import { EntryScreen } from "./activity/EntryScreen";
 import { ScopeScreen } from "./activity/ScopeScreen";
 
@@ -26,7 +26,7 @@ export function ActivityDataTab() {
   const s2 = useScope2();
   const { activeId } = useCompany();
   const [nav, setNav] = useState<Nav>({ level: "home" });
-  const { buReg, addBu, removeBu, setMode } = useBuConfig(activeId);
+  const { buReg, addBu, removeBu } = useBuConfig(activeId);
 
   const year = s1.selectedYear;
   const setYear = (y: number) => { s1.setSelectedYear(y); s2.setSelectedYear(y); };
@@ -50,81 +50,25 @@ export function ActivityDataTab() {
 
   const openCat = (key: CatKey) => { setNav({ level: "cat", key }); };
 
-  const assetsByFamily = (fam: FuelFamily) => s1.selectedAssets.filter((a) => fuelFamily(a.fuelType) === fam);
-  const fuelsInFamily = (fam: FuelFamily) => (Object.keys(FUELS) as FuelId[]).filter((id) => fuelFamily(id) === fam).map((id) => ({ id, label: FUELS[id].label }));
-  const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : (key === "liquid" || key === "gas" || key === "solid" || key === "biofuels") ? assetsByFamily(key).length : 0;
+  const countOf = (key: CatKey) => key === "refrigerants" ? s1.selectedSystems.length : key === "electricity" ? s2.selectedFacilities.length : (key === "liquid" || key === "gas" || key === "solid" || key === "biofuels") ? s1.selectedAssets.filter((a) => fuelFamily(a.fuelType) === key).length : 0;
 
-  // Gases from the Excel workbook (inExcel: true)
-  const refrigGases = (Object.values(REFRIGERANTS) as RefrigerantFactor[])
-    .filter((r) => r.inExcel)
-    .map((r) => ({ key: r.id, label: r.label, gwp: r.gwp }));
+  const catTotal = (d: CatDef) => {
+    if (d.kind === "electricity") {
+      return s2.selectedFacilities.filter((f) => !f.excluded).reduce((s, f) => s + facCO2e(f), 0);
+    }
+    if (d.kind === "refrigerant") {
+      return s1.selectedSystems.filter((sy) => !sy.excluded).reduce((s, sy) => s + refrigerantCO2e(sy), 0);
+    }
+    return s1.selectedAssets.filter((a) => !a.excluded && fuelFamily(a.fuelType) === d.key).reduce((s, a) => s + combustionCO2e(a), 0);
+  };
 
-  const typesFor = (d: CatDef): { key: string; label: string; gridEf?: number; gwp?: number }[] =>
-    d.kind === "refrigerant"
-      ? refrigGases
-      : d.kind === "electricity"
-      ? ELEC_TYPES.map((t) => ({ key: t.key, label: t.label, gridEf: t.gridEf }))
-      : fuelsInFamily(d.key as FuelFamily).map((f) => ({ key: f.id, label: f.label }));
+  const refrigSysById = (id: string) => s1.selectedSystems.find((sy) => sy.id === id);
 
   const blankFac = (bu: string, t: { label: string; gridEf?: number }, kwh: number, aggregate: boolean): Facility => ({
     id: newId("f"), name: t.label, annualLoadKwh: kwh, tariffPerKwh: 9, loadSplit: { lightingPct: 15, motorPct: 40, hvacPct: 25 },
     roofSpaceM2: 0, peakLoadKw: 0, gridEf: t.gridEf ?? 0.71, irradiance: 1400, isolated: false, existingSolarKwp: 0, existingRenewablePct: 0,
     bu: bu || undefined, excluded: bu ? !aggregate : false,
   });
-
-  const typeAggTotal = (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") =>
-    d.kind === "refrigerant"
-      ? s1.selectedSystems.filter((sy) => !sy.excluded && sy.refrigerant === (t.key as RefrigerantId)).reduce((s, sy) => s + refrigerantCO2e(sy), 0)
-      : d.kind === "electricity"
-      ? s2.selectedFacilities.filter((f) => !f.excluded && f.name === t.label).reduce((s, f) => s + facCO2e(f), 0)
-      : s1.selectedAssets.filter((a) => !a.excluded && a.fuelType === (t.key as FuelId) && (!cat || a.category === cat)).reduce((s, a) => s + combustionCO2e(a), 0);
-
-  const catTotal = (d: CatDef) => typesFor(d).reduce((s, t) => s + typeAggTotal(d, t), 0);
-
-  const refrigSysById = (id: string) => s1.selectedSystems.find((sy) => sy.id === id);
-
-  const entryFor = (d: CatDef, t: { key: string; label: string }, cat: "stationary" | "mobile" | undefined, bu: string): CombustionAsset | Facility | undefined =>
-    d.kind === "electricity"
-      ? s2.selectedFacilities.find((f) => (f.bu ?? "") === bu && f.name === t.label)
-      : d.kind === "refrigerant"
-      ? undefined  // refrigerant entries are looked up via refrigSysById path
-      : s1.selectedAssets.find((a) => (a.bu ?? "") === bu && a.fuelType === (t.key as FuelId) && (!cat || a.category === cat));
-
-  const emOfEntry = (d: CatDef, ex: CombustionAsset | Facility | undefined) =>
-    !ex ? 0 : d.kind === "electricity" ? facCO2e(ex as Facility) : combustionCO2e(ex as CombustionAsset);
-
-  const nWithData = (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") =>
-    d.kind === "refrigerant"
-      ? buReg.units.filter((u) => s1.selectedSystems.some((sy) => (sy.bu ?? "") === u.name && sy.refrigerant === (t.key as RefrigerantId))).length
-      : buReg.units.filter((u) => entryFor(d, t, cat, u.name)).length;
-
-  // Returns the refrigeration system id for (gasId, bu), creating it if missing.
-  const ensureRefrigEntry = (gasId: RefrigerantId, bu: string, agg: boolean): string => {
-    const ex = s1.selectedSystems.find((sy) => (sy.bu ?? "") === bu && sy.refrigerant === gasId);
-    if (ex) return ex.id;
-    const id = newId("r");
-    s1.addRefrigerationSystem(year, {
-      id,
-      name: bu ? `${REFRIGERANTS[gasId].label} — ${bu}` : REFRIGERANTS[gasId].label,
-      systemType: "commercialHVAC",
-      refrigerant: gasId,
-      toppedUpKg: 0,
-      gasCostPerKg: 900,
-      bu: bu || undefined,
-      excluded: bu ? !agg : false,
-    });
-    return id;
-  };
-
-  // Returns the entry id for (type, category, bu), creating it if missing WITHOUT navigating.
-  const ensureEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean): string => {
-    const fuelId = t.key as FuelId;
-    const ex = s1.selectedAssets.find((a) => (a.bu ?? "") === bu && a.fuelType === fuelId && (!cat || a.category === cat));
-    if (ex) return ex.id;
-    const id = newId("c");
-    s1.addCombustionAsset(year, { id, name: bu ? `${FUELS[fuelId].label} — ${bu}` : FUELS[fuelId].label, category: cat ?? "stationary", fuelType: fuelId, unit: FUELS[fuelId].unit, annualVolume: 0, opex: 0, remainingLife: 10, unitCount: 1, bu: bu || undefined, excluded: bu ? !agg : false });
-    return id;
-  };
 
   // Find/create the (BU, instrument) facility; returns its id. Does not navigate.
   const ensureFacility = (bu: string, instrumentKey: string, agg: boolean): string => {
@@ -143,11 +87,6 @@ export function ActivityDataTab() {
       const cur = facById(id) ?? { excluded: !agg };
       s2.updateFacility(year, id, { excluded: !cur.excluded });
     });
-  };
-
-  const openEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean) => {
-    const id = ensureEntry(d, t, cat, bu, agg);
-    setNav({ level: "entry", kind: d.kind === "electricity" ? "facility" : "combustion", id });
   };
 
   const combById = (id: string) => s1.selectedAssets.find((a) => a.id === id);
@@ -179,30 +118,6 @@ export function ActivityDataTab() {
         buReg={buReg}
         addBu={addBu}
         removeBu={removeBu}
-        setMode={setMode}
-      />
-    );
-  }
-
-  if (nav.level === "type") {
-    return (
-      <TypeScreen
-        nav={nav}
-        setNav={setNav}
-        buReg={buReg}
-        year={year}
-        typesFor={typesFor}
-        typeAggTotal={typeAggTotal}
-        entryFor={entryFor}
-        emOfEntry={emOfEntry}
-        openEntry={openEntry}
-        ensureEntry={ensureEntry}
-        ensureRefrigEntry={ensureRefrigEntry}
-        combById={combById}
-        refrigSysById={refrigSysById}
-        selectedSystems={s1.selectedSystems}
-        updateCombustion={s1.updateCombustion}
-        updateRefrigeration={s1.updateRefrigeration}
       />
     );
   }
@@ -224,20 +139,36 @@ export function ActivityDataTab() {
   }
 
   if (nav.level === "cat") {
+    const def = CAT_DEFS.find((c) => c.key === nav.key)!;
+    if (def.kind === "electricity") {
+      return (
+        <CategoryScreen
+          nav={nav}
+          setNav={setNav}
+          year={year}
+          buReg={buReg}
+          catTotal={catTotal}
+          buElecEmissions={buElecEmissions}
+          elecBuExcluded={elecBuExcluded}
+          toggleElecCentral={toggleElecCentral}
+        />
+      );
+    }
+    // fuel or refrigerant → SourceListScreen
     return (
-      <CategoryScreen
-        nav={nav}
-        setNav={setNav}
+      <SourceListScreen
+        def={def}
+        buUnits={buReg.units}
+        combustionAssets={s1.selectedAssets}
+        refrigerationSystems={s1.selectedSystems}
         year={year}
-        buReg={buReg}
-        typesFor={typesFor}
-        typeAggTotal={typeAggTotal}
-        catTotal={catTotal}
-        nWithData={nWithData}
-        refrigGases={refrigGases}
-        buElecEmissions={buElecEmissions}
-        elecBuExcluded={elecBuExcluded}
-        toggleElecCentral={toggleElecCentral}
+        addCombustionAsset={s1.addCombustionAsset}
+        addRefrigerationSystem={s1.addRefrigerationSystem}
+        updateCombustion={s1.updateCombustion}
+        updateRefrigeration={s1.updateRefrigeration}
+        deleteCombustion={s1.delCombustion}
+        deleteRefrigeration={s1.delRefrigeration}
+        setNav={setNav}
       />
     );
   }

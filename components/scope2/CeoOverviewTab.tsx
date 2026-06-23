@@ -15,7 +15,7 @@ export function Scope2CeoOverviewTab() {
   const { result, baseFacilities } = useScope2();
   const k = result.kpis;
   const confidence = confidenceOf(
-    baseFacilities.map((f) => ({ grade: facilityGrade(f), co2eT: result.baseline.perFacility.find((p) => p.id === f.id)?.locationT ?? 0 })),
+    baseFacilities.filter((f) => !f.excluded).map((f) => ({ grade: facilityGrade(f), co2eT: result.baseline.perFacility.find((p) => p.id === f.id)?.locationT ?? 0 })),
   );
 
   return (

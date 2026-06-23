@@ -21,46 +21,23 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── renderActivityInTypeScreen ────────────────────────────────────────────────
-// Seeds localStorage for BU mode with one BU "Pune" (aggregate: true),
-// then renders ActivityDataTab and navigates to the given fuel's type screen
-// by clicking the category card then the fuel card.
+// ── renderActivityWithBu ───────────────────────────────────────────────────────
+// Seeds BU config and renders the ActivityDataTab.
 
-interface TypeScreenOpts {
-  family: "liquid" | "gas" | "solid";
-  fuel: string;   // e.g. "diesel" (matches the button label search)
-  fuelLabel: string; // e.g. "Diesel"
-  bus: string[];  // BU names
-  value?: number; // optionally pre-seed a value via the input
+interface BuOpts {
+  units: { name: string; aggregate: boolean }[];
 }
 
-function renderActivityInTypeScreen(opts: TypeScreenOpts) {
-  // Seed BU config before mount — the default active company id is "c-0"
+function renderActivityWithBu(opts: BuOpts) {
   window.localStorage.setItem(
     "osh-bus-v3::c-0",
-    JSON.stringify({ mode: "bu", units: opts.bus.map((name) => ({ name, aggregate: true })) }),
+    JSON.stringify({ mode: "bu", units: opts.units }),
   );
-
   render(
     <Wrapper>
       <ActivityDataTab />
     </Wrapper>,
   );
-
-  // Category labels map
-  const catLabel: Record<string, string> = {
-    liquid: "Fuels – Liquid",
-    gas: "Fuels – Gas",
-    solid: "Fuels – Solid",
-  };
-
-  // Click the category card (button containing the label text)
-  const catBtn = screen.getByText(catLabel[opts.family]).closest("button")!;
-  fireEvent.click(catBtn);
-
-  // Now we're on CategoryScreen — click the fuel card (button containing fuelLabel)
-  const fuelBtn = screen.getByText(opts.fuelLabel).closest("button")!;
-  fireEvent.click(fuelBtn);
 }
 
 // ── Existing smoke test (SSR, kept intact) ───────────────────────────────────
@@ -90,324 +67,6 @@ describe("ActivityDataTab", () => {
     expect(html).toContain("Total footprint");
     expect(html).toContain("Scope 1");
     expect(html).toContain("Scope 2");
-  });
-});
-
-// ── Interactive BU row tests ──────────────────────────────────────────────────
-
-describe("ActivityDataTab — inline BU row interactions", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it("typing a value on a BU row creates the entry and shows emissions", async () => {
-    renderActivityInTypeScreen({
-      family: "liquid",
-      fuel: "diesel",
-      fuelLabel: "Diesel",
-      bus: ["Pune"],
-    });
-
-    // The inline input should now be visible with the BU's aria-label
-    const input = await screen.findByLabelText("Pune Diesel consumption");
-    expect(input).toBeTruthy();
-
-    // Type a consumption value
-    fireEvent.change(input, { target: { value: "100000" } });
-
-    // Emissions cell should now show a value ending in "t"
-    const emCells = screen.getAllByText(/\d.*t$/);
-    expect(emCells.length).toBeGreaterThan(0);
-  });
-
-  it("toggling the central control excludes the BU from the total", async () => {
-    renderActivityInTypeScreen({
-      family: "liquid",
-      fuel: "diesel",
-      fuelLabel: "Diesel",
-      bus: ["Pune"],
-    });
-
-    // First type a value so the entry exists
-    const input = await screen.findByLabelText("Pune Diesel consumption");
-    fireEvent.change(input, { target: { value: "100000" } });
-
-    // The central toggle button should be present
-    const toggle = screen.getByLabelText("Include Pune in central total");
-    expect(toggle).toBeTruthy();
-
-    // "Excluded from total" must NOT be shown before the toggle
-    expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
-
-    // Click to exclude
-    fireEvent.click(toggle);
-
-    // The "Excluded from total" marker should appear
-    // getByText throws if not found — this is the assertion
-    expect(screen.getByText(/Excluded from total/)).toBeTruthy();
-  });
-
-  it("toggling the central control on a NON-aggregate BU flips it to included (bug fix)", async () => {
-    // Seed a non-aggregate BU "Goa"
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Goa", aggregate: false }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to Diesel type screen
-    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
-    fireEvent.click(catBtn);
-    const fuelBtn = screen.getByText("Diesel").closest("button")!;
-    fireEvent.click(fuelBtn);
-
-    // Type a value to create the entry (ensureEntry is called with aggregate: false)
-    const input = await screen.findByLabelText("Goa Diesel consumption");
-    fireEvent.change(input, { target: { value: "50000" } });
-
-    // Entry is now created with excluded: true (aggregate: false → excluded: !false = true)
-    // "Excluded from total" should be visible
-    expect(screen.getByText(/Excluded from total/)).toBeTruthy();
-
-    // Click the central toggle — should flip excluded from true → false (include it)
-    const toggle = screen.getByLabelText("Include Goa in central total");
-    fireEvent.click(toggle);
-
-    // After the toggle, "Excluded from total" should be gone
-    expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
-  });
-});
-
-// ── Refrigerant gas-card flow tests ──────────────────────────────────────────
-
-function renderActivityInCategory(catKey: "refrigerants") {
-  window.localStorage.setItem(
-    "osh-bus-v3::c-0",
-    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-  );
-  render(
-    <Wrapper>
-      <ActivityDataTab />
-    </Wrapper>,
-  );
-  // Click the Refrigerants category card
-  const catBtn = screen.getByText("Refrigerants & cooling").closest("button")!;
-  fireEvent.click(catBtn);
-}
-
-describe("ActivityDataTab — refrigerant gas-card flow", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it("refrigerants category lists workbook gases and supports per-BU entry", async () => {
-    renderActivityInCategory("refrigerants");
-    // Should show gas cards — R-404A (HFC) is a workbook gas
-    fireEvent.click(await screen.findByText(/R-404A/));
-    // now on the gas type screen with BU "Pune"
-    const input = await screen.findByLabelText("Pune R-404A (HFC) topped up");
-    fireEvent.change(input, { target: { value: "6" } });
-    // Emissions cell should now show a value ending in "t" (e.g. "24 t")
-    const emCells = screen.getAllByText(/\d\s*t$/);
-    expect(emCells.length).toBeGreaterThan(0);
-  });
-
-  it("toggling the central control on a refrigerant BU row excludes it from the total", async () => {
-    renderActivityInCategory("refrigerants");
-    // Navigate to R-404A type screen
-    fireEvent.click(await screen.findByText(/R-404A/));
-    // Type a kg value in the Pune row to create the entry
-    const input = await screen.findByLabelText("Pune R-404A (HFC) topped up");
-    fireEvent.change(input, { target: { value: "6" } });
-    // "Excluded from total" must NOT appear before the toggle
-    expect(screen.queryByText(/Excluded from total/)).toBeFalsy();
-    // Click the central toggle to exclude Pune
-    const toggle = screen.getByLabelText("Include Pune in central total");
-    fireEvent.click(toggle);
-    // "Excluded from total" should now appear
-    expect(screen.getByText(/Excluded from total/)).toBeTruthy();
-  });
-});
-
-// ── New workbook fuels visibility test ───────────────────────────────────────
-// Regression: FUELS_BY_CATEGORY never included the 20 new workbook fuels
-// (jetFuel, marineDiesel*, aviationGasoline, biodiesel, lng, etc.), so the
-// old filter hid them from the fuel-card grid.  After re-adding the correct
-// mobile/stationary filter, jet fuel is mobile-only so it appears on the Mobile
-// tab, not the default Stationary tab.
-
-describe("ActivityDataTab — new workbook fuels are selectable", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it('shows "Jet Fuel (Aviation Turbine Fuel)" card on the Mobile tab of Fuels – Liquid', () => {
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to the Fuels – Liquid category screen
-    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
-    fireEvent.click(catBtn);
-
-    // Jet Fuel is mobile-only — switch to the Mobile tab first
-    const mobileBtn = screen.getByText("mobile");
-    fireEvent.click(mobileBtn);
-
-    // Jet Fuel must now be visible as a selectable card
-    expect(screen.getByText("Jet Fuel (Aviation Turbine Fuel)")).toBeTruthy();
-  });
-
-  it('shows "Fuel Oil / Furnace Oil" card on the default Stationary tab of Fuels – Liquid', () => {
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to the Fuels – Liquid category screen (default tab is Stationary)
-    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
-    fireEvent.click(catBtn);
-
-    // Fuel Oil is stationary-only and must appear without switching tabs
-    expect(screen.getByText("Fuel Oil / Furnace Oil")).toBeTruthy();
-  });
-});
-
-// ── Bio Fuels category tests ──────────────────────────────────────────────────
-
-describe("ActivityDataTab — Bio Fuels category", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it('home screen shows a "Bio Fuels" category card', () => {
-    const html = renderToString(
-      <CompanyProvider>
-        <ScenarioProvider>
-          <Scope2Provider>
-            <ActivityDataTab />
-          </Scope2Provider>
-        </ScenarioProvider>
-      </CompanyProvider>,
-    );
-    expect(html).toContain("Bio Fuels");
-  });
-
-  it('navigating to "Bio Fuels" shows Biodiesel card on the Mobile tab', () => {
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to the Bio Fuels category screen
-    const catBtn = screen.getByText("Bio Fuels").closest("button")!;
-    fireEvent.click(catBtn);
-
-    // Switch to Mobile tab — Biodiesel is in both mobile and stationary
-    const mobileBtn = screen.getByText("mobile");
-    fireEvent.click(mobileBtn);
-
-    expect(screen.getByText("Biodiesel")).toBeTruthy();
-  });
-
-  it('navigating to "Bio Fuels" shows Wood Pellets card on the Stationary tab', () => {
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to the Bio Fuels category screen (default tab is Stationary)
-    const catBtn = screen.getByText("Bio Fuels").closest("button")!;
-    fireEvent.click(catBtn);
-
-    // Wood Pellets is stationary-only and should appear without switching tabs
-    expect(screen.getByText("Wood Pellets")).toBeTruthy();
-  });
-});
-
-// ── Mobile restriction tests ──────────────────────────────────────────────────
-
-describe("ActivityDataTab — Mobile tab fuel restriction", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it('Solid category Mobile tab shows empty-state (no mobile solid fuels)', () => {
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to Fuels – Solid
-    const catBtn = screen.getByText("Fuels – Solid").closest("button")!;
-    fireEvent.click(catBtn);
-
-    // Switch to Mobile tab
-    const mobileBtn = screen.getByText("mobile");
-    fireEvent.click(mobileBtn);
-
-    // No coal/solid fuels are mobile — should see empty state
-    expect(screen.getByText(/No mobile fuels available in this group/)).toBeTruthy();
-  });
-
-  it('Liquid category Mobile tab does NOT show "Fuel Oil / Furnace Oil" (stationary-only)', () => {
-    window.localStorage.setItem(
-      "osh-bus-v3::c-0",
-      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
-    );
-
-    render(
-      <Wrapper>
-        <ActivityDataTab />
-      </Wrapper>,
-    );
-
-    // Navigate to Fuels – Liquid
-    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
-    fireEvent.click(catBtn);
-
-    // Switch to Mobile tab
-    const mobileBtn = screen.getByText("mobile");
-    fireEvent.click(mobileBtn);
-
-    // Fuel Oil is stationary-only — must NOT appear on the Mobile tab
-    expect(screen.queryByText("Fuel Oil / Furnace Oil")).toBeFalsy();
   });
 });
 
@@ -555,8 +214,8 @@ describe("Collapsible", () => {
 });
 
 // ── Entry screen calc-collapsed test (Task 3 TDD) ────────────────────────────
-// Navigates to the Diesel BU entry screen and verifies the "How this is
-// calculated" block is collapsed by default, then expands on click.
+// Navigates to the Diesel BU entry screen via the new SourceListScreen flow
+// and verifies the "How this is calculated" block is collapsed by default.
 
 async function openDieselBuEntry() {
   window.localStorage.setItem(
@@ -568,17 +227,16 @@ async function openDieselBuEntry() {
       <ActivityDataTab />
     </Wrapper>,
   );
-  // Navigate: home → Fuels – Liquid category → Diesel type screen
-  const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
-  fireEvent.click(catBtn);
-  const fuelBtn = screen.getByText("Diesel").closest("button")!;
-  fireEvent.click(fuelBtn);
-  // Type a value to create the Pune Diesel entry
-  const input = await screen.findByLabelText("Pune Diesel consumption");
-  fireEvent.change(input, { target: { value: "100000" } });
-  // Click the gear/details button on the Pune row to open the entry screen
-  const detailsBtn = screen.getByLabelText("Pune details");
-  fireEvent.click(detailsBtn);
+  // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row
+  fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Pune Diesel" } });
+  // Leave all defaults (stationary, first fuel, no BU), just submit
+  fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+  // Now click the source row to open the entry screen
+  // The row is a div with onClick; find the name span and click its parent
+  const nameSpan = screen.getAllByText("Pune Diesel").find((el) => el.tagName === "SPAN");
+  fireEvent.click(nameSpan!.closest("div")!);
 }
 
 describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
@@ -599,6 +257,7 @@ describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
 });
 
 // ── Refrigerant gear → full screen (Task 5) ──────────────────────────────────
+// Navigate via the new SourceListScreen flow.
 
 async function openR404aBuRow() {
   window.localStorage.setItem(
@@ -610,11 +269,20 @@ async function openR404aBuRow() {
       <ActivityDataTab />
     </Wrapper>,
   );
-  // Navigate: home → Refrigerants & cooling category → R-404A type screen
-  const catBtn = screen.getByText("Refrigerants & cooling").closest("button")!;
-  fireEvent.click(catBtn);
-  fireEvent.click(await screen.findByText(/R-404A/));
-  // Now on the R-404A type screen with BU "Pune" row visible
+  // Navigate: home → Refrigerants & cooling → Add a source → name + R-404A → submit
+  fireEvent.click(screen.getByText("Refrigerants & cooling").closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Pune R404A System" } });
+  // The gas dropdown should have R-404A; select it by label
+  const gasSelect = screen.getByLabelText(/Refrigerant gas/i);
+  // Find the option value for R-404A
+  const r404aOption = Array.from(gasSelect.querySelectorAll("option")).find(
+    (o) => o.textContent?.includes("R-404A")
+  );
+  if (r404aOption) {
+    fireEvent.change(gasSelect, { target: { value: r404aOption.value } });
+  }
+  fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
 }
 
 describe("ActivityDataTab — refrigerant gear opens full entry screen (Task 5)", () => {
@@ -623,8 +291,10 @@ describe("ActivityDataTab — refrigerant gear opens full entry screen (Task 5)"
   });
 
   it("refrigerant gear opens the full refrigerant entry screen", async () => {
-    await openR404aBuRow(); // refrigerants → R-404A → BU mode row visible
-    fireEvent.click(screen.getByLabelText("Pune details")); // the gear
+    await openR404aBuRow();
+    // Click the source row to navigate to the entry screen
+    const nameSpanR = screen.getAllByText("Pune R404A System").find((el) => el.tagName === "SPAN");
+    fireEvent.click(nameSpanR!.closest("div")!);
     // full screen: Details for the scenario modeller + collapsible calc, NOT a side panel
     expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
     expect(screen.getByText(/Details for the scenario modeller/i)).toBeTruthy();
@@ -677,5 +347,104 @@ describe("ActivityDataTab — Electricity BU-first flow (Task 4)", () => {
     expect(screen.getAllByText(/142/).length).toBeGreaterThan(0);
     fireEvent.change(vppa, { target: { value: "50000" } });
     expect(screen.getAllByText(/142/).length).toBeGreaterThan(0); // unchanged — vppa is clean
+  });
+});
+
+// ── Task 2: BU mode removal tests ────────────────────────────────────────────
+
+describe("ActivityDataTab — Task 2: BU mode removal", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("Business Units screen has no central/by-BU mode and lists units", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(screen.getByRole("button", { name: /Business units/i }));
+    expect(screen.queryByText(/How is the data collected/i)).toBeFalsy(); // mode radio gone
+    expect(screen.getByText("Pune")).toBeTruthy();
+  });
+
+  it("electricity shows a Company-wide row plus each BU", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(await screen.findByText("Electricity"));
+    expect(screen.getByText(/Company-wide/i)).toBeTruthy();
+    expect(screen.getByText("Pune")).toBeTruthy();
+  });
+});
+
+// ── Task 3: Fuel entry screen shows modeller fields only ─────────────────────
+// Verifies the fuel entry "Details for the scenario modeller" section shows
+// only Annual spend, Number of units, and Remaining life — no Category control,
+// no Site / location, no Metered volume / spend toggle.
+
+async function openDieselSourceEntry() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row
+  fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Diesel gensets" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+  // Click the source row to open the entry screen
+  const nameSpan = screen.getAllByText("Diesel gensets").find((el) => el.tagName === "SPAN");
+  fireEvent.click(nameSpan!.closest("div")!);
+}
+
+describe("ActivityDataTab — Task 3: fuel entry modeller fields only", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("fuel entry details show modeller fields only (no stationary/mobile, no site)", async () => {
+    await openDieselSourceEntry(); // helper: add 'Diesel gensets', click it
+    expect(screen.getByLabelText(/Number of units/i)).toBeTruthy();
+    expect(screen.getByText(/Annual spend/i)).toBeTruthy();
+    expect(screen.queryByText(/Site \/ location/i)).toBeFalsy();
+    expect(screen.queryByText(/Metered volume/i)).toBeFalsy();   // inputMode toggle gone
+    // category control absent in details
+    expect(screen.queryByText(/^Category$/i)).toBeFalsy();
+  });
+});
+
+// ── SourceListScreen tests (Task 1) ──────────────────────────────────────────
+
+describe("ActivityDataTab — SourceListScreen (Task 1)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("category shows a source list and adding a source creates it", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(await screen.findByText("Fuels – Liquid"));
+    // no all-fuels grid: a known non-added fuel card is absent
+    expect(screen.queryByText("Marine Gas Oil (ULSGO)")).toBeFalsy();
+    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+    fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Diesel gensets" } });
+    // fuel + type + BU default to first sensible values; submit
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    expect(screen.getAllByText("Diesel gensets").length).toBeGreaterThan(0);
+  });
+
+  it("excluded source shows an always-visible 'Excluded from total' badge on the row", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(await screen.findByText("Fuels – Liquid"));
+    // Add a source
+    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+    fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Excluded Genset" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    // Badge should not be visible yet (source is included by default)
+    expect(screen.queryByText(/Excluded from total/i)).toBeFalsy();
+    // Toggle excluded via the central button (it's inside hover group but still clickable)
+    const toggleBtn = screen.getByRole("button", { name: /Include Excluded Genset in central total/i });
+    fireEvent.click(toggleBtn);
+    // Now the always-visible badge must appear
+    expect(screen.getByText(/Excluded from total/i)).toBeTruthy();
   });
 });

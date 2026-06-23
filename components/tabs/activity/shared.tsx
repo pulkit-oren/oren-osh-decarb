@@ -14,7 +14,6 @@ export type Nav =
   | { level: "bus" }
   | { level: "scope"; scope: 1 | 2 }
   | { level: "cat"; key: CatKey }
-  | { level: "type"; key: CatKey; typeKey: string; cat?: "stationary" | "mobile" }
   | { level: "elecbu"; bu: string }
   | { level: "entry"; kind: "combustion" | "facility" | "refrigerant"; id: string };
 

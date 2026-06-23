@@ -396,10 +396,43 @@ function LabeledNum({ label, hint, value, suffix, onChange, footer }: {
   );
 }
 
-export function CombustionDetails({ a, year, showCalc = true, showSource = true, showFuel = true }: { a: CombustionAsset; year: number; showCalc?: boolean; showSource?: boolean; showFuel?: boolean }) {
+export function CombustionDetails({ a, year, showCalc = true, showSource = true, showFuel = true, modellerOnly = false }: { a: CombustionAsset; year: number; showCalc?: boolean; showSource?: boolean; showFuel?: boolean; modellerOnly?: boolean }) {
   const { updateCombustion } = useScenario();
   const price = FUELS[a.fuelType].typicalPricePerUnit ?? 0;
   const avgOpex = Math.round(a.annualVolume * price);
+
+  if (modellerOnly) {
+    return (
+      <div className="space-y-4">
+        <LabeledNum
+          label={`Annual spend (${CURRENCY}/yr)`} hint="Fuel cost plus related maintenance for the year. Drives payback and cost-per-tonne in the action plan."
+          value={a.opex} onChange={(v) => updateCombustion(year, a.id, { opex: v })}
+          footer={price > 0 && a.opex !== avgOpex ? (
+            <button type="button" onClick={() => updateCombustion(year, a.id, { opex: avgOpex })} className="text-brand-600 hover:underline">
+              Use average ≈ {fmtMoney(avgOpex)} ({CURRENCY}{fmt(price)}/{a.unit})
+            </button>
+          ) : price > 0 ? `≈ average at ${CURRENCY}${fmt(price)}/${a.unit}` : null}
+        />
+        <label className="block">
+          <span className="text-xs font-medium text-ink-soft flex items-center gap-1.5">Number of units</span>
+          <span className="mt-1 flex items-center gap-1.5">
+            <input
+              type="number"
+              value={a.unitCount}
+              onChange={(e) => updateCombustion(year, a.id, { unitCount: Math.max(1, Math.round(Number(e.target.value))) })}
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400 text-right tabular-nums"
+              aria-label="Number of units"
+            />
+          </span>
+        </label>
+        <LabeledNum
+          label="Remaining life (yrs)" hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset."
+          value={a.remainingLife} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {showSource && (

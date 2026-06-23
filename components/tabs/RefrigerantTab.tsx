@@ -11,9 +11,11 @@ import { REFRIGERANTS } from "@/lib/model/factors";
 import { refrigerantCO2e } from "@/lib/model/baseline";
 import type { RefrigerantEra, RefrigerantFactor, RefrigerantId } from "@/lib/model/types";
 import { cn, fmt, fmtNum, pct } from "@/lib/utils";
+import { groupByBu } from "@/lib/group-by-bu";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
 import { InfoTip } from "../ui/InfoTip";
+import { Collapsible } from "./activity/Collapsible";
 
 const ALL = Object.values(REFRIGERANTS);
 const MAX_GWP = Math.max(...ALL.map((r) => r.gwp));
@@ -34,7 +36,11 @@ const RECO: Partial<Record<RefrigerantId, RefrigerantId>> = {
 };
 
 export function RefrigerantTab() {
-  const { baseSystems: systems } = useScenario();
+  const { baseSystems } = useScenario();
+  // Bug fix: exclude systems flagged as excluded from the advisor
+  const systems = baseSystems.filter((s) => !s.excluded);
+  // Group by BU (Company-wide first)
+  const groups = groupByBu(systems);
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,63 +51,69 @@ export function RefrigerantTab() {
           subtitle="Based on the cooling systems entered in Data input"
           right={<HowTo points={[
             "Every kilogram of refrigerant that leaks acts like hundreds or thousands of kilograms of CO₂ — that multiplier is the gas's GWP (global warming potential).",
-            "“Today” is the CO₂e your system leaks per year at its current charge and leak rate.",
-            "“After swap” estimates the same leak with the recommended gas, adjusted for the smaller charge natural refrigerants need.",
+            `“Today” is the CO₂e your system leaks per year at its current charge and leak rate.`,
+            `“After swap” estimates the same leak with the recommended gas, adjusted for the smaller charge natural refrigerants need.`,
             "Swaps are applied in the Scenario modeller via the gas-switch lever.",
           ]} />}
         />
         {systems.length === 0 ? (
           <p className="text-sm text-ink-faint">No cooling systems entered yet — add them in Data input (step 1).</p>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {systems.map((s) => {
-              const cur = REFRIGERANTS[s.refrigerant];
-              const targetId = RECO[s.refrigerant];
-              const tgt = targetId ? REFRIGERANTS[targetId] : null;
-              const nowT = refrigerantCO2e(s);
-              const afterT = tgt ? nowT * ((tgt.gwp * tgt.volAdj) / cur.gwp) : nowT;
-              const cut = tgt ? 1 - afterT / Math.max(nowT, 1e-9) : 0;
-              return (
-                <div key={s.id} className="rounded-xl2 border border-line/70 p-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-lg bg-brand-50 grid place-items-center text-brand-600 shrink-0">
-                      <Snowflake size={17} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-ink truncate">{s.name}</div>
-                      <div className="text-xs text-ink-faint">{fmt(s.toppedUpKg)} kg topped up/yr (= leaked)</div>
-                    </div>
-                    {tgt ? (
-                      <span className="ml-auto shrink-0 text-sm font-extrabold text-brand-600 bg-brand-50 rounded-full px-3 py-1">
-                        −{pct(cut)}
-                      </span>
-                    ) : (
-                      <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
-                        <CheckCircle2 size={14} /> already low-impact
-                      </span>
-                    )}
-                  </div>
-                  {tgt && (
-                    <>
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs rounded-md bg-surface-muted px-2 py-1 text-ink-soft font-medium">
-                          {cur.label} <span className="text-ink-faint">· GWP {fmt(cur.gwp)}</span>
-                        </span>
-                        <ArrowRight size={14} className="text-ink-faint shrink-0" />
-                        <span className="text-xs rounded-md bg-brand-50 text-brand-700 px-2 py-1 font-semibold" title={tgt.note}>
-                          {tgt.label} <span className="font-normal">· GWP {fmt(tgt.gwp)}</span>
-                        </span>
+          <div className="flex flex-col gap-5">
+            {groups.map(([bu, groupSystems]) => (
+              <Collapsible key={bu || "__company_wide__"} title={bu || "Company-wide"} defaultOpen>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {groupSystems.map((s) => {
+                    const cur = REFRIGERANTS[s.refrigerant];
+                    const targetId = RECO[s.refrigerant];
+                    const tgt = targetId ? REFRIGERANTS[targetId] : null;
+                    const nowT = refrigerantCO2e(s);
+                    const afterT = tgt ? nowT * ((tgt.gwp * tgt.volAdj) / cur.gwp) : nowT;
+                    const cut = tgt ? 1 - afterT / Math.max(nowT, 1e-9) : 0;
+                    return (
+                      <div key={s.id} className="rounded-xl2 border border-line/70 p-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-lg bg-brand-50 grid place-items-center text-brand-600 shrink-0">
+                            <Snowflake size={17} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-ink truncate">{s.name}</div>
+                            <div className="text-xs text-ink-faint">{fmt(s.toppedUpKg)} kg topped up/yr (= leaked)</div>
+                          </div>
+                          {tgt ? (
+                            <span className="ml-auto shrink-0 text-sm font-extrabold text-brand-600 bg-brand-50 rounded-full px-3 py-1">
+                              −{pct(cut)}
+                            </span>
+                          ) : (
+                            <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
+                              <CheckCircle2 size={14} /> already low-impact
+                            </span>
+                          )}
+                        </div>
+                        {tgt && (
+                          <>
+                            <div className="mt-3 flex items-center gap-2 flex-wrap">
+                              <span className="text-xs rounded-md bg-surface-muted px-2 py-1 text-ink-soft font-medium">
+                                {cur.label} <span className="text-ink-faint">· GWP {fmt(cur.gwp)}</span>
+                              </span>
+                              <ArrowRight size={14} className="text-ink-faint shrink-0" />
+                              <span className="text-xs rounded-md bg-brand-50 text-brand-700 px-2 py-1 font-semibold" title={tgt.note}>
+                                {tgt.label} <span className="font-normal">· GWP {fmt(tgt.gwp)}</span>
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm">
+                              <span className="text-ink-soft">Leak emissions: <strong className="text-ink tabular-nums">{fmtNum(nowT, 1)}</strong> t/yr today</span>
+                              <ArrowRight size={13} className="text-ink-faint shrink-0 mx-2" />
+                              <span className="text-brand-700 font-semibold tabular-nums">≈ {fmtNum(afterT, 1)} t/yr after swap</span>
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div className="mt-3 flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-sm">
-                        <span className="text-ink-soft">Leak emissions: <strong className="text-ink tabular-nums">{fmtNum(nowT, 1)}</strong> t/yr today</span>
-                        <ArrowRight size={13} className="text-ink-faint shrink-0 mx-2" />
-                        <span className="text-brand-700 font-semibold tabular-nums">≈ {fmtNum(afterT, 1)} t/yr after swap</span>
-                      </div>
-                    </>
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </Collapsible>
+            ))}
           </div>
         )}
       </Card>
