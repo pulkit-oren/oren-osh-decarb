@@ -21,9 +21,13 @@ type Props = {
   nWithData: (d: CatDef, t: { key: string; label: string }, cat?: "stationary" | "mobile") => number;
   // gas list passed from container
   refrigGases: { key: string; label: string; gwp: number }[];
+  // electricity BU helpers
+  buElecEmissions: (bu: string) => number;
+  elecBuExcluded: (bu: string) => boolean;
+  toggleElecCentral: (bu: string, agg: boolean) => void;
 };
 
-export function CategoryScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, catTotal, nWithData, refrigGases }: Props) {
+export function CategoryScreen({ nav, setNav, year, buReg, typesFor, typeAggTotal, catTotal, nWithData, refrigGases, buElecEmissions, elecBuExcluded, toggleElecCentral }: Props) {
   const [catMode, setCatMode] = useState<"stationary" | "mobile">("stationary");
   const [fuelFilter, setFuelFilter] = useState<Set<string>>(new Set());
   const [fuelMenuOpen, setFuelMenuOpen] = useState(false);
@@ -69,26 +73,40 @@ export function CategoryScreen({ nav, setNav, year, buReg, typesFor, typeAggTota
           </div>
         </>
       ) : def.kind === "electricity" ? (
-        <>
-          <p className="text-xs text-ink-soft -mt-1">Each source shows its total emissions, aggregated from the business units. Click one to add units &amp; enter values.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {typesFor(def).map((t) => {
-              const TIcon = ELEC_TYPES.find((e) => e.key === t.key)?.icon ?? Zap;
-              const totalEm = typeAggTotal(def, t);
-              const nbu = nWithData(def, t);
+        buReg.mode === "central" ? (
+          <button onClick={() => setNav({ level: "elecbu", bu: "" })} className="rounded-xl3 border border-line/60 bg-surface shadow-card p-5 flex items-center gap-3 text-left hover:border-brand-300 hover:shadow-card-lg transition-all w-full">
+            <span className="w-10 h-10 rounded-xl bg-surface-muted grid place-items-center text-ink-soft font-bold shrink-0">C</span>
+            <div className="min-w-0 flex-1"><span className="block font-semibold text-ink">Central (company-wide)</span><span className="text-xs text-ink-faint">Click to enter purchased / VPPA / solar / I-REC</span></div>
+            <span className="text-sm font-semibold tabular-nums shrink-0">{fmt(buElecEmissions(""))} tCO₂e</span>
+            <ChevronRight size={18} className="text-ink-faint shrink-0" />
+          </button>
+        ) : buReg.units.length === 0 ? (
+          <div className="rounded-xl3 border border-dashed border-line/70 bg-surface-muted/40 p-6 text-center">
+            <p className="text-sm text-ink-soft">No business units set up yet.</p>
+            <button onClick={() => setNav({ level: "bus" })} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Set up business units</button>
+          </div>
+        ) : (
+          <div className="rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-brand-50 to-transparent">
+              <span className="text-sm font-semibold text-ink">{buReg.units.length} business unit{buReg.units.length === 1 ? "" : "s"}</span>
+              <span className="text-xs text-ink-faint">Purchased · VPPA · Solar · I-REC per BU</span>
+            </div>
+            {[...buReg.units].map((u) => {
+              const ex = elecBuExcluded(u.name);
               return (
-                <button key={t.key} onClick={() => setNav({ level: "type", key: def.key, typeKey: t.key })} style={{ background: GRAD[def.meta] }} className="group rounded-xl3 border border-white/60 shadow-card p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-card-lg hover:ring-2 hover:ring-white/80">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="w-12 h-12 rounded-2xl bg-white/55 backdrop-blur-sm grid place-items-center transition-all group-hover:bg-white/85 group-hover:scale-105"><TIcon size={24} strokeWidth={1.9} style={{ color: ICON_COLOR[def.meta] }} /></span>
-                    <div className="text-right"><div className="text-[9px] uppercase tracking-wide text-ink-soft font-bold">Emissions</div><div className="text-lg font-extrabold tabular-nums text-ink leading-none mt-0.5">{fmt(totalEm)}<span className="text-[10px] text-ink-soft"> t</span></div></div>
+                <div key={u.name} className="group flex items-center gap-3 px-4 py-3 border-t border-line/40 hover:bg-brand-50/30 transition-colors">
+                  <span className="w-8 h-8 rounded-lg bg-surface-muted grid place-items-center text-ink-soft font-bold text-xs shrink-0">{u.name.charAt(0).toUpperCase()}</span>
+                  <button onClick={() => setNav({ level: "elecbu", bu: u.name })} className="min-w-0 flex-1 text-left font-medium text-ink truncate">{u.name}</button>
+                  <span className="w-20 text-right text-sm font-semibold tabular-nums shrink-0">{fmt(buElecEmissions(u.name))} t</span>
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => toggleElecCentral(u.name, u.aggregate)} aria-label={`Include ${u.name} in central total`} className={cn("text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-1 border", !ex ? "bg-brand-50 text-brand-700 border-brand-200" : "bg-surface-muted text-ink-faint border-line")}>{!ex ? "✓ central" : "central"}</button>
                   </div>
-                  <div className="mt-3 text-sm font-bold text-ink leading-tight">{t.label}</div>
-                  <div className="text-[11px] text-ink-soft mt-0.5 inline-flex items-center gap-0.5">{buReg.mode === "central" ? "Central" : `${nbu}/${buReg.units.length} BUs`} <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" /></div>
-                </button>
+                  <button onClick={() => setNav({ level: "elecbu", bu: u.name })} aria-label={`${u.name} electricity`} className="shrink-0"><ChevronRight size={16} className="text-ink-faint" /></button>
+                </div>
               );
             })}
           </div>
-        </>
+        )
       ) : (() => {
         const famFuels = fuelsInFamily(def.key as FuelFamily).filter((f) => FUELS_BY_CATEGORY[catMode].includes(f.id));
         const shown = fuelFilter.size === 0 ? famFuels : famFuels.filter((f) => fuelFilter.has(f.id));

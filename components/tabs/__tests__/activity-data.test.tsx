@@ -597,3 +597,52 @@ describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
     expect(screen.getAllByText(/tCO₂e|GJ|Emission factor/i).length).toBeGreaterThan(0);
   });
 });
+
+// ── Electricity BU-first 4-box flow tests (Task 4) ───────────────────────────
+
+async function openElectricityCategory() {
+  window.localStorage.setItem(
+    "osh-bus-v3::c-0",
+    JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+  );
+  render(
+    <Wrapper>
+      <ActivityDataTab />
+    </Wrapper>,
+  );
+  // Click the Electricity category card
+  const catBtn = screen.getByText("Electricity").closest("button")!;
+  fireEvent.click(catBtn);
+}
+
+async function openPuneElectricity() {
+  await openElectricityCategory();
+  // Click the "Pune" row to navigate to the BU electricity screen
+  const puneBtn = screen.getByText("Pune").closest("button")!;
+  fireEvent.click(puneBtn);
+}
+
+describe("ActivityDataTab — Electricity BU-first flow (Task 4)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("electricity goes straight to the BU list (no instrument cards)", async () => {
+    await openElectricityCategory(); // helper: bu mode w/ a unit "Pune", click Electricity card
+    expect(screen.queryByText("Virtual PPA")).toBeFalsy();   // no instrument card on the cat screen
+    expect(screen.getByText("Pune")).toBeTruthy();           // BU row present
+  });
+
+  it("a BU electricity screen has 4 boxes; only Purchased drives emissions", async () => {
+    await openPuneElectricity();   // helper: ...→ click the Pune row
+    const purchased = screen.getByLabelText("Pune Purchased electricity");
+    const vppa = screen.getByLabelText("Pune Virtual PPA");
+    expect(screen.getByLabelText("Pune Solar onsite")).toBeTruthy();
+    expect(screen.getByLabelText("Pune I-REC")).toBeTruthy();
+    fireEvent.change(purchased, { target: { value: "200000" } });
+    // 200000 * 0.71 / 1000 = 142
+    expect(screen.getAllByText(/142/).length).toBeGreaterThan(0);
+    fireEvent.change(vppa, { target: { value: "50000" } });
+    expect(screen.getAllByText(/142/).length).toBeGreaterThan(0); // unchanged — vppa is clean
+  });
+});

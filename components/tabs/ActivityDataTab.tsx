@@ -16,6 +16,7 @@ import { useBuConfig } from "./activity/useBuConfig";
 import { HomeScreen } from "./activity/HomeScreen";
 import { BusinessUnitsScreen } from "./activity/BusinessUnitsScreen";
 import { CategoryScreen } from "./activity/CategoryScreen";
+import { ElectricityBuScreen } from "./activity/ElectricityBuScreen";
 import { TypeScreen } from "./activity/TypeScreen";
 import { EntryScreen } from "./activity/EntryScreen";
 import { ScopeScreen } from "./activity/ScopeScreen";
@@ -132,6 +133,25 @@ export function ActivityDataTab() {
     return id;
   };
 
+  // Find/create the (BU, instrument) facility; returns its id. Does not navigate.
+  const ensureFacility = (bu: string, instrumentKey: string, agg: boolean): string => {
+    const t = ELEC_TYPES.find((e) => e.key === instrumentKey)!;
+    let ex = s2.selectedFacilities.find((f) => (f.bu ?? "") === bu && f.name === t.label);
+    if (!ex) { const rec = blankFac(bu, { label: t.label, gridEf: t.gridEf }, 0, agg); s2.addFacilityRecord(year, rec); ex = rec; }
+    return ex.id;
+  };
+  const buElecFacilities = (bu: string) => s2.selectedFacilities.filter((f) => (f.bu ?? "") === bu && ELEC_TYPES.some((e) => e.label === f.name));
+  const buElecEmissions = (bu: string) => buElecFacilities(bu).filter((f) => !f.excluded).reduce((s, f) => s + facCO2e(f), 0);
+  const elecBuExcluded = (bu: string) => { const fs = buElecFacilities(bu); return fs.length > 0 && fs.every((f) => f.excluded); };
+  // Toggle central for all 4 of a BU's electricity records together.
+  const toggleElecCentral = (bu: string, agg: boolean) => {
+    ELEC_TYPES.forEach((t) => {
+      const id = ensureFacility(bu, t.key, agg);
+      const cur = facById(id) ?? { excluded: !agg };
+      s2.updateFacility(year, id, { excluded: !cur.excluded });
+    });
+  };
+
   const openEntry = (d: CatDef, t: { key: string; label: string; gridEf?: number }, cat: "stationary" | "mobile" | undefined, bu: string, agg: boolean) => {
     const id = ensureEntry(d, t, cat, bu, agg);
     setNav({ level: "entry", kind: d.kind === "electricity" ? "facility" : "combustion", id });
@@ -203,6 +223,22 @@ export function ActivityDataTab() {
     );
   }
 
+  if (nav.level === "elecbu") {
+    const bu = nav.bu;
+    const agg = bu ? (buReg.units.find((u) => u.name === bu)?.aggregate ?? true) : true;
+    return (
+      <ElectricityBuScreen
+        bu={bu}
+        year={year}
+        ensureFacility={(k) => ensureFacility(bu, k, agg)}
+        facById={facById}
+        updateFacility={s2.updateFacility}
+        co2Fac={co2Fac}
+        setNav={setNav}
+      />
+    );
+  }
+
   if (nav.level === "cat") {
     return (
       <CategoryScreen
@@ -215,6 +251,9 @@ export function ActivityDataTab() {
         catTotal={catTotal}
         nWithData={nWithData}
         refrigGases={refrigGases}
+        buElecEmissions={buElecEmissions}
+        elecBuExcluded={elecBuExcluded}
+        toggleElecCentral={toggleElecCentral}
       />
     );
   }
