@@ -411,6 +411,23 @@ describe("ActivityDataTab — Mobile tab fuel restriction", () => {
   });
 });
 
+// ── ELEC_TYPES shape test ─────────────────────────────────────────────────────
+
+import { ELEC_TYPES } from "@/components/tabs/activity/shared";
+
+describe("ELEC_TYPES (4 fixed instruments)", () => {
+  it("has grid, vppa, solar, irec with Solar onsite labelled and clean EFs zero", () => {
+    expect(ELEC_TYPES.map((t) => t.key)).toEqual(["grid", "vppa", "solar", "irec"]);
+    const solar = ELEC_TYPES.find((t) => t.key === "solar");
+    expect(solar?.label).toBe("Solar onsite");
+    expect(solar?.gridEf).toBe(0);
+    expect(ELEC_TYPES.find((t) => t.key === "vppa")?.gridEf).toBe(0);
+    expect(ELEC_TYPES.find((t) => t.key === "irec")?.gridEf).toBe(0);
+    expect(ELEC_TYPES.find((t) => t.key === "grid")?.gridEf).toBe(0.71);
+    expect(ELEC_TYPES.some((t) => t.key === "any")).toBe(false);
+  });
+});
+
 // ── Scope drill-down tests ────────────────────────────────────────────────────
 
 describe("ActivityDataTab — Scope drill-down", () => {
