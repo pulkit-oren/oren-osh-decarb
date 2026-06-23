@@ -212,7 +212,7 @@ export function FacilityDetailContent({ f, year, locationT }: { f: Facility; yea
             </div>
             <p className="text-[11px] text-ink-faint mt-2 flex items-center gap-1.5">
               Roof headroom for new solar ≈ <strong className="text-ink">{fmt(roofCapKwp)} kWp</strong> ({M2_PER_KW} m²/kW{f.existingSolarKwp ? `, after ${fmt(f.existingSolarKwp)} kWp installed` : ""})
-              <InfoTip text="Solar yield is geography-specific: sunny Pune ≈ 1,500; cloudy London ≈ 950. Peak load sizes the battery inverter." />
+              <InfoTip text="Solar yield is geography-specific: sunny Pune ≈ 1,500; cloudy London ≈ 950." />
             </p>
           </div>
 
