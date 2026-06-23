@@ -7,6 +7,7 @@ import { M2_PER_KW } from "@/lib/scope2/model/constants";
 import { useScope2 } from "@/lib/scope2/store";
 import { defaultFacilityActions } from "@/lib/scope2/defaults";
 import { cn, fmt, fmtMoney, fmtNum, pct } from "@/lib/utils";
+import { groupByBu } from "@/lib/group-by-bu";
 import { Card, CardHeader } from "../ui/Card";
 import { KpiCard } from "../ui/KpiCard";
 import { Slider } from "../ui/Slider";
@@ -53,19 +54,44 @@ export function Scope2BuilderTab() {
         </div>
       )}
 
-      {/* facility picker */}
+      {/* facility picker — grouped by BU */}
       <div>
         <div className="text-xs uppercase tracking-wider text-ink-faint font-bold mb-2">Facility — efficiency & generation levers apply per site</div>
-        <div className="flex flex-wrap gap-1.5">
-          {baseFacilities.map((f) => {
-            const active = f.id === facility.id;
-            return (
-              <button key={f.id} onClick={() => setSelId(f.id)} className={cn("rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors", active ? "bg-brand-500 text-white border-brand-500" : "border-line hover:border-brand-300 hover:bg-brand-50/40")}>
-                {f.name}
-                {f.isolated && <span className={cn("ml-1.5 text-[10px]", active ? "text-white/80" : "text-amber-600")}>· isolated</span>}
-              </button>
-            );
-          })}
+        <div className="flex flex-col gap-3">
+          {groupByBu(baseFacilities).map(([bu, groupFacilities]) => (
+            <div key={bu || "__company_wide__"}>
+              {/* BU group label — only shown when there is more than one group */}
+              {groupByBu(baseFacilities).length > 1 && (
+                <div className="text-[10px] uppercase tracking-wider text-ink-faint font-semibold mb-1.5">
+                  {bu || "Company-wide"}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                {groupFacilities.map((f) => {
+                  const active = f.id === facility.id;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelId(f.id)}
+                      className={cn(
+                        "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                        f.excluded && "opacity-60",
+                        active ? "bg-brand-500 text-white border-brand-500" : "border-line hover:border-brand-300 hover:bg-brand-50/40",
+                      )}
+                    >
+                      {f.name}
+                      {f.isolated && <span className={cn("ml-1.5 text-[10px]", active ? "text-white/80" : "text-amber-600")}>· isolated</span>}
+                      {f.excluded && (
+                        <span className={cn("ml-1.5 text-[10px] font-semibold", active ? "text-white/80" : "text-amber-700")}>
+                          · Excluded
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
