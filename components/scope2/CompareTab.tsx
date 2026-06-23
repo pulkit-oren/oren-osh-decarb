@@ -26,7 +26,7 @@ export function Scope2CompareTab() {
     { id: "current", name: "Current levers", result },
     ...scenarios
       .filter((sc) => picked.includes(sc.id))
-      .map((sc) => ({ id: sc.id, name: sc.name, result: computeScope2(baseFacilities, sc.levers, baseYear) })),
+      .map((sc) => ({ id: sc.id, name: sc.name, result: computeScope2(baseFacilities.filter((f) => !f.excluded), sc.levers, baseYear) })),
   ];
 
   const series: TrajectorySeries[] = rows.flatMap((r, i) => [
