@@ -411,6 +411,36 @@ describe("ActivityDataTab — Mobile tab fuel restriction", () => {
   });
 });
 
+// ── RefrigerantDetailsPanel showCalc=false test (Task 3) ─────────────────────
+// Verifies that RefrigerantDetailsPanel (used in EntryScreen) does NOT render
+// the "How this is calculated" section — it must live only in the Collapsible.
+
+import { RefrigerantDetailsPanel } from "@/components/tabs/DataInputTab";
+import type { RefrigerationSystem } from "@/lib/model/types";
+
+const STUB_REFRIGERANT_SYSTEM: RefrigerationSystem = {
+  id: "r-test",
+  name: "Test AC",
+  systemType: "commercialHVAC",
+  refrigerant: "R404A",
+  toppedUpKg: 5,
+  gasCostPerKg: 400,
+};
+
+describe("RefrigerantDetailsPanel — showCalc=false", () => {
+  it("does NOT render 'How this is calculated' when used via RefrigerantDetailsPanel", () => {
+    render(
+      <Wrapper>
+        <RefrigerantDetailsPanel s={STUB_REFRIGERANT_SYSTEM} year={2025} />
+      </Wrapper>,
+    );
+    // The calc section heading must NOT appear (showCalc=false)
+    expect(screen.queryByText(/How this is calculated/i)).toBeFalsy();
+    // The inputs section must still be present (the panel body is unchanged)
+    expect(screen.getByText(/Inputs/i)).toBeTruthy();
+  });
+});
+
 // ── ELEC_TYPES shape test ─────────────────────────────────────────────────────
 
 import { ELEC_TYPES } from "@/components/tabs/activity/shared";

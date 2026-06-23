@@ -500,7 +500,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true,
   );
 }
 
-function RefrigerantDetails({ s, year }: { s: RefrigerationSystem; year: number }) {
+function RefrigerantDetails({ s, year, showCalc = true }: { s: RefrigerationSystem; year: number; showCalc?: boolean }) {
   const { updateRefrigeration } = useScenario();
   return (
     <div className="space-y-6">
@@ -524,10 +524,12 @@ function RefrigerantDetails({ s, year }: { s: RefrigerationSystem; year: number 
           />
         </div>
       </div>
-      <div className="border-t border-line/60 pt-5">
-        <SectionLabel>How this is calculated</SectionLabel>
-        <RefrigerantCalc s={s} />
-      </div>
+      {showCalc && (
+        <div className="border-t border-line/60 pt-5">
+          <SectionLabel>How this is calculated</SectionLabel>
+          <RefrigerantCalc s={s} />
+        </div>
+      )}
     </div>
   );
 }
@@ -575,7 +577,7 @@ export function CombustionCalc({ a }: { a: CombustionAsset }) {
 
 /** Exported thin wrapper — renders the RefrigerantDetails panel for use in EntryScreen. */
 export function RefrigerantDetailsPanel({ s, year }: { s: RefrigerationSystem; year: number }) {
-  return <RefrigerantDetails s={s} year={year} />;
+  return <RefrigerantDetails s={s} year={year} showCalc={false} />;
 }
 
 /** Exported thin wrapper — renders the RefrigerantCalc block for use in EntryScreen. */
