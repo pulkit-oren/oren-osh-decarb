@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /* Refrigerant advisor — answer first: what should WE swap, and what is
    it worth in tonnes. The 30-gas reference library stays one click away
@@ -15,6 +15,7 @@ import { groupByBu } from "@/lib/group-by-bu";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
 import { InfoTip } from "../ui/InfoTip";
+import { Collapsible } from "./activity/Collapsible";
 
 const ALL = Object.values(REFRIGERANTS);
 const MAX_GWP = Math.max(...ALL.map((r) => r.gwp));
@@ -50,8 +51,8 @@ export function RefrigerantTab() {
           subtitle="Based on the cooling systems entered in Data input"
           right={<HowTo points={[
             "Every kilogram of refrigerant that leaks acts like hundreds or thousands of kilograms of CO₂ — that multiplier is the gas's GWP (global warming potential).",
-            '"Today" is the CO₂e your system leaks per year at its current charge and leak rate.',
-            '"After swap" estimates the same leak with the recommended gas, adjusted for the smaller charge natural refrigerants need.',
+            `“Today” is the CO₂e your system leaks per year at its current charge and leak rate.`,
+            `“After swap” estimates the same leak with the recommended gas, adjusted for the smaller charge natural refrigerants need.`,
             "Swaps are applied in the Scenario modeller via the gas-switch lever.",
           ]} />}
         />
@@ -60,10 +61,7 @@ export function RefrigerantTab() {
         ) : (
           <div className="flex flex-col gap-5">
             {groups.map(([bu, groupSystems]) => (
-              <div key={bu || "__company_wide__"}>
-                <div className="text-[11px] uppercase tracking-wider text-ink-faint font-bold mb-2">
-                  {bu || "Company-wide"}
-                </div>
+              <Collapsible key={bu || "__company_wide__"} title={bu || "Company-wide"} defaultOpen>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {groupSystems.map((s) => {
                     const cur = REFRIGERANTS[s.refrigerant];
@@ -114,7 +112,7 @@ export function RefrigerantTab() {
                     );
                   })}
                 </div>
-              </div>
+              </Collapsible>
             ))}
           </div>
         )}

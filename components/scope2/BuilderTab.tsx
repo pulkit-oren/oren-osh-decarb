@@ -29,6 +29,7 @@ export function Scope2BuilderTab() {
     return <Card>No facilities in the base year — add them on the Data input tab first.</Card>;
   }
 
+  const facilityGroups = groupByBu(baseFacilities);
   const acts = levers.byFacility[facility.id] ?? defaultFacilityActions(facility);
   const eff = acts.efficiency;
   const gen = acts.generation;
@@ -58,10 +59,10 @@ export function Scope2BuilderTab() {
       <div>
         <div className="text-xs uppercase tracking-wider text-ink-faint font-bold mb-2">Facility — efficiency & generation levers apply per site</div>
         <div className="flex flex-col gap-3">
-          {groupByBu(baseFacilities).map(([bu, groupFacilities]) => (
+          {facilityGroups.map(([bu, groupFacilities]) => (
             <div key={bu || "__company_wide__"}>
               {/* BU group label — only shown when there is more than one group */}
-              {groupByBu(baseFacilities).length > 1 && (
+              {facilityGroups.length > 1 && (
                 <div className="text-[10px] uppercase tracking-wider text-ink-faint font-semibold mb-1.5">
                   {bu || "Company-wide"}
                 </div>
