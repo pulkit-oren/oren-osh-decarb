@@ -104,79 +104,85 @@ export function Scope2BuilderTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* Pillar 1 — efficiency */}
+      {gridFacilities.length === 0 ? (
         <Card>
-          <CardHeader
-            title={<span className="flex items-center gap-2"><Lightbulb size={16} style={{ color: EFF_COLOR }} /> Energy efficiency · {facility.name}</span>}
-            subtitle="Capital upgrades that shrink the raw electricity draw."
-            right={<Toggle on={eff.enabled} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { enabled: v })} label="Enable efficiency lever" />}
-          />
-          <div className={cn("space-y-4", !eff.enabled && "opacity-50 pointer-events-none")}>
-            <Slider label="LED lighting deployment" value={eff.ledPct} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { ledPct: v })} color={EFF_COLOR}
-              hint="Share of legacy lighting replaced. LEDs cut the lighting load ~55%." />
-            <Slider label="High-efficiency motors / VFDs" value={eff.motorPct} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { motorPct: v })} color={EFF_COLOR}
-              hint="IE1/IE2 motors moved to IE4/IE5 or fitted with variable-frequency drives. Cuts the motor load ~12.5%." />
-            <Slider label="BMS / automation" value={eff.bmsPct} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { bmsPct: v })} color={EFF_COLOR}
-              hint="Smart sensors optimizing HVAC schedules and idling equipment. Cuts HVAC + other load ~17.5%." />
-            <div className="grid grid-cols-3 gap-2">
-              <NumField label="LED CAPEX (full)" value={eff.ledCapex} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { ledCapex: v })} />
-              <NumField label="Motor CAPEX (full)" value={eff.motorCapex} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { motorCapex: v })} />
-              <NumField label="BMS CAPEX (full)" value={eff.bmsCapex} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { bmsCapex: v })} />
-            </div>
-            <YearRange start={eff.startYear} target={eff.targetYear}
-              onStart={(y) => updateFacilityAction(facility.id, "efficiency", { startYear: y, targetYear: Math.max(y, eff.targetYear) })}
-              onTarget={(y) => updateFacilityAction(facility.id, "efficiency", { targetYear: y })} />
-            {pf && eff.enabled && (
-              <div className="rounded-xl bg-surface-muted px-3 py-2.5 text-xs text-ink-soft space-y-0.5">
-                <p>Lighting −{fmt(pf.eff.ledKwh)} · Motors −{fmt(pf.eff.motorKwh)} · BMS −{fmt(pf.eff.bmsKwh)} kWh/yr</p>
-                <p className="font-semibold text-ink">Total −{fmt(pf.eff.savedKwh)} kWh/yr → residual load {fmt(pf.eff.residualLoadKwh)} kWh</p>
-              </div>
-            )}
-          </div>
+          <p className="text-sm text-ink-faint">No grid-supplied facilities — efficiency and on-site generation apply only to purchased-grid electricity.</p>
         </Card>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {/* Pillar 1 — efficiency */}
+          <Card>
+            <CardHeader
+              title={<span className="flex items-center gap-2"><Lightbulb size={16} style={{ color: EFF_COLOR }} /> Energy efficiency · {facility.name}</span>}
+              subtitle="Capital upgrades that shrink the raw electricity draw."
+              right={<Toggle on={eff.enabled} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { enabled: v })} label="Enable efficiency lever" />}
+            />
+            <div className={cn("space-y-4", !eff.enabled && "opacity-50 pointer-events-none")}>
+              <Slider label="LED lighting deployment" value={eff.ledPct} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { ledPct: v })} color={EFF_COLOR}
+                hint="Share of legacy lighting replaced. LEDs cut the lighting load ~55%." />
+              <Slider label="High-efficiency motors / VFDs" value={eff.motorPct} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { motorPct: v })} color={EFF_COLOR}
+                hint="IE1/IE2 motors moved to IE4/IE5 or fitted with variable-frequency drives. Cuts the motor load ~12.5%." />
+              <Slider label="BMS / automation" value={eff.bmsPct} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { bmsPct: v })} color={EFF_COLOR}
+                hint="Smart sensors optimizing HVAC schedules and idling equipment. Cuts HVAC + other load ~17.5%." />
+              <div className="grid grid-cols-3 gap-2">
+                <NumField label="LED CAPEX (full)" value={eff.ledCapex} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { ledCapex: v })} />
+                <NumField label="Motor CAPEX (full)" value={eff.motorCapex} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { motorCapex: v })} />
+                <NumField label="BMS CAPEX (full)" value={eff.bmsCapex} onChange={(v) => updateFacilityAction(facility.id, "efficiency", { bmsCapex: v })} />
+              </div>
+              <YearRange start={eff.startYear} target={eff.targetYear}
+                onStart={(y) => updateFacilityAction(facility.id, "efficiency", { startYear: y, targetYear: Math.max(y, eff.targetYear) })}
+                onTarget={(y) => updateFacilityAction(facility.id, "efficiency", { targetYear: y })} />
+              {pf && eff.enabled && (
+                <div className="rounded-xl bg-surface-muted px-3 py-2.5 text-xs text-ink-soft space-y-0.5">
+                  <p>Lighting −{fmt(pf.eff.ledKwh)} · Motors −{fmt(pf.eff.motorKwh)} · BMS −{fmt(pf.eff.bmsKwh)} kWh/yr</p>
+                  <p className="font-semibold text-ink">Total −{fmt(pf.eff.savedKwh)} kWh/yr → residual load {fmt(pf.eff.residualLoadKwh)} kWh</p>
+                </div>
+              )}
+            </div>
+          </Card>
 
-        {/* Pillar 2 — generation */}
-        <Card>
-          <CardHeader
-            title={<span className="flex items-center gap-2"><Sun size={16} style={{ color: GEN_COLOR }} /> On-site generation · {facility.name}</span>}
-            subtitle="Behind-the-meter solar + battery, offsetting the post-efficiency load."
-            right={<Toggle on={gen.enabled} onChange={(v) => updateFacilityAction(facility.id, "generation", { enabled: v })} label="Enable generation lever" />}
-          />
-          <div className={cn("space-y-4", !gen.enabled && "opacity-50 pointer-events-none")}>
-            <Slider label="Solar PV capacity" value={Math.round(gen.solarKwp)} min={0} max={Math.max(1, Math.round(roofCapKwp))} suffix=" kWp" color={GEN_COLOR}
-              onChange={(v) => updateFacilityAction(facility.id, "generation", { solarKwp: v })}
-              hint={`Roof space caps the array at ${Math.round(roofCapKwp)} kWp (${M2_PER_KW} m² per kW). Yield here: ${facility.irradiance} kWh/kWp/yr.`} />
-            <Slider label="Battery storage" value={Math.round(gen.batteryKwh)} min={0} max={Math.max(1, Math.round(facility.peakLoadKw * 8))} suffix=" kWh" color={GEN_COLOR}
-              onChange={(v) => updateFacilityAction(facility.id, "generation", { batteryKwh: v })}
-              hint={`Stores excess daytime solar, lifting self-consumption toward 100%. Peak load ${fmt(facility.peakLoadKw)} kW sizes the inverter.`} />
-            <label className="block">
-              <span className="text-xs text-ink-soft flex items-center gap-1.5">Grid export
-                <InfoTip text="Net metering: the utility credits exported solar at the tariff. Zero export: generation beyond on-site demand is curtailed — no value, no emission credit." />
-              </span>
-              <select value={gen.exportMode} onChange={(e) => updateFacilityAction(facility.id, "generation", { exportMode: e.target.value as typeof gen.exportMode })}
-                className="mt-1 w-full border border-line rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400">
-                <option value="netMetering">Net metering allowed</option>
-                <option value="zeroExport">Zero export (curtail)</option>
-              </select>
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <NumField label="Solar CAPEX /kW" value={gen.solarCapexPerKw} onChange={(v) => updateFacilityAction(facility.id, "generation", { solarCapexPerKw: v })} />
-              <NumField label="Battery CAPEX /kWh" value={gen.batteryCapexPerKwh} onChange={(v) => updateFacilityAction(facility.id, "generation", { batteryCapexPerKwh: v })} />
-              <NumField label="Subsidy" value={gen.subsidyPct} onChange={(v) => updateFacilityAction(facility.id, "generation", { subsidyPct: Math.max(0, Math.min(100, v)) })} suffix="%" />
-            </div>
-            <YearRange start={gen.startYear} target={gen.targetYear}
-              onStart={(y) => updateFacilityAction(facility.id, "generation", { startYear: y, targetYear: Math.max(y, gen.targetYear) })}
-              onTarget={(y) => updateFacilityAction(facility.id, "generation", { targetYear: y })} />
-            {pf && gen.enabled && gen.solarKwp > 0 && (
-              <div className="rounded-xl bg-surface-muted px-3 py-2.5 text-xs text-ink-soft space-y-0.5">
-                <p>Generation {fmt(pf.gen.solarGenKwh)} kWh/yr · self-consumption {pct(pf.gen.selfConsumption)} · exported {fmt(pf.gen.exportedKwh)} kWh</p>
-                <p className="font-semibold text-ink">Grid draw after solar: {fmt(pf.gen.gridDrawKwh)} kWh/yr</p>
+          {/* Pillar 2 — generation */}
+          <Card>
+            <CardHeader
+              title={<span className="flex items-center gap-2"><Sun size={16} style={{ color: GEN_COLOR }} /> On-site generation · {facility.name}</span>}
+              subtitle="Behind-the-meter solar + battery, offsetting the post-efficiency load."
+              right={<Toggle on={gen.enabled} onChange={(v) => updateFacilityAction(facility.id, "generation", { enabled: v })} label="Enable generation lever" />}
+            />
+            <div className={cn("space-y-4", !gen.enabled && "opacity-50 pointer-events-none")}>
+              <Slider label="Solar PV capacity" value={Math.round(gen.solarKwp)} min={0} max={Math.max(1, Math.round(roofCapKwp))} suffix=" kWp" color={GEN_COLOR}
+                onChange={(v) => updateFacilityAction(facility.id, "generation", { solarKwp: v })}
+                hint={`Roof space caps the array at ${Math.round(roofCapKwp)} kWp (${M2_PER_KW} m² per kW). Yield here: ${facility.irradiance} kWh/kWp/yr.`} />
+              <Slider label="Battery storage" value={Math.round(gen.batteryKwh)} min={0} max={Math.max(1, Math.round(facility.peakLoadKw * 8))} suffix=" kWh" color={GEN_COLOR}
+                onChange={(v) => updateFacilityAction(facility.id, "generation", { batteryKwh: v })}
+                hint={`Stores excess daytime solar, lifting self-consumption toward 100%. Peak load ${fmt(facility.peakLoadKw)} kW sizes the inverter.`} />
+              <label className="block">
+                <span className="text-xs text-ink-soft flex items-center gap-1.5">Grid export
+                  <InfoTip text="Net metering: the utility credits exported solar at the tariff. Zero export: generation beyond on-site demand is curtailed — no value, no emission credit." />
+                </span>
+                <select value={gen.exportMode} onChange={(e) => updateFacilityAction(facility.id, "generation", { exportMode: e.target.value as typeof gen.exportMode })}
+                  className="mt-1 w-full border border-line rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400">
+                  <option value="netMetering">Net metering allowed</option>
+                  <option value="zeroExport">Zero export (curtail)</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <NumField label="Solar CAPEX /kW" value={gen.solarCapexPerKw} onChange={(v) => updateFacilityAction(facility.id, "generation", { solarCapexPerKw: v })} />
+                <NumField label="Battery CAPEX /kWh" value={gen.batteryCapexPerKwh} onChange={(v) => updateFacilityAction(facility.id, "generation", { batteryCapexPerKwh: v })} />
+                <NumField label="Subsidy" value={gen.subsidyPct} onChange={(v) => updateFacilityAction(facility.id, "generation", { subsidyPct: Math.max(0, Math.min(100, v)) })} suffix="%" />
               </div>
-            )}
-          </div>
-        </Card>
-      </div>
+              <YearRange start={gen.startYear} target={gen.targetYear}
+                onStart={(y) => updateFacilityAction(facility.id, "generation", { startYear: y, targetYear: Math.max(y, gen.targetYear) })}
+                onTarget={(y) => updateFacilityAction(facility.id, "generation", { targetYear: y })} />
+              {pf && gen.enabled && gen.solarKwp > 0 && (
+                <div className="rounded-xl bg-surface-muted px-3 py-2.5 text-xs text-ink-soft space-y-0.5">
+                  <p>Generation {fmt(pf.gen.solarGenKwh)} kWh/yr · self-consumption {pct(pf.gen.selfConsumption)} · exported {fmt(pf.gen.exportedKwh)} kWh</p>
+                  <p className="font-semibold text-ink">Grid draw after solar: {fmt(pf.gen.gridDrawKwh)} kWh/yr</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Pillar 3 — procurement (portfolio-wide, pinned) */}
       <Card>

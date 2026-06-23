@@ -6,7 +6,12 @@
  *        "Add annual spend to see cost savings in the modeller."
  *        When opex > 0, the hint disappears.
  *
- * E2b — AssetActionCard: when asset.annualVolume === 0, shows
+ * E2b — FacilityDetailContent: roof-space hint appears only for grid
+ *        facilities (gridEf > 0) with roofSpaceM2 === 0.
+ *        It must NOT appear when roofSpaceM2 > 0, and must NOT appear
+ *        for a clean/non-grid facility (gridEf === 0, roofSpaceM2 === 0).
+ *
+ * E2c — AssetActionCard: when asset.annualVolume === 0, shows
  *        "No consumption entered yet" note in the card.
  */
 
@@ -16,6 +21,10 @@ import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "../ActivityDataTab";
+import { BuilderTab } from "../BuilderTab";
+import type { CombustionAsset } from "@/lib/model/types";
+import { FacilityDetailContent } from "@/components/scope2/DataInputTab";
+import type { Facility } from "@/lib/scope2/model/types";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -103,10 +112,85 @@ describe("EntryScreen — E2a: opex=0 hint", () => {
   });
 });
 
-/* ── E2b: annualVolume hint on AssetActionCard ───────────────────────────────── */
+/* ── E2b: roof-space hint on FacilityDetailContent ──────────────────────────── */
 
-import { BuilderTab } from "../BuilderTab";
-import type { CombustionAsset } from "@/lib/model/types";
+const BASE_ROOF_HINT = /Set roof space to size the on-site solar option\./i;
+
+function makeGridFacility(overrides: Partial<Facility> = {}): Facility {
+  return {
+    id: "f-grid-test",
+    name: "Grid Test",
+    bu: "Pune",
+    annualLoadKwh: 1_000_000,
+    tariffPerKwh: 8.5,
+    loadSplit: { lightingPct: 15, motorPct: 55, hvacPct: 20 },
+    roofSpaceM2: 0,
+    peakLoadKw: 300,
+    gridEf: 0.71,
+    irradiance: 1500,
+    isolated: false,
+    ...overrides,
+  };
+}
+
+function seedScope2(facility: Facility) {
+  const BASE_YEAR = 2025;
+  const persisted = {
+    facilities: { [BASE_YEAR]: [facility] },
+    levers: {
+      byFacility: {},
+      procurement: {
+        enabled: false, ppaPct: 0, greenTariffPct: 0, recPct: 0,
+        ppaStrikeDeltaPerKwh: -0.5, greenTariffPremiumPerKwh: 0.8, recPricePerKwh: 0.45,
+        re100Exclusion: false, startYear: 2026, targetYear: 2030,
+      },
+    },
+    scenarios: [],
+    baseYear: BASE_YEAR,
+  };
+  window.localStorage.setItem("osh-scope2-planner-v1", JSON.stringify(persisted));
+}
+
+describe("FacilityDetailContent — E2b: roof-space hint", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("shows the hint for a GRID facility (gridEf > 0) with roofSpaceM2 === 0", () => {
+    const facility = makeGridFacility({ gridEf: 0.71, roofSpaceM2: 0 });
+    seedScope2(facility);
+    render(
+      <Scope2Provider>
+        <FacilityDetailContent f={facility} year={2025} locationT={100} />
+      </Scope2Provider>,
+    );
+    expect(screen.getByText(BASE_ROOF_HINT)).toBeTruthy();
+  });
+
+  it("does NOT show the hint for a GRID facility with roofSpaceM2 > 0", () => {
+    const facility = makeGridFacility({ gridEf: 0.71, roofSpaceM2: 5000 });
+    seedScope2(facility);
+    render(
+      <Scope2Provider>
+        <FacilityDetailContent f={facility} year={2025} locationT={100} />
+      </Scope2Provider>,
+    );
+    expect(screen.queryByText(BASE_ROOF_HINT)).toBeFalsy();
+  });
+
+  it("does NOT show the hint for a clean/non-grid facility (gridEf === 0, roofSpaceM2 === 0)", () => {
+    const facility = makeGridFacility({ gridEf: 0, roofSpaceM2: 0 });
+    seedScope2(facility);
+    render(
+      <Scope2Provider>
+        <FacilityDetailContent f={facility} year={2025} locationT={0} />
+      </Scope2Provider>,
+    );
+    expect(screen.queryByText(BASE_ROOF_HINT)).toBeFalsy();
+  });
+});
+
+/* ── E2c: annualVolume hint on AssetActionCard ───────────────────────────────── */
 
 /** Seed a combustion asset with the given annualVolume and render the BuilderTab. */
 function renderBuilderWithAsset(annualVolume: number) {
@@ -154,7 +238,7 @@ function renderBuilderWithAsset(annualVolume: number) {
   fireEvent.click(screen.getByText("Stationary"));
 }
 
-describe("AssetActionCard — E2b: annualVolume=0 hint", () => {
+describe("AssetActionCard — E2c: annualVolume=0 hint", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });

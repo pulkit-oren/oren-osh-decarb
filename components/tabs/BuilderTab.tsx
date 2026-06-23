@@ -235,7 +235,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
             <p className="text-sm text-ink-soft mt-0.5">
               {isMobile ? `${asset.unitCount} vehicles` : "1 unit"} · {fmt(asset.annualVolume)} {asset.unit}/yr
             </p>
-            {asset.annualVolume === 0 && (
+            {!asset.excluded && asset.annualVolume === 0 && (
               <p className="text-[11px] text-ink-faint mt-0.5">No consumption entered yet</p>
             )}
           </div>
