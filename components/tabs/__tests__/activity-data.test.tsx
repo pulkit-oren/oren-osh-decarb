@@ -510,3 +510,16 @@ describe("ActivityDataTab — Scope drill-down", () => {
     expect(screen.getByText(/Light diesel oil/i)).toBeTruthy();
   });
 });
+
+// ── Collapsible component tests ──────────────────────────────────────────────
+
+import { Collapsible } from "@/components/tabs/activity/Collapsible";
+
+describe("Collapsible", () => {
+  it("hides content until the header is clicked", () => {
+    render(<Collapsible title="How this is calculated"><p>BODY-MARKER</p></Collapsible>);
+    expect(screen.queryByText("BODY-MARKER")).toBeFalsy();
+    fireEvent.click(screen.getByRole("button", { name: /How this is calculated/i }));
+    expect(screen.getByText("BODY-MARKER")).toBeTruthy();
+  });
+});
