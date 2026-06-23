@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import { computeScope2 } from "@/lib/scope2/model";
 import { defaultFacilityActions, DEFAULT_PROCUREMENT } from "@/lib/scope2/defaults";
+import { facilityGrade, confidenceOf } from "@/lib/data-quality";
 import type { Facility, Scope2Levers } from "@/lib/scope2/model/types";
 
 const BASE_YEAR = 2025;
@@ -55,15 +56,8 @@ describe("Scope 2 excluded facility filter", () => {
     expect(unfiltered.kpis.locationNowT).toBeGreaterThan(filtered.kpis.locationNowT);
   });
 
-  it("filtered saved-scenario column matches the store result (post-fix)", () => {
-    // The store computes: computeScope2(baseFacilities.filter((f) => !f.excluded), levers, baseYear)
-    // The fix makes CompareTab use the same filter.
-    // Both must produce the same locationNowT.
-    const storeResult = computeScope2(allFacilities.filter((f) => !f.excluded), levers, BASE_YEAR);
-    const savedColResult = computeScope2(allFacilities.filter((f) => !f.excluded), levers, BASE_YEAR);
-
-    expect(savedColResult.kpis.locationNowT).toBeCloseTo(storeResult.kpis.locationNowT, 6);
-  });
+  // Test 2 was a tautology (f(x) ≈ f(x)) — removed as redundant with Test 1,
+  // which already proves the unfiltered path overcounts.
 
   it("excluded facility contributes zero to the filtered result", () => {
     // Only active facility in the filtered set.
@@ -74,16 +68,32 @@ describe("Scope 2 excluded facility filter", () => {
     expect(filtered.kpis.marketNowT).toBeCloseTo(activeOnly.kpis.marketNowT, 6);
   });
 
-  it("CEO confidence gauge excludes the excluded facility (post-fix)", () => {
-    // CeoOverviewTab was calling confidenceOf(baseFacilities.map(...))
-    // without filtering — an excluded facility inflated the weighted gauge.
-    // The fix: baseFacilities.filter((f) => !f.excluded).map(...)
-    // We verify that filtering changes the input set.
-    const allIds = allFacilities.map((f) => f.id);
-    const filteredIds = allFacilities.filter((f) => !f.excluded).map((f) => f.id);
+  it("CEO confidence gauge: confidenceOf on unfiltered vs filtered inputs yields different totalT", () => {
+    // CeoOverviewTab builds: baseFacilities.filter((f) => !f.excluded).map(f => ({
+    //   grade: facilityGrade(f),
+    //   co2eT: result.baseline.perFacility.find(p => p.id === f.id)?.locationT ?? 0,
+    // }))
+    // The excluded facility has annualLoadKwh > 0 → grade "measured" and positive locationT
+    // (= annualLoadKwh * gridEf / 1000). When unfiltered it contributes positive co2eT to the
+    // gauge's totalT, inflating the weighted confidence score.  After the fix it is absent.
 
-    expect(filteredIds).not.toEqual(allIds);
-    expect(filteredIds).toContain("active");
-    expect(filteredIds).not.toContain("excluded");
+    const toInput = (f: Facility) => ({
+      grade: facilityGrade(f),
+      // locationT formula from baseline.ts: (annualLoadKwh * gridEf) / 1000
+      co2eT: (f.annualLoadKwh * f.gridEf) / 1000,
+    });
+
+    const unfilteredConfidence = confidenceOf(allFacilities.map(toInput));
+    const filteredConfidence = confidenceOf(
+      allFacilities.filter((f) => !f.excluded).map(toInput),
+    );
+
+    // The excluded facility contributes positive co2eT, so totalT must differ.
+    // This proves the unfiltered (old) path was passing excluded weight to the gauge.
+    expect(unfilteredConfidence.totalT).toBeGreaterThan(filteredConfidence.totalT);
+
+    // And the filtered result should match computing on only the active facility.
+    const activeOnlyConfidence = confidenceOf([toInput(activeFacility)]);
+    expect(filteredConfidence.totalT).toBeCloseTo(activeOnlyConfidence.totalT, 6);
   });
 });
