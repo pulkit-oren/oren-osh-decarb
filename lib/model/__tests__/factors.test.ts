@@ -39,10 +39,14 @@ describe("biomass fuels", () => {
   });
 
   it("appear in the data-entry dropdown categories", () => {
+    // Stationary includes workbook bio fuels and app-only bio fuels for legacy DataInputTab
     expect(FUELS_BY_CATEGORY.stationary).toEqual(
-      expect.arrayContaining(["biogas", "bioCng", "bioBriquettes", "biomass"]),
+      expect.arrayContaining(["biogas", "bioBriquettes", "biomass"]),
     );
+    // bioCng is app-only; it stays in FUELS_BY_CATEGORY.mobile (legacy DataInputTab compat)
     expect(FUELS_BY_CATEGORY.mobile).toContain("bioCng");
+    // bioCng is NOT in stationary (it was removed in the mobile-restriction update)
+    expect(FUELS_BY_CATEGORY.stationary).not.toContain("bioCng");
   });
 
   it("only the small CH₄/N₂O factor counts to Scope 1, well below a fossil fuel", () => {

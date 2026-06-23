@@ -104,7 +104,7 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
           <div className="relative mt-auto pt-5 border-t border-white/20 grid grid-cols-3 gap-2 text-center">
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Measured</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{Math.round(confidence.measuredPct * 100)}%</p></div>
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Sources</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{totalSources}</p></div>
-            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Categories</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{CAT_DEFS.filter((d) => countOf(d.key) > 0).length}<span className="text-sm font-medium text-white/70">/5</span></p></div>
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Categories</p><p className="text-2xl font-extrabold tabular-nums leading-tight">{CAT_DEFS.filter((d) => countOf(d.key) > 0).length}<span className="text-sm font-medium text-white/70">/{CAT_DEFS.length}</span></p></div>
           </div>
         </aside>
       </div>

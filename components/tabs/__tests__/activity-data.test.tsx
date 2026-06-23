@@ -85,6 +85,7 @@ describe("ActivityDataTab", () => {
     expect(html).toContain("Fuels – Liquid");
     expect(html).toContain("Fuels – Gas");
     expect(html).toContain("Fuels – Solid");
+    expect(html).toContain("Bio Fuels");
     expect(html).toContain("Electricity");
     expect(html).toContain("Total footprint");
     expect(html).toContain("Scope 1");
@@ -236,15 +237,16 @@ describe("ActivityDataTab — refrigerant gas-card flow", () => {
 // ── New workbook fuels visibility test ───────────────────────────────────────
 // Regression: FUELS_BY_CATEGORY never included the 20 new workbook fuels
 // (jetFuel, marineDiesel*, aviationGasoline, biodiesel, lng, etc.), so the
-// old filter hid them from the fuel-card grid.  After the fix (filter dropped),
-// every fuel with excelCategory === "liquid" must appear as a selectable card.
+// old filter hid them from the fuel-card grid.  After re-adding the correct
+// mobile/stationary filter, jet fuel is mobile-only so it appears on the Mobile
+// tab, not the default Stationary tab.
 
 describe("ActivityDataTab — new workbook fuels are selectable", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it('shows "Jet Fuel (Aviation Turbine Fuel)" card in Fuels – Liquid (was hidden by old FUELS_BY_CATEGORY filter)', () => {
+  it('shows "Jet Fuel (Aviation Turbine Fuel)" card on the Mobile tab of Fuels – Liquid', () => {
     window.localStorage.setItem(
       "osh-bus-v3::c-0",
       JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
@@ -260,9 +262,152 @@ describe("ActivityDataTab — new workbook fuels are selectable", () => {
     const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
     fireEvent.click(catBtn);
 
-    // Jet Fuel has excelCategory "liquid" so fuelsInFamily("liquid") includes it.
-    // Without the fix the old filter removed it; with the fix it must be visible.
+    // Jet Fuel is mobile-only — switch to the Mobile tab first
+    const mobileBtn = screen.getByText("mobile");
+    fireEvent.click(mobileBtn);
+
+    // Jet Fuel must now be visible as a selectable card
     expect(screen.getByText("Jet Fuel (Aviation Turbine Fuel)")).toBeTruthy();
+  });
+
+  it('shows "Fuel Oil / Furnace Oil" card on the default Stationary tab of Fuels – Liquid', () => {
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to the Fuels – Liquid category screen (default tab is Stationary)
+    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
+    fireEvent.click(catBtn);
+
+    // Fuel Oil is stationary-only and must appear without switching tabs
+    expect(screen.getByText("Fuel Oil / Furnace Oil")).toBeTruthy();
+  });
+});
+
+// ── Bio Fuels category tests ──────────────────────────────────────────────────
+
+describe("ActivityDataTab — Bio Fuels category", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('home screen shows a "Bio Fuels" category card', () => {
+    const html = renderToString(
+      <CompanyProvider>
+        <ScenarioProvider>
+          <Scope2Provider>
+            <ActivityDataTab />
+          </Scope2Provider>
+        </ScenarioProvider>
+      </CompanyProvider>,
+    );
+    expect(html).toContain("Bio Fuels");
+  });
+
+  it('navigating to "Bio Fuels" shows Biodiesel card on the Mobile tab', () => {
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to the Bio Fuels category screen
+    const catBtn = screen.getByText("Bio Fuels").closest("button")!;
+    fireEvent.click(catBtn);
+
+    // Switch to Mobile tab — Biodiesel is in both mobile and stationary
+    const mobileBtn = screen.getByText("mobile");
+    fireEvent.click(mobileBtn);
+
+    expect(screen.getByText("Biodiesel")).toBeTruthy();
+  });
+
+  it('navigating to "Bio Fuels" shows Wood Pellets card on the Stationary tab', () => {
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to the Bio Fuels category screen (default tab is Stationary)
+    const catBtn = screen.getByText("Bio Fuels").closest("button")!;
+    fireEvent.click(catBtn);
+
+    // Wood Pellets is stationary-only and should appear without switching tabs
+    expect(screen.getByText("Wood Pellets")).toBeTruthy();
+  });
+});
+
+// ── Mobile restriction tests ──────────────────────────────────────────────────
+
+describe("ActivityDataTab — Mobile tab fuel restriction", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('Solid category Mobile tab shows empty-state (no mobile solid fuels)', () => {
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to Fuels – Solid
+    const catBtn = screen.getByText("Fuels – Solid").closest("button")!;
+    fireEvent.click(catBtn);
+
+    // Switch to Mobile tab
+    const mobileBtn = screen.getByText("mobile");
+    fireEvent.click(mobileBtn);
+
+    // No coal/solid fuels are mobile — should see empty state
+    expect(screen.getByText(/No mobile fuels available in this group/)).toBeTruthy();
+  });
+
+  it('Liquid category Mobile tab does NOT show "Fuel Oil / Furnace Oil" (stationary-only)', () => {
+    window.localStorage.setItem(
+      "osh-bus-v3::c-0",
+      JSON.stringify({ mode: "bu", units: [{ name: "Pune", aggregate: true }] }),
+    );
+
+    render(
+      <Wrapper>
+        <ActivityDataTab />
+      </Wrapper>,
+    );
+
+    // Navigate to Fuels – Liquid
+    const catBtn = screen.getByText("Fuels – Liquid").closest("button")!;
+    fireEvent.click(catBtn);
+
+    // Switch to Mobile tab
+    const mobileBtn = screen.getByText("mobile");
+    fireEvent.click(mobileBtn);
+
+    // Fuel Oil is stationary-only — must NOT appear on the Mobile tab
+    expect(screen.queryByText("Fuel Oil / Furnace Oil")).toBeFalsy();
   });
 });
 
