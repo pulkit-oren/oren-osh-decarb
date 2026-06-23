@@ -215,7 +215,7 @@ export function ActivityDataTab() {
         bu={bu}
         year={year}
         ensureFacility={(k) => ensureFacility(bu, k, agg)}
-        facById={facById}
+        facFor={(k) => s2.selectedFacilities.find((f) => (f.bu ?? "") === bu && f.name === ELEC_TYPES.find((e) => e.key === k)!.label)}
         updateFacility={s2.updateFacility}
         co2Fac={co2Fac}
         setNav={setNav}
