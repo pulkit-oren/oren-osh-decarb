@@ -227,28 +227,6 @@ export function FacilityDetailContent({ f, year, locationT }: { f: Facility; yea
             <Toggle on={f.isolated} onChange={(v) => updateFacility(year, f.id, { isolated: v })} label="Isolated grid" />
           </div>
 
-          <div className="border-t border-line/60 pt-5">
-            <div className="text-[11px] uppercase tracking-wide text-ink-faint font-bold mb-1">What we already have</div>
-            <p className="text-[11px] text-ink-faint mb-3">Renewables already in place — so the model starts from where you really are, not from zero.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <NumField
-                label="Solar already installed (kWp)"
-                value={f.existingSolarKwp ?? 0}
-                onChange={(v) => updateFacility(year, f.id, { existingSolarKwp: Math.max(0, v) })}
-                suffix="kWp"
-              />
-              <NumField
-                label="Already on green contracts (%)"
-                value={f.existingRenewablePct ?? 0}
-                onChange={(v) => updateFacility(year, f.id, { existingRenewablePct: Math.max(0, Math.min(100, v)) })}
-                suffix="%"
-              />
-            </div>
-            <p className="text-[11px] text-ink-faint mt-2 flex items-start gap-1.5">
-              <InfoTip text="Solar already installed: only frees up roof space for new panels — its generation is already netted out of your grid bill. Green contracts (existing PPAs/RECs): the share of this site's electricity already covered, which lowers the market-based starting point. Ignored for isolated grids." />
-              <span>{f.isolated ? "Green contracts don't apply on an isolated grid." : "Existing solar frees roof space; existing contracts lower the market-based baseline."}</span>
-            </p>
-          </div>
         </div>
   );
 }

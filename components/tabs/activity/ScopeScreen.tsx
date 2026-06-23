@@ -34,7 +34,7 @@ export function ScopeScreen({
   if (scope === 1) {
     for (const fam of ["liquid", "gas", "solid"] as const) {
       const rows = s1.selectedAssets
-        .filter((a) => fuelFamily(a.fuelType) === fam)
+        .filter((a) => fuelFamily(a.fuelType) === fam && a.annualVolume > 0)
         .map((a) => ({
           id: a.id,
           name: FUELS[a.fuelType].label,
@@ -48,7 +48,7 @@ export function ScopeScreen({
       }
     }
     const otherRows = s1.selectedAssets
-      .filter((a) => fuelFamily(a.fuelType) === null)
+      .filter((a) => fuelFamily(a.fuelType) === null && a.annualVolume > 0)
       .map((a) => ({
         id: a.id,
         name: FUELS[a.fuelType].label,
@@ -60,7 +60,9 @@ export function ScopeScreen({
     if (otherRows.length) {
       groups.push({ label: "Other Fuels", rows: otherRows });
     }
-    const refRows = s1.selectedSystems.map((sy) => ({
+    const refRows = s1.selectedSystems
+      .filter((sy) => sy.toppedUpKg > 0)
+      .map((sy) => ({
       id: sy.id,
       name: REFRIGERANTS[sy.refrigerant].label,
       bu: sy.bu,
@@ -72,7 +74,9 @@ export function ScopeScreen({
       groups.push({ label: "Refrigerants", rows: refRows });
     }
   } else {
-    const rows = s2.selectedFacilities.map((f) => ({
+    const rows = s2.selectedFacilities
+      .filter((f) => f.annualLoadKwh > 0)
+      .map((f) => ({
       id: f.id,
       name: f.name,
       bu: f.bu,
