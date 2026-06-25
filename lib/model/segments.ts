@@ -7,7 +7,9 @@
 
 import { applyElectrification, applyFuelSwitch } from "./levers";
 import { ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, RECOMMENDED_ALT_BY_SYSTEM } from "./factors";
+import { refrigClassProfile } from "./refrigerant-class";
 import type { AltFuelId, AssetActions, CombustionAsset, ElectrifyAction, FlexFuelAction, GlobalAssumptions, RefrigerationSystem, SystemActions } from "./types";
+import { endUseProfile } from "./end-use";
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
@@ -51,17 +53,30 @@ export function fractionFor(a: ElectrifyAction, asset: CombustionAsset): number 
 
 /** Sensible default (off) action plan for a freshly-added asset. */
 export function defaultActions(asset: CombustionAsset): AssetActions {
-  return {
+  const base: AssetActions = {
     electrify: { enabled: false, unitsToConvert: 0, capacityPct: 0, cop: 3, tariffPerKwh: 9, assetCapex: 0, startYear: 2026, targetYear: 2032 },
     fuelSwitch: { enabled: false, altFuel: defaultAltFuelFor(asset.fuelType) ?? "biodiesel", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 78, retrofitCapex: 0, startYear: 2027, targetYear: 2033 },
     flexFuel: defaultFlexFuel(asset),
+  };
+  const p = endUseProfile(asset);
+  if (!p) return base;
+  return {
+    ...base,
+    electrify: {
+      ...base.electrify,
+      cop: p.electrify.cop,
+      assetCapex: p.electrify.capexPerUnit ?? base.electrify.assetCapex,
+      capacityPct: asset.category === "mobile" ? base.electrify.capacityPct : (p.electrify.capacityHint ?? base.electrify.capacityPct),
+    },
+    fuelSwitch: { ...base.fuelSwitch, altFuel: p.fuelSwitch.preferred ?? base.fuelSwitch.altFuel },
   };
 }
 
 /** Sensible default (off) plan for a freshly-added cooling system. */
 export function defaultSystemActions(sys: RefrigerationSystem): SystemActions {
+  const cls = refrigClassProfile(sys);
   return {
-    gasSwitch: { enabled: false, transitionPct: 60, altRefrigerant: RECOMMENDED_ALT_BY_SYSTEM[sys.systemType], retrofitCapex: 0, startYear: 2026, targetYear: 2030 },
+    gasSwitch: { enabled: false, transitionPct: 60, altRefrigerant: cls?.recommendedAlt ?? RECOMMENDED_ALT_BY_SYSTEM[sys.systemType], retrofitCapex: 0, startYear: 2026, targetYear: 2030 },
     leakFix: { enabled: false, leakImprovementPct: 50, startYear: 2026, targetYear: 2028 },
   };
 }

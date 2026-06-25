@@ -1,6 +1,6 @@
 "use client";
 
-import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Sun, Leaf } from "lucide-react";
+import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Sun, Leaf, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FuelFamily } from "@/lib/activity-groups";
 import type { Facility } from "@/lib/scope2/model/types";
@@ -84,6 +84,27 @@ export const unitLabel = (u: string) => (u === "m3" ? "m³" : u);
 export function IconTile({ emoji, bg, size = "md", hover }: { emoji: string; bg: string; size?: "md" | "lg"; hover?: boolean }) {
   const s = size === "lg" ? "w-16 h-16 rounded-2xl text-3xl" : "w-9 h-9 rounded-xl text-lg";
   return <span style={{ background: bg }} className={cn("grid place-items-center shrink-0 transition-transform", s, hover && "group-hover:scale-110")}>{emoji}</span>;
+}
+
+// Always-visible toggle: is this source counted in the company-wide total?
+export function CentralPill({ included, onClick, name }: { included: boolean; onClick: (e: React.MouseEvent) => void; name?: string }) {
+  const desc = included ? "counted in company total" : "excluded from company total";
+  return (
+    <button
+      onClick={onClick}
+      title={included ? "Counted in company total — click to exclude" : "Excluded from company total — click to include"}
+      aria-label={name ? `${name} — ${desc}` : desc}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold border transition-colors shrink-0",
+        included
+          ? "bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100"
+          : "bg-surface-muted text-ink-faint border-line hover:bg-surface"
+      )}
+    >
+      <Building2 size={13} strokeWidth={2} />
+      {included ? "In total" : "Excluded"}
+    </button>
+  );
 }
 
 export function ScopeBadge({ scope }: { scope: 1 | 2 | "outside" }) {

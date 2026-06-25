@@ -136,9 +136,11 @@ describe("ActivityDataTab — Scope drill-down", () => {
   it("clicking Scope 1 opens a drill-down listing sources by category", async () => {
     renderActivityHomeWithData();
     fireEvent.click(screen.getByRole("button", { name: /Scope 1 details/i }));
-    expect(await screen.findByText("Fuels – Liquid")).toBeTruthy();
+    // "Fuels – Liquid" / "Refrigerants" now appear in both the chart legend and the
+    // detail table, so assert at least one match rather than uniqueness.
+    expect((await screen.findAllByText("Fuels – Liquid")).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Diesel/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Refrigerants")).toBeTruthy();
+    expect(screen.getAllByText("Refrigerants").length).toBeGreaterThan(0);
   });
 
   it("null-family fuel (ldo) appears in Other Fuels group in Scope 1 drill-down", async () => {
@@ -193,10 +195,10 @@ describe("ActivityDataTab — Scope drill-down", () => {
     // Navigate to the Scope 1 drill-down
     fireEvent.click(screen.getByRole("button", { name: /Scope 1 details/i }));
 
-    // Fix 1: "Other Fuels" group header must be visible
-    expect(await screen.findByText("Other Fuels")).toBeTruthy();
-    // Fix 1: The LDO fuel label must appear in the drill-down
-    expect(screen.getByText(/Light diesel oil/i)).toBeTruthy();
+    // Fix 1: "Other Fuels" group header must be visible (legend + table → ≥1)
+    expect((await screen.findAllByText("Other Fuels")).length).toBeGreaterThan(0);
+    // Fix 1: The LDO fuel label must appear in the drill-down (ranked bar + table → ≥1)
+    expect(screen.getAllByText(/Light diesel oil/i).length).toBeGreaterThan(0);
   });
 });
 
@@ -239,19 +241,16 @@ async function openDieselBuEntry() {
   fireEvent.click(nameSpan!.closest("div")!);
 }
 
-describe("ActivityDataTab — Entry screen calc collapsible (Task 3)", () => {
+describe("ActivityDataTab — Entry screen shows calc live", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it("entry screen hides the calculation until expanded", async () => {
+  it("entry screen shows the calculation inline (no collapsible)", async () => {
     await openDieselBuEntry();
-    // The "How this is calculated" button must exist (it's the Collapsible toggle)
-    expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
-    // But the calc body (Energy step) should be hidden by default
-    expect(screen.queryByText(/Energy/i)).toBeFalsy();
-    // After clicking the Collapsible header, the body should appear
-    fireEvent.click(screen.getByRole("button", { name: /How this is calculated/i }));
+    // The "How this is calculated" section heading is present...
+    expect(screen.getByText(/How this is calculated/i)).toBeTruthy();
+    // ...and the calc body is visible immediately — no click required.
     expect(screen.getAllByText(/tCO₂e|GJ|Emission factor/i).length).toBeGreaterThan(0);
   });
 });
@@ -271,7 +270,7 @@ async function openR404aBuRow() {
   );
   // Navigate: home → Refrigerants & cooling → Add a source → name + R-404A → submit
   fireEvent.click(screen.getByText("Refrigerants & cooling").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Add a (source|system)/i }));
   fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Pune R404A System" } });
   // The gas dropdown should have R-404A; select it by label
   const gasSelect = screen.getByLabelText(/Refrigerant gas/i);
@@ -295,9 +294,10 @@ describe("ActivityDataTab — refrigerant gear opens full entry screen (Task 5)"
     // Click the source row to navigate to the entry screen
     const nameSpanR = screen.getAllByText("Pune R404A System").find((el) => el.tagName === "SPAN");
     fireEvent.click(nameSpanR!.closest("div")!);
-    // full screen: Details for the scenario modeller + collapsible calc, NOT a side panel
-    expect(screen.getByRole("button", { name: /How this is calculated/i })).toBeTruthy();
-    expect(screen.getByText(/Details for the scenario modeller/i)).toBeTruthy();
+    // full screen (not a side panel): back link + System details + live calc heading
+    expect(screen.getByRole("button", { name: /Back to Refrigerants/i })).toBeTruthy();
+    expect(screen.getByText(/System details/i)).toBeTruthy();
+    expect(screen.getByText(/How this is calculated/i)).toBeTruthy();
   });
 });
 
@@ -397,19 +397,20 @@ async function openDieselSourceEntry() {
   fireEvent.click(nameSpan!.closest("div")!);
 }
 
-describe("ActivityDataTab — Task 3: fuel entry modeller fields only", () => {
+describe("ActivityDataTab — fuel entry shows all detail fields", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it("fuel entry details show modeller fields only (no stationary/mobile, no site)", async () => {
+  it("fuel entry details expose the full interactive field set", async () => {
     await openDieselSourceEntry(); // helper: add 'Diesel gensets', click it
-    expect(screen.getByLabelText(/Number of units/i)).toBeTruthy();
-    expect(screen.getByText(/Annual spend/i)).toBeTruthy();
-    expect(screen.queryByText(/Site \/ location/i)).toBeFalsy();
-    expect(screen.queryByText(/Metered volume/i)).toBeFalsy();   // inputMode toggle gone
-    // category control absent in details
-    expect(screen.queryByText(/^Category$/i)).toBeFalsy();
+    expect(screen.getByLabelText("Number of units")).toBeTruthy();
+    expect(screen.getAllByText(/Annual spend/i).length).toBeGreaterThan(0);
+    // "Show all the things": site, metered/spend toggle, category & remaining life present
+    expect(screen.getByLabelText(/Site \/ location/i)).toBeTruthy();
+    expect(screen.getByText(/Metered volume/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^Category$/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Remaining life/i)).toBeTruthy();
   });
 });
 
@@ -432,19 +433,72 @@ describe("ActivityDataTab — SourceListScreen (Task 1)", () => {
     expect(screen.getAllByText("Diesel gensets").length).toBeGreaterThan(0);
   });
 
-  it("excluded source shows an always-visible 'Excluded from total' badge on the row", async () => {
+  it("the always-visible central pill toggles between 'In total' and 'Excluded'", async () => {
     renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
     fireEvent.click(await screen.findByText("Fuels – Liquid"));
     // Add a source
     fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
     fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Excluded Genset" } });
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    // Badge should not be visible yet (source is included by default)
-    expect(screen.queryByText(/Excluded from total/i)).toBeFalsy();
-    // Toggle excluded via the central button (it's inside hover group but still clickable)
-    const toggleBtn = screen.getByRole("button", { name: /Include Excluded Genset in central total/i });
-    fireEvent.click(toggleBtn);
-    // Now the always-visible badge must appear
-    expect(screen.getByText(/Excluded from total/i)).toBeTruthy();
+    // Included by default → at least one pill reads "In total"
+    expect(screen.getAllByText(/In total/i).length).toBeGreaterThan(0);
+    // Toggle exclusion via this source's always-visible pill (aria-label carries its name)
+    fireEvent.click(screen.getByRole("button", { name: /Excluded Genset.*company total/i }));
+    // Now its pill reads "Excluded"
+    expect(screen.getByText(/^Excluded$/i)).toBeTruthy();
+  });
+});
+
+// ── End-use resets on type change ───────────────────────────────────────────
+
+describe("ActivityDataTab — end-use resets on type change", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  it("clears the end-use when the stationary/mobile type changes", async () => {
+    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
+    fireEvent.click(await screen.findByText("Fuels – Liquid"));
+    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+    // switch to mobile, choose Truck
+    fireEvent.click(screen.getByRole("button", { name: /^mobile$/i }));
+    const sel = document.getElementById("src-enduse") as HTMLSelectElement;
+    const truck = Array.from(sel.querySelectorAll("option")).find((o) => /Truck/.test(o.textContent || ""));
+    fireEvent.change(sel, { target: { value: truck!.value } });
+    expect(sel.value).not.toBe("");
+    // switch back to stationary → end-use must reset
+    fireEvent.click(screen.getByRole("button", { name: /^stationary$/i }));
+    expect((document.getElementById("src-enduse") as HTMLSelectElement).value).toBe("");
+  });
+});
+
+// ── End-use selector (combustion) ───────────────────────────────────────────
+describe("ActivityDataTab — end-use selector", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  it("fuel entry shows an end-use selector filtered by category", async () => {
+    await openDieselSourceEntry(); // existing helper: adds 'Diesel gensets', opens its entry
+    const sel = screen.getByLabelText(/Equipment \/ end-use/i) as HTMLSelectElement;
+    expect(sel).toBeTruthy();
+    const opts = Array.from(sel.querySelectorAll("option")).map((o) => o.textContent);
+    expect(opts.join("|")).toMatch(/Boiler/);     // stationary option present
+    expect(opts.join("|")).not.toMatch(/Truck/);  // mobile-only option absent for stationary
+  });
+});
+
+// ── Refrigerant equipment-class selector ─────────────────────────────────────
+describe("ActivityDataTab — refrigerant equipment class", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  it("entry screen shows an equipment-class selector and recommended swap", async () => {
+    await openR404aBuRow();
+    const nameSpanR = screen.getAllByText("Pune R404A System").find((el) => el.tagName === "SPAN");
+    fireEvent.click(nameSpanR!.closest("div")!);
+    const sel = screen.getByLabelText(/Equipment class/i) as HTMLSelectElement;
+    expect(sel).toBeTruthy();
+    const opts = Array.from(sel.querySelectorAll("option")).map((o) => o.textContent);
+    expect(opts.join("|")).toMatch(/Chiller/);          // commercialHVAC class present
+    expect(opts.join("|")).not.toMatch(/Display case/); // retail-only class absent
+    fireEvent.change(sel, { target: { value: "chiller" } });
+    expect(screen.getByText(/Recommended low-GWP swap/i)).toBeTruthy();
+    expect(screen.getByText(/R-?1234ze/i)).toBeTruthy();
   });
 });

@@ -148,6 +148,8 @@ export interface CombustionAsset {
   remainingLife: number;
   /** Number of units (vehicles for mobile, units for stationary; single boiler = 1). */
   unitCount: number;
+  /** Equipment / end-use class — drives scenario-lever defaults & feasibility. Absent ⇒ unspecified. */
+  endUse?: import("./end-use").EndUseId;
   /** FY this snapshot is for — selects the DEFRA factor year. */
   year?: number;
 }
@@ -156,6 +158,8 @@ export interface RefrigerationSystem {
   id: string;
   name: string;
   systemType: "commercialHVAC" | "industrialColdStorage" | "retailRefrigeration";
+  /** Finer equipment class within the system type — sharpens the recommended low-GWP swap. Absent ⇒ use the system-type default. */
+  equipmentClass?: import("./refrigerant-class").RefrigClassId;
   refrigerant: RefrigerantId;
   /** Refrigerant topped up over the year (kg). Under the mass-balance method
    *  the amount refilled equals the amount that leaked to atmosphere — so this

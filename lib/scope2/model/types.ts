@@ -36,6 +36,8 @@ export interface Facility {
   existingRenewablePct?: number;
   /** Business unit this entry belongs to. Absent ⇒ Central (consolidated). */
   bu?: string;
+  /** Building/facility class — presets the load split & drives solar-feasibility guidance. Absent ⇒ unspecified. */
+  facilityType?: import("./facility-type").FacilityTypeId;
   /** When true, excluded from all footprint totals (a non-aggregated BU). */
   excluded?: boolean;
   year?: number;

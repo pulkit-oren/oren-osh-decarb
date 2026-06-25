@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Plus, Trash2, ChevronRight } from "lucide-react";
-import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, newId, type Nav, type CatKey, type CatDef } from "./shared";
+import { ArrowLeft, Plus, X, ChevronRight } from "lucide-react";
+import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, CentralPill, showNum, unitLabel, newId, type Nav, type CatDef } from "./shared";
 import { FUELS, FUELS_BY_CATEGORY, REFRIGERANTS } from "@/lib/model/factors";
 import { fuelsInExcelFamily, fuelFamily, type FuelFamily } from "@/lib/activity-groups";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
+import { fromRef, toRef } from "@/lib/unit-convert";
 import { fmt, cn } from "@/lib/utils";
-import type { CombustionAsset, FuelId, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
+import type { CombustionAsset, FuelId, FuelUnit, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
+import { endUsesFor, type EndUseId } from "@/lib/model/end-use";
+import { refrigClassesFor, type RefrigClassId } from "@/lib/model/refrigerant-class";
 
 type BuUnit = { name: string; aggregate: boolean };
 
@@ -26,8 +29,8 @@ type Props = {
   setNav: (n: Nav) => void;
 };
 
-type FuelType = "stationary" | "mobile";
-type SystemType = "commercialHVAC" | "industrialColdStorage" | "retailRefrigeration";
+type FuelType = CombustionAsset["category"];
+type SystemType = RefrigerationSystem["systemType"];
 
 export function SourceListScreen({
   def,
@@ -50,6 +53,8 @@ export function SourceListScreen({
   const [selectedGas, setSelectedGas] = useState<RefrigerantId | "">("");
   const [systemType, setSystemType] = useState<SystemType>("commercialHVAC");
   const [selectedBu, setSelectedBu] = useState("");
+  const [endUse, setEndUse] = useState<EndUseId | "">("");
+  const [equipmentClass, setEquipmentClass] = useState<RefrigClassId | "">("");
 
   const CatIcon = CAT_ICON[def.meta];
   const isRefrigerant = def.kind === "refrigerant";
@@ -74,6 +79,8 @@ export function SourceListScreen({
     setSelectedGas(gases[0]?.id ?? "");
     setSystemType("commercialHVAC");
     setSelectedBu("");
+    setEndUse("");
+    setEquipmentClass("");
     setShowForm(true);
   };
 
@@ -84,6 +91,7 @@ export function SourceListScreen({
       FUELS_BY_CATEGORY[t].includes(f.id)
     );
     setSelectedFuel(fuels[0]?.id ?? "");
+    setEndUse("");
   };
 
   // Sources for this category — use shared fuelFamily helper
@@ -108,6 +116,7 @@ export function SourceListScreen({
         toppedUpKg: 0,
         gasCostPerKg: 900,
         bu: selectedBu || undefined,
+        equipmentClass: equipmentClass || undefined,
         excluded: false,
       });
     } else {
@@ -124,6 +133,7 @@ export function SourceListScreen({
         remainingLife: 10,
         unitCount: 1,
         bu: selectedBu || undefined,
+        endUse: endUse || undefined,
         excluded: false,
       });
     }
@@ -178,68 +188,77 @@ export function SourceListScreen({
               ? `${FUELS[asset.fuelType]?.label ?? asset.fuelType} · ${asset.category} · ${buLabel}`
               : `${REFRIGERANTS[sys.refrigerant]?.label ?? sys.refrigerant} · ${sys.systemType} · ${buLabel}`;
 
+            // Inline consumption — show each source's particular unit
+            const disp = isComb ? (asset.displayUnit ?? asset.unit) : "kg";
+            const consVal = isComb
+              ? showNum(fromRef(asset.annualVolume, asset.fuelType, disp as FuelUnit))
+              : sys.toppedUpKg;
+            const unitTxt = isComb ? `${unitLabel(disp)}/yr` : "kg/yr";
+            const openEntry = () =>
+              setNav({ level: "entry", kind: isComb ? "combustion" : "refrigerant", id: source.id });
+
             return (
               <div
                 key={source.id}
-                className="group flex items-center gap-3 px-4 py-3 hover:bg-brand-50/30 transition-colors cursor-pointer"
-                onClick={() =>
-                  setNav({
-                    level: "entry",
-                    kind: isComb ? "combustion" : "refrigerant",
-                    id: source.id,
-                  })
-                }
+                onClick={openEntry}
+                className={cn(
+                  "group flex items-center gap-3 px-4 py-3 hover:bg-brand-50/30 transition-colors cursor-pointer",
+                  excluded && "opacity-70"
+                )}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="block font-medium text-ink">{source.name}</span>
-                    {excluded && (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
-                        Excluded from total
-                      </span>
-                    )}
-                  </div>
+                  <span className="block font-medium text-ink truncate">{source.name}</span>
                   <span className="text-[11px] text-ink-soft">{subLabel}</span>
                 </div>
-                <span className="w-20 text-right text-sm font-semibold tabular-nums shrink-0">
+
+                {/* Inline consumption input */}
+                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="number"
+                    value={consVal}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (isComb) {
+                        updateCombustion(year, asset.id, { annualVolume: toRef(v, asset.fuelType, disp as FuelUnit) });
+                      } else {
+                        updateRefrigeration(year, sys.id, { toppedUpKg: v });
+                      }
+                    }}
+                    aria-label={`${source.name} annual consumption`}
+                    className="w-24 text-right tabular-nums rounded-lg border border-brand-200 bg-brand-50/50 px-2.5 py-1.5 text-sm focus:outline-none focus:border-brand-400 focus:bg-white"
+                  />
+                  <span className="text-[11px] text-ink-faint w-14">{unitTxt}</span>
+                </div>
+
+                <span className="w-16 text-right text-sm font-semibold tabular-nums shrink-0">
                   {fmt(emissions)} t
                 </span>
-                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isComb) {
-                        updateCombustion(year, asset.id, { excluded: !asset.excluded });
-                      } else {
-                        updateRefrigeration(year, sys.id, { excluded: !sys.excluded });
-                      }
-                    }}
-                    aria-label={`Include ${source.name} in central total`}
-                    className={cn(
-                      "text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-1 border",
-                      !excluded
-                        ? "bg-brand-50 text-brand-700 border-brand-200"
-                        : "bg-surface-muted text-ink-faint border-line"
-                    )}
-                  >
-                    {!excluded ? "✓ central" : "central"}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isComb) {
-                        deleteCombustion(year, asset.id);
-                      } else {
-                        deleteRefrigeration(year, sys.id);
-                      }
-                    }}
-                    aria-label={`Delete ${source.name}`}
-                    className="p-1.5 rounded-lg text-ink-faint hover:text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-                <ChevronRight size={16} className="text-ink-faint shrink-0" />
+
+                <CentralPill
+                  included={!excluded}
+                  name={source.name}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isComb) updateCombustion(year, asset.id, { excluded: !asset.excluded });
+                    else updateRefrigeration(year, sys.id, { excluded: !sys.excluded });
+                  }}
+                />
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isComb) deleteCombustion(year, asset.id);
+                    else deleteRefrigeration(year, sys.id);
+                  }}
+                  aria-label={`Remove ${source.name}`}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-faint hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                >
+                  <X size={14} /> Remove
+                </button>
+
+                <button onClick={openEntry} aria-label={`Details for ${source.name}`} className="shrink-0">
+                  <ChevronRight size={16} className="text-ink-faint" />
+                </button>
               </div>
             );
           })}
@@ -250,23 +269,32 @@ export function SourceListScreen({
       {!showForm ? (
         <button
           onClick={handleOpenForm}
-          className="inline-flex items-center gap-2 text-sm font-semibold rounded-lg border border-brand-300 bg-brand-50 text-brand-700 px-4 py-2.5 hover:bg-brand-100 transition-colors w-fit"
+          className="group inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 text-brand-700 font-semibold text-sm px-4 py-2.5 hover:border-brand-400 hover:bg-brand-50 transition-colors w-fit"
         >
-          <Plus size={16} /> Add a source
+          <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
+            <Plus size={14} strokeWidth={2.5} />
+          </span>
+          Add a {isRefrigerant ? "system" : "source"}
         </button>
       ) : (
-        <div className="rounded-xl3 border border-brand-200 bg-surface shadow-card p-5 flex flex-col gap-4">
-          <h2 className="text-sm font-semibold text-ink">New source</h2>
-          <div className="flex flex-col gap-3">
+        <div className="rounded-xl3 border border-brand-200 bg-surface shadow-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-ink">New {isRefrigerant ? "system" : "source"}</h2>
+            <button onClick={() => setShowForm(false)} aria-label="Close" className="p-1 -mr-1 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-muted transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Source name */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-ink-soft">Source name</label>
+              <label className="text-[11px] font-semibold text-ink-soft">Name</label>
               <input
                 aria-label="Source name"
                 type="text"
                 value={sourceName}
                 onChange={(e) => setSourceName(e.target.value)}
-                placeholder="e.g. Diesel gensets"
+                placeholder={isRefrigerant ? "e.g. Rooftop chillers" : "e.g. Diesel gensets"}
                 className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
               />
             </div>
@@ -274,17 +302,15 @@ export function SourceListScreen({
             {/* Type control */}
             {!isRefrigerant ? (
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-ink-soft">Type</label>
-                <div className="inline-flex gap-1 rounded-full bg-surface-muted p-1 w-fit">
+                <label className="text-[11px] font-semibold text-ink-soft">Type</label>
+                <div className="inline-flex gap-1 rounded-lg bg-surface-muted p-0.5">
                   {(["stationary", "mobile"] as const).map((t) => (
                     <button
                       key={t}
                       onClick={() => handleFuelTypeChange(t)}
                       className={cn(
-                        "px-4 py-1.5 rounded-full text-sm font-semibold capitalize transition-colors",
-                        fuelType === t
-                          ? "bg-surface text-brand-700 shadow-card"
-                          : "text-ink-soft hover:text-ink"
+                        "flex-1 px-3 py-1.5 rounded-md text-sm font-semibold capitalize transition-colors",
+                        fuelType === t ? "bg-surface text-brand-700 shadow-card" : "text-ink-soft hover:text-ink"
                       )}
                     >
                       {t}
@@ -294,10 +320,10 @@ export function SourceListScreen({
               </div>
             ) : (
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-ink-soft">System type</label>
+                <label className="text-[11px] font-semibold text-ink-soft">System type</label>
                 <select
                   value={systemType}
-                  onChange={(e) => setSystemType(e.target.value as SystemType)}
+                  onChange={(e) => { setSystemType(e.target.value as SystemType); setEquipmentClass(""); }}
                   className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
                 >
                   <option value="commercialHVAC">Commercial HVAC</option>
@@ -307,10 +333,22 @@ export function SourceListScreen({
               </div>
             )}
 
+            {/* Equipment class (refrigerant only) */}
+            {isRefrigerant && (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="src-refrig-class" className="text-[11px] font-semibold text-ink-soft">Equipment class</label>
+                <select id="src-refrig-class" value={equipmentClass} onChange={(e) => setEquipmentClass(e.target.value as RefrigClassId | "")}
+                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400">
+                  <option value="">Unspecified</option>
+                  {refrigClassesFor(systemType).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+              </div>
+            )}
+
             {/* Fuel / Gas select */}
             {!isRefrigerant ? (
               <div className="flex flex-col gap-1">
-                <label htmlFor="src-fuel-select" className="text-xs font-medium text-ink-soft">Fuel</label>
+                <label htmlFor="src-fuel-select" className="text-[11px] font-semibold text-ink-soft">Fuel</label>
                 <select
                   id="src-fuel-select"
                   value={selectedFuel}
@@ -318,18 +356,14 @@ export function SourceListScreen({
                   className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
                 >
                   {currentFuels.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
+                    <option key={f.id} value={f.id}>{f.label}</option>
                   ))}
-                  {currentFuels.length === 0 && (
-                    <option value="" disabled>No fuels available</option>
-                  )}
+                  {currentFuels.length === 0 && <option value="" disabled>No fuels available</option>}
                 </select>
               </div>
             ) : (
               <div className="flex flex-col gap-1">
-                <label htmlFor="src-gas-select" className="text-xs font-medium text-ink-soft">Refrigerant gas</label>
+                <label htmlFor="src-gas-select" className="text-[11px] font-semibold text-ink-soft">Refrigerant gas</label>
                 <select
                   id="src-gas-select"
                   value={selectedGas}
@@ -337,17 +371,27 @@ export function SourceListScreen({
                   className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
                 >
                   {availableGases.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.label}
-                    </option>
+                    <option key={g.id} value={g.id}>{g.label}</option>
                   ))}
+                </select>
+              </div>
+            )}
+
+            {/* End-use */}
+            {!isRefrigerant && (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="src-enduse" className="text-[11px] font-semibold text-ink-soft">End-use</label>
+                <select id="src-enduse" value={endUse} onChange={(e) => setEndUse(e.target.value as EndUseId | "")}
+                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400">
+                  <option value="">Unspecified</option>
+                  {endUsesFor(fuelType).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
               </div>
             )}
 
             {/* Business unit */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-ink-soft">Business unit</label>
+              <label className="text-[11px] font-semibold text-ink-soft">Business unit</label>
               <select
                 value={selectedBu}
                 onChange={(e) => setSelectedBu(e.target.value)}
@@ -355,15 +399,13 @@ export function SourceListScreen({
               >
                 <option value="">Company-wide</option>
                 {buUnits.map((u) => (
-                  <option key={u.name} value={u.name}>
-                    {u.name}
-                  </option>
+                  <option key={u.name} value={u.name}>{u.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-2 justify-end mt-4">
             <button
               onClick={() => setShowForm(false)}
               className="px-4 py-2 text-sm font-medium text-ink-soft hover:text-ink rounded-lg border border-line bg-surface"
@@ -373,9 +415,9 @@ export function SourceListScreen({
             <button
               onClick={handleAdd}
               disabled={!sourceName.trim()}
-              className="px-4 py-2 text-sm font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Add
+              <Plus size={15} strokeWidth={2.5} /> Add
             </button>
           </div>
         </div>

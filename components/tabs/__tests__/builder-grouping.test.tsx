@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { BuilderTab } from "../BuilderTab";
+import { endUseProfile } from "@/lib/model/end-use";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -112,5 +113,77 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
     // There should be exactly one excluded badge (Mumbai only)
     const badges = screen.queryAllByText(/Excluded from totals/i);
     expect(badges.length).toBe(1);
+  });
+});
+
+// ── Electrify feasibility hint (data guard) ──────────────────────────────────
+
+describe("BuilderTab — electrify feasibility data", () => {
+  it("furnaceKiln is hard to electrify with a high-temp note", () => {
+    const p = endUseProfile({ endUse: "furnaceKiln" });
+    expect(p?.electrify.feasible).toBe("hard");
+    expect(p?.electrify.note).toMatch(/High-temp/i);
+  });
+});
+
+// ── Electrify feasibility warning renders outside the disabled wrapper ────────
+
+function seedFurnaceKilnAsset() {
+  const persisted = {
+    combustion: {
+      2025: [
+        {
+          id: "stationary-kiln",
+          name: "Kiln Furnace",
+          category: "stationary",
+          fuelType: "png",
+          unit: "m3",
+          annualVolume: 200000,
+          opex: 5000000,
+          remainingLife: 10,
+          unitCount: 1,
+          endUse: "furnaceKiln",
+        },
+      ],
+    },
+    refrigeration: {},
+    settings: {
+      assumptions: {
+        gridEf: 0.71,
+        renewableSourcingPct: 50,
+        recCostPerTonne: 800,
+        carbonPricePerTonne: 2000,
+        infraCapex: 15000000,
+      },
+      byAsset: {
+        "stationary-kiln": {
+          electrify: { enabled: false, unitsToConvert: 0, capacityPct: 0, cop: 1.0, tariffPerKwh: 9, assetCapex: 0, startYear: 2026, targetYear: 2032 },
+          fuelSwitch: { enabled: false, altFuel: "biogas", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 78, retrofitCapex: 0, startYear: 2027, targetYear: 2033 },
+        },
+      },
+      bySystem: {},
+    },
+    scenarios: [],
+    baseYear: 2025,
+  };
+  window.localStorage.setItem("osh-scope1-planner-v4", JSON.stringify(persisted));
+}
+
+describe("BuilderTab — electrify feasibility warning visible when lever is OFF", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("shows the feasibility warning even when the Electrify toggle is OFF", () => {
+    seedFurnaceKilnAsset();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    // Switch to Stationary segment (default is Mobile)
+    fireEvent.click(screen.getByText("Stationary"));
+    // The warning badge must be visible regardless of the toggle state
+    expect(screen.getByText(/electrification is limited/i)).toBeTruthy();
   });
 });

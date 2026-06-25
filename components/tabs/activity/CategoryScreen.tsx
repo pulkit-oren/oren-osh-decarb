@@ -1,9 +1,8 @@
 "use client";
 
 import { ArrowLeft, ChevronRight } from "lucide-react";
-import { CAT_DEFS, META, GRAD, CAT_ICON, ICON_COLOR, ELEC_TYPES, ScopeBadge, type Nav, type CatKey, type CatDef } from "./shared";
-import { fmt, cn } from "@/lib/utils";
-import { Zap } from "lucide-react";
+import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, CentralPill, type Nav, type CatDef } from "./shared";
+import { fmt } from "@/lib/utils";
 
 type Props = {
   nav: Nav & { level: "cat" };
@@ -19,7 +18,6 @@ type Props = {
 
 export function CategoryScreen({ nav, setNav, year, buReg, catTotal, buElecEmissions, elecBuExcluded, toggleElecCentral }: Props) {
   const def = CAT_DEFS.find((c) => c.key === nav.key)!;
-  const m = META[def.meta];
   const CatIcon = CAT_ICON[def.meta];
 
   return (
@@ -56,9 +54,7 @@ export function CategoryScreen({ nav, setNav, year, buReg, catTotal, buElecEmiss
               <span className="w-8 h-8 rounded-lg bg-surface-muted grid place-items-center text-ink-soft font-bold text-xs shrink-0">{u.name.charAt(0).toUpperCase()}</span>
               <button onClick={() => setNav({ level: "elecbu", bu: u.name })} className="min-w-0 flex-1 text-left font-medium text-ink truncate">{u.name}</button>
               <span className="w-20 text-right text-sm font-semibold tabular-nums shrink-0">{fmt(buElecEmissions(u.name))} t</span>
-              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => toggleElecCentral(u.name, u.aggregate)} aria-label={`Include ${u.name} in central total`} className={cn("text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-1 border", !ex ? "bg-brand-50 text-brand-700 border-brand-200" : "bg-surface-muted text-ink-faint border-line")}>{!ex ? "✓ central" : "central"}</button>
-              </div>
+              <CentralPill included={!ex} name={u.name} onClick={(e) => { e.stopPropagation(); toggleElecCentral(u.name, u.aggregate); }} />
               <button onClick={() => setNav({ level: "elecbu", bu: u.name })} aria-label={`${u.name} electricity`} className="shrink-0"><ChevronRight size={16} className="text-ink-faint" /></button>
             </div>
           );

@@ -9,6 +9,7 @@ import { outlivesAsset, retirementYear } from "@/lib/model/validate";
 import { useScenario } from "@/lib/store";
 import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM } from "@/lib/model/factors";
 import { applyAssetActions, defaultActions, defaultFlexFuel, defaultSystemActions, flexFuelCapable } from "@/lib/model/segments";
+import { endUseProfile } from "@/lib/model/end-use";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { CURRENCY } from "@/lib/defaults";
@@ -214,6 +215,8 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   const afterT = Math.max(0, baseT - totalAbate);
   const isMobile = asset.category === "mobile";
   const e = acts.electrify;
+  const eu = endUseProfile(asset);
+  const electrifyWarn = !!eu && (eu.electrify.feasible === "hard" || eu.electrify.feasible === "no");
   const eColor = FAMILY_COLORS[isMobile ? 5 : 6];
 
   return (
@@ -253,6 +256,11 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
         enabled={e.enabled}
         onToggle={() => updateAction(asset.id, "electrify", { enabled: !e.enabled })}
         className="lg:pr-7"
+        warning={electrifyWarn ? (
+          <p className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 text-[11px] font-medium">
+            ⚠ {eu!.electrify.note ?? "Limited electrification potential for this equipment."}
+          </p>
+        ) : undefined}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
           {isMobile ? (
@@ -425,10 +433,11 @@ function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
 }
 
 function ActionRow({
-  title, sub, icon: Icon, color, enabled, onToggle, children, className, disabled,
+  title, sub, icon: Icon, color, enabled, onToggle, children, className, disabled, warning,
 }: {
   title: string; sub: string; icon: React.ElementType; color: string;
   enabled: boolean; onToggle: () => void; children: ReactNode; className?: string; disabled?: boolean;
+  warning?: ReactNode;
 }) {
   return (
     <div className={cn("min-w-0", className)}>
@@ -444,6 +453,7 @@ function ActionRow({
           <span className={cn("absolute top-1 w-4 h-4 rounded-full bg-white shadow-card transition-all", enabled ? "left-6" : "left-1")} />
         </button>
       </div>
+      {warning && <div className="mb-2">{warning}</div>}
       <div className={cn(!disabled && !enabled && "opacity-40 pointer-events-none")}>{children}</div>
     </div>
   );

@@ -155,7 +155,7 @@ describe("ScopeScreen — Change 2: hide zero-raw-value rows", () => {
     // but ScopeScreen shows the fuel label (FUELS[a.fuelType].label) not asset.name,
     // so both would show as "Diesel". Instead check by looking for the raw column
     // which shows "10,000 L" vs "0 L". After filtering, "0 L" must not appear.
-    expect(await screen.findByText("Fuels – Liquid")).toBeTruthy();
+    expect((await screen.findAllByText("Fuels – Liquid")).length).toBeGreaterThan(0);
     // The non-zero row's raw input shows as "10,000 L" (fmt(10000) + " L")
     expect(screen.getAllByText(/10[,.]?000 L/i).length).toBeGreaterThan(0);
     // The zero row's raw input shows as "0 L" — must NOT appear
