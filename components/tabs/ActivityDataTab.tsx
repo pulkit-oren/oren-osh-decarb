@@ -20,6 +20,7 @@ import { ElectricityBuScreen } from "./activity/ElectricityBuScreen";
 import { SourceListScreen } from "./activity/SourceListScreen";
 import { EntryScreen } from "./activity/EntryScreen";
 import { ScopeScreen } from "./activity/ScopeScreen";
+import { BiogenicScreen } from "./activity/BiogenicScreen";
 
 export function ActivityDataTab() {
   const s1 = useScenario();
@@ -175,6 +176,10 @@ export function ActivityDataTab() {
 
   if (nav.level === "scope") {
     return <ScopeScreen scope={nav.scope} s1={s1} s2={s2} year={year} onBack={() => setNav({ level: "home" })} />;
+  }
+
+  if (nav.level === "biogenic") {
+    return <BiogenicScreen rows={biogenicRows} total={biogenicT} year={year} onBack={() => setNav({ level: "home" })} />;
   }
 
   // home

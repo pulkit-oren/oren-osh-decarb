@@ -1,16 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Download, FileSpreadsheet, Search, ChevronDown, Check } from "lucide-react";
+import { Bell, Search, ChevronDown, Check } from "lucide-react";
 import { CompanySwitcher } from "./CompanySwitcher";
 import { PERSONAS, type Persona } from "@/lib/persona";
 import { cn } from "@/lib/utils";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
-import { useCompany } from "@/lib/company/store";
-import { buildWorkbookSheets, trajectorySheet } from "@/lib/export";
-import { scope2TrajectorySheet } from "@/lib/scope2/export";
-import { downloadCsv, downloadWorkbook } from "@/lib/export-download";
 import { fyLabel } from "@/lib/model/types";
 import type { AnyTabKey, Scope } from "./Sidebar";
 
@@ -35,50 +31,12 @@ export function Topbar({ scope, tab, persona, setPersona }: {
   const t = TITLES[tab];
   const s1 = useScenario();
   const s2 = useScope2();
-  const { activeCompany } = useCompany();
-  const [busy, setBusy] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const activePersona = PERSONAS.find((p) => p.key === persona) ?? PERSONAS[0];
 
   const baseYear = scope === "s1" ? s1.baseYear : s2.baseYear;
-  const slug = activeCompany.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "company";
-
-  const onExport = async () => {
-    setExportError(null);
-    setBusy(true);
-    try {
-      const stamp = new Date().toISOString().slice(0, 10);
-      if (scope === "s1") {
-        const sheets = buildWorkbookSheets({
-          combustion: s1.combustion, refrigeration: s1.refrigeration, settings: s1.settings,
-          assets: s1.baseAssets, systems: s1.baseSystems, result: s1.result,
-        });
-        await downloadWorkbook(sheets, `${slug}-scope1-scenario-FY${s1.baseYear}-${stamp}.xlsx`);
-      } else {
-        const { buildScope2WorkbookSheets } = await import("@/lib/scope2/export");
-        const sheets = buildScope2WorkbookSheets({
-          facilities: s2.facilities, levers: s2.levers, result: s2.result,
-        });
-        await downloadWorkbook(sheets, `${slug}-scope2-scenario-FY${s2.baseYear}-${stamp}.xlsx`);
-      }
-    } catch (err) {
-      // Some failures (e.g. chunk-load errors) reject with an empty-message Error — fall back so the alert always renders
-      setExportError(err instanceof Error && err.message ? err.message : "the workbook could not be generated — please retry");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const onCsv = () => {
-    if (scope === "s1") {
-      downloadCsv(trajectorySheet(s1.result), `${slug}-scope1-trajectory-FY${s1.baseYear}.csv`);
-    } else {
-      downloadCsv(scope2TrajectorySheet(s2.result), `${slug}-scope2-trajectory-FY${s2.baseYear}.csv`);
-    }
-  };
 
   return (
-    <>
     <header className="flex items-center justify-between gap-4 flex-wrap">
       <div>
         <p className="text-xs uppercase tracking-wider text-brand-600 font-bold">{t.eyebrow}</p>
@@ -86,25 +44,6 @@ export function Topbar({ scope, tab, persona, setPersona }: {
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={busy}
-          title="Export the full scenario workbook (inputs, factors, scenario, trajectory, finance)"
-          className="rounded-full bg-gradient-to-r from-brand-500 to-brand-600 text-white px-3.5 py-2 text-sm font-medium flex items-center gap-2 hover:from-brand-600 hover:to-brand-700 transition-colors shadow-[0_6px_18px_rgba(31,158,90,0.3)] disabled:opacity-50"
-        >
-          <FileSpreadsheet size={15} /> {busy ? "Exporting…" : "Export"}
-        </button>
-        <button
-          type="button"
-          onClick={onCsv}
-          disabled={busy}
-          aria-label="Download trajectory CSV"
-          title="Download the year-by-year trajectory as CSV"
-          className="w-9 h-9 rounded-full bg-surface-muted border border-line/60 grid place-items-center text-ink-soft hover:bg-line/40 disabled:opacity-50"
-        >
-          <Download size={16} />
-        </button>
         <CompanySwitcher />
         <div className="rounded-full bg-surface-muted border border-line/60 px-3.5 py-2 text-sm flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">Base year</span>
@@ -163,11 +102,5 @@ export function Topbar({ scope, tab, persona, setPersona }: {
         </div>
       </div>
     </header>
-    {exportError && (
-      <p role="alert" className="mt-2 text-xs font-medium text-red-600 bg-red-50 rounded-lg px-3 py-2 inline-block">
-        Export failed: {exportError}
-      </p>
-    )}
-    </>
   );
 }

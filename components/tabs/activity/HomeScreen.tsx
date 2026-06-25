@@ -1,7 +1,7 @@
 "use client";
 
 import { Leaf, ChevronRight } from "lucide-react";
-import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, type Nav, type CatKey, type CatDef } from "./shared";
+import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, type Nav, type CatKey, type CatDef } from "./shared";
 import { fyLabel, type FY_YEARS } from "@/lib/model/types";
 import { fmt } from "@/lib/utils";
 
@@ -60,7 +60,6 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
                 <div className="min-w-0 flex-1">
                   <span className="block text-xl font-extrabold text-ink truncate">{def.label}</span>
                   <div className="mt-1.5 flex items-center gap-2">
-                    <ScopeBadge scope={def.scope} />
                     <span className="text-xs text-ink-soft">{n} source{n === 1 ? "" : "s"}</span>
                   </div>
                 </div>
@@ -73,13 +72,15 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
             );
           })}
           {biogenicRows.length > 0 && (
-            <div className="rounded-xl3 border border-dashed border-line/70 bg-surface-muted/40 px-5 py-3 shrink-0">
+            <button onClick={() => setNav({ level: "biogenic" })} className="group rounded-xl3 border border-dashed border-line/70 bg-surface-muted/40 px-5 py-2.5 shrink-0 text-left w-full hover:border-brand-300 hover:bg-surface-muted/70 transition-colors">
               <div className="flex items-center gap-2">
                 <Leaf size={16} className="text-brand-600 shrink-0" />
                 <span className="font-semibold text-ink text-sm">Outside of Scopes — Biogenic CO₂</span>
                 <span className="ml-auto text-base font-extrabold tabular-nums">{fmt(biogenicT)} <span className="text-xs font-normal text-ink-faint">t</span></span>
+                <ChevronRight size={16} className="text-ink-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all shrink-0" />
               </div>
-            </div>
+              <div className="mt-0.5 ml-6 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">View breakdown</div>
+            </button>
           )}
         </div>
 
@@ -90,15 +91,23 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
           <p className="relative mt-3 text-[44px] leading-none font-extrabold tabular-nums">{fmt(total)} <span className="text-lg font-semibold text-white/80">tCO₂e</span></p>
           <p className="relative mt-1 text-xs text-white/70">Scope 1 + Scope 2, this financial year</p>
           <div className="relative mt-6 flex flex-col gap-3">
-            <button onClick={() => setNav({ level: "scope", scope: 1 })} aria-label="Scope 1 details" className="rounded-2xl bg-white/12 backdrop-blur-sm px-4 py-3 text-left w-full cursor-pointer hover:bg-white/20 transition-colors">
-              <div className="flex items-center justify-between"><span className="text-sm font-bold">Scope 1</span><span className="text-xs text-white/75">{share(scope1T)}%</span></div>
+            <button onClick={() => setNav({ level: "scope", scope: 1 })} aria-label="Scope 1 details" className="group rounded-2xl bg-white/12 ring-1 ring-white/10 backdrop-blur-sm px-4 py-3 text-left w-full cursor-pointer hover:bg-white/20 hover:ring-white/40 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold inline-flex items-center gap-1">Scope 1 <ChevronRight size={14} className="text-white/70 group-hover:translate-x-0.5 transition-transform" /></span>
+                <span className="text-xs text-white/75">{share(scope1T)}%</span>
+              </div>
               <div className="text-2xl font-extrabold tabular-nums mt-0.5">{fmt(scope1T)} <span className="text-xs font-medium text-white/75">tCO₂e</span></div>
               <div className="mt-2 h-1.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-white transition-all duration-500" style={{ width: `${share(scope1T)}%` }} /></div>
+              <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/60">View breakdown</div>
             </button>
-            <button onClick={() => setNav({ level: "scope", scope: 2 })} aria-label="Scope 2 details" className="rounded-2xl bg-white/12 backdrop-blur-sm px-4 py-3 text-left w-full cursor-pointer hover:bg-white/20 transition-colors">
-              <div className="flex items-center justify-between"><span className="text-sm font-bold">Scope 2</span><span className="text-xs text-white/75">{share(scope2T)}%</span></div>
+            <button onClick={() => setNav({ level: "scope", scope: 2 })} aria-label="Scope 2 details" className="group rounded-2xl bg-white/12 ring-1 ring-white/10 backdrop-blur-sm px-4 py-3 text-left w-full cursor-pointer hover:bg-white/20 hover:ring-white/40 transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold inline-flex items-center gap-1">Scope 2 <ChevronRight size={14} className="text-white/70 group-hover:translate-x-0.5 transition-transform" /></span>
+                <span className="text-xs text-white/75">{share(scope2T)}%</span>
+              </div>
               <div className="text-2xl font-extrabold tabular-nums mt-0.5">{fmt(scope2T)} <span className="text-xs font-medium text-white/75">tCO₂e</span></div>
               <div className="mt-2 h-1.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full bg-white transition-all duration-500" style={{ width: `${share(scope2T)}%` }} /></div>
+              <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/60">View breakdown</div>
             </button>
           </div>
           <div className="relative mt-auto pt-5 border-t border-white/20 grid grid-cols-3 gap-2 text-center">

@@ -13,6 +13,7 @@ export type Nav =
   | { level: "home" }
   | { level: "bus" }
   | { level: "scope"; scope: 1 | 2 }
+  | { level: "biogenic" }
   | { level: "cat"; key: CatKey }
   | { level: "elecbu"; bu: string }
   | { level: "entry"; kind: "combustion" | "facility" | "refrigerant"; id: string };
