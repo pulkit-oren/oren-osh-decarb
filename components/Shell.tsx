@@ -34,8 +34,9 @@ function CompanyScopedShell() {
   const { activeId } = useCompany();
   const [scope, setScope] = useState<Scope>("s1");
   // Each scope remembers its own active tab across switches.
-  const [tabS1, setTabS1] = useState<TabKey>("builder");
-  const [tabS2, setTabS2] = useState<Scope2TabKey>("builder2");
+  // Default landing is the Activity Data screen for both scopes.
+  const [tabS1, setTabS1] = useState<TabKey>("data");
+  const [tabS2, setTabS2] = useState<Scope2TabKey>("data2");
 
   const [persona, setPersonaState] = useState<Persona>(DEFAULT_PERSONA);
 
