@@ -349,3 +349,56 @@ describe("BuilderTab — Energy Balance screen", () => {
     expect(screen.getByText(/Reduction 2030/i)).toBeTruthy();
   });
 });
+
+// ── End-use / vehicle-equipment-type selector on source scenario screen ─────────
+
+describe("BuilderTab — end-use selector on combustion source scenario screen", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("shows the 'Equipment / vehicle type' card when opening a combustion source's scenario screen", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    // Navigate: home → Mobile segment → Pune Fleet source
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // The DetailCard title must be visible
+    expect(screen.getByText(/Equipment \/ vehicle type/i)).toBeTruthy();
+  });
+
+  it("renders the Type select field on the combustion source scenario screen", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // The SelectField label must be visible
+    expect(screen.getByText(/^Type$/i)).toBeTruthy();
+  });
+
+  it("changing the end-use type does not crash and the SuggestionCard is still shown", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // Find the select element (the one inside the Equipment / vehicle type card)
+    const selects = screen.getAllByRole("combobox");
+    expect(selects.length).toBeGreaterThan(0);
+    // Change the value to "truck"
+    fireEvent.change(selects[0], { target: { value: "truck" } });
+    // SuggestionCard must still be shown
+    expect(screen.getByText(/Suggested for this source/i)).toBeTruthy();
+  });
+});

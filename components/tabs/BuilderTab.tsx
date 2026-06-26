@@ -10,7 +10,7 @@ import { outlivesAsset, retirementYear } from "@/lib/model/validate";
 import { useScenario } from "@/lib/store";
 import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM } from "@/lib/model/factors";
 import { applyAssetActions, defaultActions, defaultFlexFuel, defaultSystemActions, flexFuelCapable } from "@/lib/model/segments";
-import { endUseProfile } from "@/lib/model/end-use";
+import { endUseProfile, endUsesFor, type EndUseId } from "@/lib/model/end-use";
 import { refrigClassProfile } from "@/lib/model/refrigerant-class";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
@@ -356,7 +356,7 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
 }
 
 function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: string; onBack: () => void }) {
-  const { baseAssets, baseSystems } = useScenario();
+  const { baseAssets, baseSystems, updateCombustion, baseYear } = useScenario();
   const label = SEG_META[seg].label;
   const back = (
     <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
@@ -382,6 +382,15 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
   return (
     <div className="screen-in flex flex-col gap-5">
       {back}
+      <DetailCard title="Equipment / vehicle type">
+        <SelectField
+          label="Type"
+          value={(a.endUse ?? "") as EndUseId | ""}
+          options={[{ value: "" as EndUseId | "", label: "Unspecified" }, ...endUsesFor(a.category).map((p) => ({ value: p.id as EndUseId | "", label: p.label }))]}
+          onChange={(v) => updateCombustion(baseYear, a.id, { endUse: (v || undefined) as EndUseId | undefined })}
+          hint="Changing the type updates the suggestion and the lever defaults below — click Apply suggestion to adopt the new type's numbers. It does not change your baseline or any lever you've already set."
+        />
+      </DetailCard>
       <SuggestionCard kind="asset" id={a.id} />
       <SourceImpact kind="asset" id={a.id} />
       <AssetActionCard asset={a} />
