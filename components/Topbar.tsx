@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Search, ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check } from "lucide-react";
 import { CompanySwitcher } from "./CompanySwitcher";
 import { PERSONAS, type Persona } from "@/lib/persona";
 import { cn } from "@/lib/utils";
@@ -44,12 +44,6 @@ export function Topbar({ scope, tab, persona, setPersona }: {
           <span className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">Base year</span>
           <span className="font-semibold tabular-nums">{fyLabel(baseYear)}</span>
         </div>
-        <button className="w-9 h-9 rounded-full bg-surface-muted border border-line/60 grid place-items-center text-ink-soft hover:bg-line/40" aria-label="Search">
-          <Search size={16} />
-        </button>
-        <button className="w-9 h-9 rounded-full bg-surface-muted border border-line/60 grid place-items-center text-ink-soft hover:bg-line/40" aria-label="Notifications">
-          <Bell size={16} />
-        </button>
         <div className="relative">
           <button
             type="button"
