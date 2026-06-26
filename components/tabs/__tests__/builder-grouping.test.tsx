@@ -76,6 +76,26 @@ function seedMobileAssets() {
   window.localStorage.setItem("osh-scope1-planner-v4", JSON.stringify(persisted));
 }
 
+describe("BuilderTab — home screen (Task 1)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("shows all three segment labels and the Live projection panel on the home screen", () => {
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    // All three segment card labels must be visible on the home
+    expect(screen.getByText("Mobile")).toBeTruthy();
+    expect(screen.getByText("Stationary")).toBeTruthy();
+    expect(screen.getByText("Refrigerant")).toBeTruthy();
+    // The results side-panel header must also be visible
+    expect(screen.getByText("Live projection")).toBeTruthy();
+  });
+});
+
 describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -88,7 +108,9 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
         <BuilderTab />
       </Wrapper>,
     );
-    // BuilderTab defaults to Mobile segment — both BU groups must appear
+    // Navigate from home into Mobile segment
+    fireEvent.click(screen.getByText("Mobile"));
+    // Both BU groups must appear
     expect(screen.getByText("Pune")).toBeTruthy();
     expect(screen.getByText("Mumbai")).toBeTruthy();
   });
@@ -100,6 +122,8 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
         <BuilderTab />
       </Wrapper>,
     );
+    // Navigate from home into Mobile segment
+    fireEvent.click(screen.getByText("Mobile"));
     expect(screen.getByText(/Excluded from totals/i)).toBeTruthy();
   });
 
@@ -110,6 +134,8 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
         <BuilderTab />
       </Wrapper>,
     );
+    // Navigate from home into Mobile segment
+    fireEvent.click(screen.getByText("Mobile"));
     // There should be exactly one excluded badge (Mumbai only)
     const badges = screen.queryAllByText(/Excluded from totals/i);
     expect(badges.length).toBe(1);
@@ -181,7 +207,7 @@ describe("BuilderTab — electrify feasibility warning visible when lever is OFF
         <BuilderTab />
       </Wrapper>,
     );
-    // Switch to Stationary segment (default is Mobile)
+    // Navigate from home into the Stationary segment
     fireEvent.click(screen.getByText("Stationary"));
     // The warning badge must be visible regardless of the toggle state
     expect(screen.getByText(/electrification is limited/i)).toBeTruthy();

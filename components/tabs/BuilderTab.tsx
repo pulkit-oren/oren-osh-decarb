@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Sparkles, Factory, Truck, Snowflake, RotateCcw, ChevronDown, Save, Trash2, Upload,
-  Zap, Fuel, Plus, Minus, SlidersHorizontal, AlertTriangle, Wrench, Info,
+  Factory, Truck, Snowflake, RotateCcw, ChevronDown, Save, Trash2,
+  Zap, Fuel, AlertTriangle, Wrench, Info,
 } from "lucide-react";
 import { outlivesAsset, retirementYear } from "@/lib/model/validate";
 import { useScenario } from "@/lib/store";
@@ -15,11 +15,10 @@ import { applyRefrigerant } from "@/lib/model/levers";
 import { CURRENCY } from "@/lib/defaults";
 import type { CombustionAsset, FlexFuelAction, FuelSwitchAction, RefrigerantEra, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
 import { cn, fmt, fmtK, fmtMoney, fmtNum, pct } from "@/lib/utils";
-import { Card, CardHeader } from "../ui/Card";
-import { Slider } from "../ui/Slider";
 import { InfoTip } from "../ui/InfoTip";
 import { DeltaPill } from "../ui/DeltaPill";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
+import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, SelectField } from "@/components/tabs/activity/fields";
 import { groupByBu } from "@/lib/group-by-bu";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
@@ -42,137 +41,175 @@ const ERA_BADGE: Record<RefrigerantEra, { label: string; cls: string }> = {
   future: { label: "future", cls: "bg-brand-50 text-brand-700" },
 };
 
+type SegStats = { count: number; active: number; abated: number };
+
+function segStats(
+  seg: Seg,
+  baseAssets: CombustionAsset[],
+  baseSystems: RefrigerationSystem[],
+  settings: ReturnType<typeof useScenario>["settings"],
+): SegStats {
+  if (seg === "refrigerant") {
+    let active = 0, abated = 0;
+    for (const s of baseSystems) {
+      const acts = settings.bySystem[s.id];
+      if (!acts) continue;
+      if (acts.gasSwitch.enabled || acts.leakFix.enabled) active++;
+      const after = applyRefrigerant(s, {
+        transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0,
+        altRefrigerant: acts.gasSwitch.altRefrigerant,
+        leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
+      });
+      abated += Math.max(0, refrigerantCO2e(s) - Math.max(0, after.newFugitiveT));
+    }
+    return { count: baseSystems.length, active, abated };
+  }
+  const assets = baseAssets.filter((a) => a.category === seg);
+  let active = 0, abated = 0;
+  for (const a of assets) {
+    const acts = settings.byAsset[a.id];
+    if (!acts) continue;
+    if (acts.electrify.enabled || acts.fuelSwitch.enabled || acts.flexFuel?.enabled) active++;
+    const res = applyAssetActions(a, acts, settings.assumptions);
+    abated += res.scope1AbatementT + res.fuelAbatementT;
+  }
+  return { count: assets.length, active, abated };
+}
+
 export function BuilderTab() {
-  const { settings, resetSettings, baseAssets, baseSystems, baseYear, scenarios, saveScenario, deleteScenario, setSettings } = useScenario();
-  const [seg, setSeg] = useState<Seg>("mobile");
+  const [view, setView] = useState<"home" | Seg>("home");
   const [name, setName] = useState("");
 
-  const segAssets = baseAssets.filter((a) => a.category === seg);
+  if (view === "home") {
+    return <ModellerHome onOpen={setView} name={name} setName={setName} />;
+  }
+  return <SegmentScreen seg={view} onBack={() => setView("home")} />;
+}
 
-  // active-lever count per segment for the navigator chips
-  const activeCount = (s: Seg): number => {
-    if (s === "refrigerant")
-      return baseSystems.filter((x) => {
-        const a = settings.bySystem[x.id];
-        return a && (a.gasSwitch.enabled || a.leakFix.enabled);
-      }).length;
-    return baseAssets.filter((a) => a.category === s).filter((a) => {
-      const acts = settings.byAsset[a.id];
-      return acts && (acts.electrify.enabled || acts.fuelSwitch.enabled);
-    }).length;
-  };
-
+function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; name: string; setName: (v: string) => void }) {
+  const { baseAssets, baseSystems, settings, result, scenarios, saveScenario, deleteScenario, setSettings, resetSettings, baseYear } = useScenario();
+  const k = result.kpis;
+  const segs = Object.keys(SEG_META) as Seg[];
   return (
-    <div className="flex flex-col gap-6">
-      {/* hero + segment navigator */}
-      <div className="rounded-xl2 bg-gradient-to-br from-brand-600 via-brand-500 to-brand-400 text-white p-6 md:p-7 shadow-card-lg relative overflow-hidden">
-        <div className="absolute -right-10 -top-10 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative z-10 max-w-2xl">
-          <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur rounded-full px-3 py-1 text-xs font-medium">
-            <Sparkles size={12} /> Model a scenario
-          </div>
-          <h2 className="mt-3 text-2xl md:text-3xl font-extrabold tracking-tight leading-tight">
-            Plan each asset. Save the scenario.
-          </h2>
-          <p className="mt-2 text-white/80 text-sm md:text-base">
-            Stationary and mobile decarbonize differently — plan them per asset (convert N of M
-            vehicles, or electrify a boiler by %). Hover the ⓘ on any field for what it does. Save,
-            then open the <strong>Action plan</strong> to see the pathway.
-          </p>
-        </div>
-        <div className="relative z-10 mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {(Object.keys(SEG_META) as Seg[]).map((key) => {
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-10rem)]">
+      <div className="rounded-xl3 border border-line/50 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60 px-5 py-4 shrink-0">
+        <h1 className="text-xl font-extrabold text-ink">Scenario modeller</h1>
+        <p className="text-sm text-ink-soft">Pick a segment to plan its levers — the live result updates on the right.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr] gap-5 items-stretch lg:flex-1 lg:min-h-0">
+        <div className="flex flex-col gap-3 min-h-0">
+          {segs.map((key) => {
             const m = SEG_META[key];
-            const active = key === seg;
             const Icon = m.icon;
+            const st = segStats(key, baseAssets, baseSystems, settings);
+            const color = FAMILY_COLORS[m.colorIdx];
             return (
               <button
                 key={key}
-                onClick={() => setSeg(key)}
-                className={cn(
-                  "text-left rounded-xl p-3 transition-all border",
-                  active ? "bg-white text-ink shadow-card-lg border-white" : "bg-white/10 backdrop-blur text-white border-white/20 hover:bg-white/20",
-                )}
+                onClick={() => onOpen(key)}
+                className="group flex items-center gap-4 rounded-xl3 border border-line/60 bg-surface shadow-card px-5 text-left flex-1 min-h-[84px] transition-all duration-200 hover:-translate-y-1 hover:shadow-card-lg"
               >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className={cn("w-7 h-7 rounded-lg grid place-items-center", active ? "bg-brand-50 text-brand-700" : "bg-white/15")}>
-                    <Icon size={14} />
-                  </div>
-                  {activeCount(key) > 0 && (
-                    <span className={cn("text-[10px] font-bold rounded-full px-1.5 py-0.5", active ? "bg-brand-100 text-brand-700" : "bg-white/20 text-white")}>
-                      {activeCount(key)} active
-                    </span>
-                  )}
+                <span className="w-12 h-12 rounded-2xl grid place-items-center shrink-0" style={{ background: `${color}1A` }}>
+                  <Icon size={24} style={{ color }} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-xl font-extrabold text-ink truncate">{m.label}</span>
+                  <span className="text-xs text-ink-soft">{st.count} asset{st.count === 1 ? "" : "s"} · {st.active} with a plan</span>
                 </div>
-                <div className="font-bold text-sm leading-tight">{m.label}</div>
-                <div className={cn("text-[11px]", active ? "text-ink-faint" : "text-white/70")}>{m.sub}</div>
+                <div className="text-right shrink-0 mr-1">
+                  <div className="text-[9px] uppercase tracking-wide text-ink-soft font-bold">Abatement</div>
+                  <div className="text-base font-extrabold tabular-nums text-brand-600">−{fmt(st.abated)}<span className="text-[10px] text-ink-soft"> t</span></div>
+                </div>
+                <ChevronDown size={20} className="-rotate-90 text-ink-soft/70 group-hover:text-ink group-hover:-translate-x-0 transition-all shrink-0" />
               </button>
             );
           })}
+        </div>
+
+        <aside className="relative overflow-hidden rounded-xl3 bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 text-white shadow-card-lg p-6 flex flex-col">
+          <p className="relative text-[11px] uppercase tracking-wide font-bold text-white/80">Live projection</p>
+          <p className="relative mt-3 text-[40px] leading-none font-extrabold tabular-nums">{pct(k.reduction2030)}</p>
+          <p className="relative mt-1 text-xs text-white/70">reduction by 2030</p>
+          <div className="relative mt-5 grid grid-cols-2 gap-3">
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Net 2030</p><p className="text-xl font-extrabold tabular-nums">{fmtK(k.net2030)} t</p></div>
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Cost / t</p><p className="text-xl font-extrabold tabular-nums">{CURRENCY}{fmt(k.costPerTonne)}</p></div>
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Years to target</p><p className="text-xl font-extrabold tabular-nums">{k.yearsToTarget ? String(k.yearsToTarget) : "—"}</p></div>
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Status</p><p className="text-xl font-extrabold">{k.onTrack2030 ? "On track" : "Behind"}</p></div>
+          </div>
+
+          <div className="relative mt-auto pt-5 border-t border-white/20">
+            <div className="flex items-center gap-2">
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name this scenario…" className="flex-1 min-w-0 text-sm rounded-lg px-3 py-2 text-ink bg-white/95 focus:outline-none" />
+              <button onClick={() => { if (name.trim()) { saveScenario(name.trim()); setName(""); } }} disabled={!name.trim()} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-white text-brand-700 px-3 py-2 hover:bg-white/90 disabled:opacity-50">
+                <Save size={15} /> Save
+              </button>
+            </div>
+            {scenarios.length > 0 && (
+              <div className="mt-3 space-y-1.5 max-h-28 overflow-y-auto">
+                {scenarios.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2 rounded-lg bg-white/12 px-2.5 py-1.5 text-sm">
+                    <span className="flex-1 truncate">{s.name}</span>
+                    <button onClick={() => setSettings(() => s.settings)} className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-white/20 hover:bg-white/30" title="Load">Load</button>
+                    <button onClick={() => deleteScenario(s.id)} aria-label="Delete scenario" className="text-white/70 hover:text-white"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={resetSettings} className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/80 hover:text-white">
+              <RotateCcw size={12} /> Reset all to default
+            </button>
+            <p className="mt-2 text-[10px] text-white/60">Base year FY {baseYear}-{String((baseYear + 1) % 100).padStart(2, "0")} · full pathway in Action plan.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function SegmentScreen({ seg, onBack }: { seg: Seg; onBack: () => void }) {
+  const { baseAssets, baseSystems, settings } = useScenario();
+  const m = SEG_META[seg];
+  const Icon = m.icon;
+  const color = FAMILY_COLORS[m.colorIdx];
+  const st = segStats(seg, baseAssets, baseSystems, settings);
+  const segAssets = baseAssets.filter((a) => a.category === seg);
+
+  return (
+    <div className="screen-in flex flex-col gap-5">
+      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
+        <ChevronDown size={16} className="rotate-90" /> All segments
+      </button>
+
+      <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 flex items-center gap-4" style={{ background: `linear-gradient(135deg, ${color}22, ${color}0D)` }}>
+        <span className="w-14 h-14 rounded-2xl bg-white/55 backdrop-blur-sm grid place-items-center shrink-0"><Icon size={28} style={{ color }} /></span>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-extrabold text-ink leading-tight">{m.label}</h1>
+          <p className="text-sm font-medium text-ink-soft mt-0.5">{m.sub} · {st.count} asset{st.count === 1 ? "" : "s"} · {st.active} with a plan</p>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-[10px] uppercase tracking-wide text-ink-soft font-bold">Abatement</div>
+          <div className="text-3xl font-extrabold tabular-nums text-brand-600 leading-none mt-1">−{fmt(st.abated)} <span className="text-base font-semibold text-ink-soft">t</span></div>
         </div>
       </div>
 
       <LiveResult />
 
-      {/* segment body */}
       {seg === "refrigerant" ? (
         <RefrigerantControls />
+      ) : segAssets.length === 0 ? (
+        <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6"><p className="text-sm text-ink-faint">No {m.label.toLowerCase()} assets yet — add them in Data input.</p></div>
       ) : (
-        <>
-          {segAssets.length === 0 ? (
-            <Card><p className="text-sm text-ink-faint">No {SEG_META[seg].label.toLowerCase()} assets yet — add them in Data input.</p></Card>
-          ) : (
-            groupByBu(segAssets).map(([bu, assets]) => (
-              <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
-                <div className="flex flex-col gap-4">
-                  {assets.map((a) => <AssetActionCard key={a.id} asset={a} />)}
-                </div>
-              </Collapsible>
-            ))
-          )}
-        </>
+        groupByBu(segAssets).map(([bu, assets]) => (
+          <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
+            <div className="flex flex-col gap-4">
+              {assets.map((a) => <AssetActionCard key={a.id} asset={a} />)}
+            </div>
+          </Collapsible>
+        ))
       )}
 
       <AssumptionsCard seg={seg} />
-
-      <div className="flex justify-end">
-        <button onClick={resetSettings} className="inline-flex items-center gap-2 text-sm text-ink-soft hover:text-ink rounded-lg border border-line px-3 py-1.5 hover:bg-surface-muted transition-colors">
-          <RotateCcw size={14} /> Reset all to default
-        </button>
-      </div>
-
-      {/* save & manage */}
-      <Card>
-        <CardHeader title="Save this scenario" subtitle="Snapshot the whole plan (all assets + refrigerant + assumptions). Saved scenarios appear in the Action plan and Compare tabs." />
-        <div className="flex items-center gap-2 flex-wrap">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name it — e.g. Board case, fleet-first…" className="flex-1 min-w-[220px] text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-brand-400" />
-          <button onClick={() => { if (name.trim()) { saveScenario(name.trim()); setName(""); } }} disabled={!name.trim()} className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-brand-500 text-white px-4 py-2 hover:bg-brand-600 transition-colors disabled:opacity-40">
-            <Save size={15} /> Save scenario
-          </button>
-        </div>
-        {scenarios.length > 0 && (
-          <div className="mt-4 space-y-2">
-            <div className="text-xs uppercase tracking-wide text-ink-faint font-bold">Saved scenarios</div>
-            {scenarios.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 rounded-lg border border-line/70 px-3 py-2">
-                <span className="font-medium text-ink flex-1 truncate">{s.name}</span>
-                {s.savedAt > 0 && (
-                  <span className="text-[11px] text-ink-faint tabular-nums shrink-0">
-                    {new Date(s.savedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                  </span>
-                )}
-                <button onClick={() => setSettings(() => s.settings)} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 rounded-md px-2 py-1 hover:bg-brand-50" title="Load these settings into the live model">
-                  <Upload size={13} /> Load
-                </button>
-                <button onClick={() => deleteScenario(s.id)} className="text-ink-faint hover:text-red-500 p-1" aria-label="Delete scenario">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-      <p className="text-[11px] text-ink-faint">Base year for this scenario: FY {baseYear}-{String((baseYear + 1) % 100).padStart(2, "0")} (change it in Data input).</p>
     </div>
   );
 }
@@ -187,7 +224,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
 
   if (!acts) {
     return (
-      <Card className={cn(asset.excluded && "opacity-60")}>
+      <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", asset.excluded && "opacity-60")}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-ink">{asset.name}</h3>
@@ -205,7 +242,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
             Add plan
           </button>
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -220,7 +257,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   const eColor = FAMILY_COLORS[isMobile ? 5 : 6];
 
   return (
-    <Card className={cn(asset.excluded && "opacity-60")}>
+    <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", asset.excluded && "opacity-60")}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${eColor}1A` }}>
@@ -264,29 +301,30 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
           {isMobile ? (
-            <CountField
+            <Stepper
               label="Vehicles to convert"
-              tip="How many of this fleet's vehicles become EVs. Higher = bigger Scope 1 cut, more electricity to source."
+              hint="How many of this fleet's vehicles become EVs. Higher = bigger Scope 1 cut, more electricity to source."
               value={e.unitsToConvert}
               max={asset.unitCount}
               onChange={(v) => updateAction(asset.id, "electrify", { unitsToConvert: v })}
-              suffix={`of ${asset.unitCount}`}
             />
           ) : (
-            <Slider label="Electrify capacity" value={e.capacityPct} color={eColor} onChange={(v) => updateAction(asset.id, "electrify", { capacityPct: v })} hint="Share of this asset's thermal/process demand moved to electric (heat pump or electric boiler)." />
+            <SliderField label="Electrify capacity" value={e.capacityPct} min={0} max={100} suffix="%" accent={eColor} onChange={(v) => updateAction(asset.id, "electrify", { capacityPct: v })} hint="Share of this asset's thermal/process demand moved to electric (heat pump or electric boiler)." />
           )}
-          <YearField label="Target year" tip="The year this conversion is fully in place. It ramps from the start year to here." value={e.targetYear} min={2021} max={2050} onChange={(v) => updateAction(asset.id, "electrify", { targetYear: v })} />
+          <NumField label="Target year" value={e.targetYear} hint="The year this conversion is fully in place. It ramps from the start year to here." min={2021} onChange={(v) => updateAction(asset.id, "electrify", { targetYear: Math.max(2021, Math.min(2050, v)) })} />
         </div>
-        <AdvancedDrawer>
-          <NumberField
-            label={isMobile ? "EV efficiency (× ICE)" : "Heat-pump COP"}
-            tip={isMobile ? "How many times more efficient an EV is than the engine it replaces. ~3 means it needs a third of the energy." : "Coefficient of performance: 1 = electric boiler, 3–4 = heat pump. Higher = far less electricity needed."}
-            value={e.cop} step={0.1} onChange={(v) => updateAction(asset.id, "electrify", { cop: v })}
-          />
-          <NumberField label="Electricity tariff" tip="What you pay for power. Sets the new running cost." value={e.tariffPerKwh} step={0.5} suffix={`${CURRENCY}/kWh`} onChange={(v) => updateAction(asset.id, "electrify", { tariffPerKwh: v })} />
-          <NumberField label={isMobile ? "CAPEX per vehicle" : "Asset CAPEX"} tip="Up-front cost of the electric kit (per vehicle for fleets)." value={e.assetCapex} step={500_000} suffix={CURRENCY} onChange={(v) => updateAction(asset.id, "electrify", { assetCapex: v })} />
-          <NumberField label="Start year" tip="The year the conversion begins." value={e.startYear} step={1} onChange={(v) => updateAction(asset.id, "electrify", { startYear: v })} />
-        </AdvancedDrawer>
+        <Collapsible title="Advanced">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <NumField
+              label={isMobile ? "EV efficiency (× ICE)" : "Heat-pump COP"}
+              hint={isMobile ? "How many times more efficient an EV is than the engine it replaces. ~3 means it needs a third of the energy." : "Coefficient of performance: 1 = electric boiler, 3–4 = heat pump. Higher = far less electricity needed."}
+              value={e.cop} step={0.1} onChange={(v) => updateAction(asset.id, "electrify", { cop: v })}
+            />
+            <NumField label="Electricity tariff" hint="What you pay for power. Sets the new running cost." value={e.tariffPerKwh} step={0.5} suffix={`${CURRENCY}/kWh`} onChange={(v) => updateAction(asset.id, "electrify", { tariffPerKwh: v })} />
+            <NumField label={isMobile ? "CAPEX per vehicle" : "Asset CAPEX"} hint="Up-front cost of the electric kit (per vehicle for fleets)." value={e.assetCapex} step={500_000} suffix={CURRENCY} onChange={(v) => updateAction(asset.id, "electrify", { assetCapex: v })} />
+            <NumField label="Start year" hint="The year the conversion begins." value={e.startYear} step={1} min={2021} onChange={(v) => updateAction(asset.id, "electrify", { startYear: Math.max(2021, Math.min(2050, v)) })} />
+          </div>
+        </Collapsible>
         {e.enabled && outlivesAsset(asset, baseYear, e.targetYear) && (
           <LifespanWarning asset={asset} baseYear={baseYear} />
         )}
@@ -295,7 +333,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
       <FuelSwitchControls asset={asset} />
       </div>
       {flexFuelCapable(asset) && <FlexFuelControls asset={asset} />}
-    </Card>
+    </div>
   );
 }
 
@@ -350,20 +388,15 @@ function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
       className={rowClass}
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
-        <Slider label="Blend percentage" value={Math.min(f.blendPct, maxBlend)} max={maxBlend} color={FAMILY_COLORS[2]} onChange={(v) => updateAction(asset.id, "fuelSwitch", { blendPct: Math.min(maxBlend, v) })} hint={`Share of this asset's fuel energy replaced with ${ALT_FUELS[effectiveAlt].label}. Capped at ${maxBlend}% for existing equipment.`} />
-        <YearField label="Target year" tip="The year the blend is fully in place. It ramps from the start year to here." value={f.targetYear} min={2021} max={2050} onChange={(v) => updateAction(asset.id, "fuelSwitch", { targetYear: v })} />
+        <SliderField label="Blend percentage" value={Math.min(f.blendPct, maxBlend)} min={0} max={maxBlend} suffix="%" accent={FAMILY_COLORS[2]} onChange={(v) => updateAction(asset.id, "fuelSwitch", { blendPct: Math.min(maxBlend, v) })} hint={`Share of this asset's fuel energy replaced with ${ALT_FUELS[effectiveAlt].label}. Capped at ${maxBlend}% for existing equipment.`} />
+        <NumField label="Target year" hint="The year the blend is fully in place. It ramps from the start year to here." value={f.targetYear} min={2021} onChange={(v) => updateAction(asset.id, "fuelSwitch", { targetYear: Math.max(2021, Math.min(2050, v)) })} />
         <div className="md:col-span-2">
-          <span className="text-sm font-medium text-ink flex items-center gap-1.5">Alternative fuel <InfoTip text="Matched to this asset's engine/burner — only compatible drop-in fuels are shown (ethanol for petrol, biodiesel for diesel, bio-CNG for CNG, biomethane for PNG)." /></span>
-          <div className="flex gap-2 mt-2">
-            {compatible.map((id) => {
-              const active = effectiveAlt === id;
-              return (
-                <button key={id} onClick={() => updateAction(asset.id, "fuelSwitch", { altFuel: id, blendPct: Math.min(maxBlendPctFor(asset.category, id), f.blendPct) })} className={cn("flex-1 rounded-lg border px-2 py-2 text-sm font-medium transition-colors", active ? "bg-brand-500 text-white border-brand-500" : "border-line hover:border-brand-300")}>
-                  {ALT_FUELS[id].label}
-                </button>
-              );
-            })}
-          </div>
+          <span className="text-xs font-semibold text-ink-soft flex items-center gap-1.5 mb-1.5">Alternative fuel <InfoTip text="Matched to this asset's engine/burner — only compatible drop-in fuels are shown (ethanol for petrol, biodiesel for diesel, bio-CNG for CNG, biomethane for PNG)." /></span>
+          <Segmented
+            value={effectiveAlt}
+            options={compatible.map((id) => ({ value: id, label: ALT_FUELS[id].label }))}
+            onChange={(id) => updateAction(asset.id, "fuelSwitch", { altFuel: id, blendPct: Math.min(maxBlendPctFor(asset.category, id), f.blendPct) })}
+          />
           {blendNote && (
             <p className="text-[11px] text-ink-soft mt-2 flex items-start gap-1.5 bg-surface-muted rounded-lg px-2.5 py-1.5">
               <Info size={12} className="text-ink-faint shrink-0 mt-0.5" /> {blendNote}
@@ -371,12 +404,14 @@ function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
           )}
         </div>
       </div>
-      <AdvancedDrawer>
-        <NumberField label="Efficiency penalty" tip="Bio-fuels carry less energy, so a bit more is burned. Adds the extra volume." value={f.efficiencyPenaltyPct} step={0.5} suffix="%" onChange={(v) => updateAction(asset.id, "fuelSwitch", { efficiencyPenaltyPct: v })} />
-        <NumberField label="Alt-fuel price" tip="Cost per unit of the bio-fuel. Sets the new fuel bill." value={f.altFuelPricePerUnit} step={1} suffix={`${CURRENCY}/unit`} onChange={(v) => updateAction(asset.id, "fuelSwitch", { altFuelPricePerUnit: v })} />
-        <NumberField label="Retrofit CAPEX" tip="One-off cost to make this asset run the new fuel." value={f.retrofitCapex} step={500_000} suffix={CURRENCY} onChange={(v) => updateAction(asset.id, "fuelSwitch", { retrofitCapex: v })} />
-        <NumberField label="Start year" tip="The year the blend begins." value={f.startYear} step={1} onChange={(v) => updateAction(asset.id, "fuelSwitch", { startYear: v })} />
-      </AdvancedDrawer>
+      <Collapsible title="Advanced">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <NumField label="Efficiency penalty" hint="Bio-fuels carry less energy, so a bit more is burned. Adds the extra volume." value={f.efficiencyPenaltyPct} step={0.5} suffix="%" onChange={(v) => updateAction(asset.id, "fuelSwitch", { efficiencyPenaltyPct: v })} />
+          <NumField label="Alt-fuel price" hint="Cost per unit of the bio-fuel. Sets the new fuel bill." value={f.altFuelPricePerUnit} step={1} suffix={`${CURRENCY}/unit`} onChange={(v) => updateAction(asset.id, "fuelSwitch", { altFuelPricePerUnit: v })} />
+          <NumField label="Retrofit CAPEX" hint="One-off cost to make this asset run the new fuel." value={f.retrofitCapex} step={500_000} suffix={CURRENCY} onChange={(v) => updateAction(asset.id, "fuelSwitch", { retrofitCapex: v })} />
+          <NumField label="Start year" hint="The year the blend begins." value={f.startYear} step={1} min={2021} onChange={(v) => updateAction(asset.id, "fuelSwitch", { startYear: Math.max(2021, Math.min(2050, v)) })} />
+        </div>
+      </Collapsible>
       {f.enabled && outlivesAsset(asset, baseYear, f.targetYear) && (
         <LifespanWarning asset={asset} baseYear={baseYear} />
       )}
@@ -406,21 +441,22 @@ function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
         onToggle={() => set({ enabled: !flex.enabled })}
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 items-end">
-          <CountField
+          <Stepper
             label="Vehicles to convert"
-            tip="Vehicles physically replaced with flex-fuel models that run high ethanol/biodiesel blends. Beyond E20/B20 you can't just blend — these are new vehicles, so they're counted one by one."
+            hint="Vehicles physically replaced with flex-fuel models that run high ethanol/biodiesel blends. Beyond E20/B20 you can't just blend — these are new vehicles, so they're counted one by one."
             value={flex.unitsToConvert}
             max={asset.unitCount}
             onChange={(v) => set({ unitsToConvert: v })}
-            suffix={`of ${asset.unitCount}`}
           />
-          <Slider label="High blend" value={flex.highBlendPct} min={25} max={100} suffix="%" color={FAMILY_COLORS[3]} onChange={(v) => set({ highBlendPct: v })} hint={`The blend the flex vehicles run — e.g. 85 = E85. Only flex-fuel vehicles can run blends this high.`} />
-          <YearField label="Target year" tip="The year all the conversions are in place. It ramps from the start year to here." value={flex.targetYear} min={2021} max={2050} onChange={(v) => set({ targetYear: v })} />
+          <SliderField label="High blend" value={flex.highBlendPct} min={25} max={100} suffix="%" accent={FAMILY_COLORS[3]} onChange={(v) => set({ highBlendPct: v })} hint={`The blend the flex vehicles run — e.g. 85 = E85. Only flex-fuel vehicles can run blends this high.`} />
+          <NumField label="Target year" hint="The year all the conversions are in place. It ramps from the start year to here." value={flex.targetYear} min={2021} onChange={(v) => set({ targetYear: Math.max(2021, Math.min(2050, v)) })} />
         </div>
-        <AdvancedDrawer>
-          <NumberField label="CAPEX per vehicle" tip="Extra cost of a flex-fuel vehicle over a standard one (or the full replacement cost)." value={flex.vehicleCapex} step={50_000} suffix={CURRENCY} onChange={(v) => set({ vehicleCapex: v })} />
-          <NumberField label="Start year" tip="The year conversions begin." value={flex.startYear} step={1} onChange={(v) => set({ startYear: v })} />
-        </AdvancedDrawer>
+        <Collapsible title="Advanced">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <NumField label="CAPEX per vehicle" hint="Extra cost of a flex-fuel vehicle over a standard one (or the full replacement cost)." value={flex.vehicleCapex} step={50_000} suffix={CURRENCY} onChange={(v) => set({ vehicleCapex: v })} />
+            <NumField label="Start year" hint="The year conversions begin." value={flex.startYear} step={1} min={2021} onChange={(v) => set({ startYear: Math.max(2021, Math.min(2050, v)) })} />
+          </div>
+        </Collapsible>
         <p className="text-[11px] text-ink-soft mt-3 flex items-start gap-1.5 bg-surface-muted rounded-lg px-2.5 py-1.5">
           <Info size={12} className="text-ink-faint shrink-0 mt-0.5" />
           {flex.enabled && flex.unitsToConvert > 0
@@ -449,9 +485,7 @@ function ActionRow({
             <div className="text-[11px] text-ink-faint">{sub}</div>
           </div>
         </div>
-        <button onClick={disabled ? undefined : onToggle} disabled={disabled} className={cn("relative w-11 h-6 rounded-full transition-colors shrink-0", disabled ? "bg-line opacity-50 cursor-not-allowed" : enabled ? "bg-brand-500" : "bg-line")} aria-pressed={enabled} aria-label={`Toggle ${title}`}>
-          <span className={cn("absolute top-1 w-4 h-4 rounded-full bg-white shadow-card transition-all", enabled ? "left-6" : "left-1")} />
-        </button>
+        {!disabled && <ToggleSwitch on={enabled} onChange={onToggle} label={`Toggle ${title}`} />}
       </div>
       {warning && <div className="mb-2">{warning}</div>}
       <div className={cn(!disabled && !enabled && "opacity-40 pointer-events-none")}>{children}</div>
@@ -479,9 +513,8 @@ function RefrigerantControls() {
 
   return (
     <>
-      <Card tone="muted">
+      <DetailCard title="Presets · all systems">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs uppercase tracking-wider text-ink-faint font-bold mr-1">Presets · all systems</span>
           {[
             { label: "Leak fix only", sub: "0% · 40% leak", apply: () => applyPreset(false, 0, 40) },
             { label: "Balanced", sub: "60% · 50% leak", apply: () => applyPreset(true, 60, 50) },
@@ -492,9 +525,9 @@ function RefrigerantControls() {
             </button>
           ))}
         </div>
-      </Card>
+      </DetailCard>
       {baseSystems.length === 0 ? (
-        <Card><p className="text-sm text-ink-faint">No cooling systems yet — add them in Data input.</p></Card>
+        <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6"><p className="text-sm text-ink-faint">No cooling systems yet — add them in Data input.</p></div>
       ) : (
         groupByBu(baseSystems).map(([bu, systems]) => (
           <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
@@ -515,7 +548,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
 
   if (!acts) {
     return (
-      <Card className={cn(system.excluded && "opacity-60")}>
+      <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", system.excluded && "opacity-60")}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-ink">{system.name}</h3>
@@ -534,7 +567,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
             Add plan
           </button>
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -557,7 +590,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
   const gasSaving = system.toppedUpKg * ((lf.enabled ? lf.leakImprovementPct : 0) / 100) * system.gasCostPerKg;
 
   return (
-    <Card className={cn(system.excluded && "opacity-60")}>
+    <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", system.excluded && "opacity-60")}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${color}1A` }}>
@@ -594,23 +627,18 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
             <div className="md:col-span-2">
-              <span className="text-sm font-medium text-ink flex items-center gap-1.5 flex-wrap">
-                Alternative refrigerant
-                <InfoTip text="Which low-GWP gas to switch to. Lower GWP = bigger cut; naturals also need less charge." />
-                {gwpDelta < 0 && (
-                  <span className="text-[11px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">
-                    {pct(gwpDelta, 1)} GWP vs {current.label}
-                  </span>
-                )}
-              </span>
-              <select
+              <SelectField
+                label="Alternative refrigerant"
+                hint="Which low-GWP gas to switch to. Lower GWP = bigger cut; naturals also need less charge."
                 value={gs.altRefrigerant}
-                onChange={(e) => updateSystemAction(system.id, "gasSwitch", { altRefrigerant: e.target.value as RefrigerantId })}
-                aria-label={`${system.name} alternative refrigerant`}
-                className="mt-2 w-full border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400"
-              >
-                {ALT_REFRIGERANT_IDS.map((rid) => { const r = REFRIGERANTS[rid]; return <option key={rid} value={rid}>{r.label} · GWP {r.gwp}</option>; })}
-              </select>
+                options={ALT_REFRIGERANT_IDS.map((rid) => ({ value: rid, label: `${REFRIGERANTS[rid].label} · GWP ${REFRIGERANTS[rid].gwp}` }))}
+                onChange={(v) => updateSystemAction(system.id, "gasSwitch", { altRefrigerant: v as RefrigerantId })}
+              />
+              {gwpDelta < 0 && (
+                <span className="mt-1.5 inline-flex text-[11px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">
+                  {pct(gwpDelta, 1)} GWP vs {current.label}
+                </span>
+              )}
               <p className="text-[11px] text-ink-faint mt-1.5">{alt.note}</p>
               {gs.altRefrigerant !== suggested && (
                 <button
@@ -622,13 +650,15 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
                 </button>
               )}
             </div>
-            <Slider label="Gas transition" value={gs.transitionPct} color={color} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { transitionPct: v })} hint="Share of this system's cooling moved off the current gas." />
-            <YearField label="Target year" tip="The year the transition is fully in place. It ramps from the start year to here." value={gs.targetYear} min={2021} max={2050} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { targetYear: v })} />
+            <SliderField label="Gas transition" value={gs.transitionPct} min={0} max={100} suffix="%" accent={color} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { transitionPct: v })} hint="Share of this system's cooling moved off the current gas." />
+            <NumField label="Target year" hint="The year the transition is fully in place. It ramps from the start year to here." value={gs.targetYear} min={2021} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { targetYear: Math.max(2021, Math.min(2050, v)) })} />
           </div>
-          <AdvancedDrawer>
-            <NumberField label="Retrofit CAPEX" tip="One-off cost for new compressors / safety upgrades for this system." value={gs.retrofitCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { retrofitCapex: v })} />
-            <NumberField label="Start year" tip="The year the transition begins." value={gs.startYear} step={1} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { startYear: v })} />
-          </AdvancedDrawer>
+          <Collapsible title="Advanced">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <NumField label="Retrofit CAPEX" hint="One-off cost for new compressors / safety upgrades for this system." value={gs.retrofitCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { retrofitCapex: v })} />
+              <NumField label="Start year" hint="The year the transition begins." value={gs.startYear} step={1} min={2021} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { startYear: Math.max(2021, Math.min(2050, v)) })} />
+            </div>
+          </Collapsible>
         </ActionRow>
 
         <ActionRow
@@ -641,16 +671,18 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
           className="max-lg:border-t max-lg:border-line/70 max-lg:mt-4 max-lg:pt-4 lg:border-l lg:border-line/70 lg:pl-7"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
-            <Slider label="Leak-rate improvement" value={lf.leakImprovementPct} max={80} color="#D9774B" onChange={(v) => updateSystemAction(system.id, "leakFix", { leakImprovementPct: v })} hint="How much you cut leaks via maintenance & monitoring — often the biggest quick win." />
-            <YearField label="Target year" tip="The year the leak programme reaches full effect." value={lf.targetYear} min={2021} max={2050} onChange={(v) => updateSystemAction(system.id, "leakFix", { targetYear: v })} />
+            <SliderField label="Leak-rate improvement" value={lf.leakImprovementPct} min={0} max={80} suffix="%" accent="#D9774B" onChange={(v) => updateSystemAction(system.id, "leakFix", { leakImprovementPct: v })} hint="How much you cut leaks via maintenance & monitoring — often the biggest quick win." />
+            <NumField label="Target year" hint="The year the leak programme reaches full effect." value={lf.targetYear} min={2021} onChange={(v) => updateSystemAction(system.id, "leakFix", { targetYear: Math.max(2021, Math.min(2050, v)) })} />
           </div>
           <p className="text-xs text-ink-soft mt-3 tabular-nums">
             Top-up {fmtNum(system.toppedUpKg, 1)} kg/yr → <span className="font-semibold text-ink">{fmtNum(newTopUpKg, 1)} kg/yr</span>
             {gasSaving > 0 && <> · saves <span className="font-semibold text-brand-600">{fmtMoney(gasSaving)}/yr</span> in gas top-ups</>}
           </p>
-          <AdvancedDrawer>
-            <NumberField label="Start year" tip="The year the leak programme begins." value={lf.startYear} step={1} onChange={(v) => updateSystemAction(system.id, "leakFix", { startYear: v })} />
-          </AdvancedDrawer>
+          <Collapsible title="Advanced">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <NumField label="Start year" hint="The year the leak programme begins." value={lf.startYear} step={1} min={2021} onChange={(v) => updateSystemAction(system.id, "leakFix", { startYear: Math.max(2021, Math.min(2050, v)) })} />
+            </div>
+          </Collapsible>
           {lf.enabled && lf.leakImprovementPct > 70 && (
             <p className="mt-3 flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
               <AlertTriangle size={14} className="shrink-0" />
@@ -660,7 +692,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
         </ActionRow>
       </div>
       <p className="text-[11px] text-ink-faint mt-3">Carbon price is set once in <strong>Global assumptions</strong> below and applied across the scenario.</p>
-    </Card>
+    </div>
   );
 }
 
@@ -723,90 +755,20 @@ function AssumptionsCard({ seg }: { seg: Seg }) {
   const a = settings.assumptions;
   const isRefrigerant = seg === "refrigerant";
   return (
-    <Card tone="muted">
-      <div className="flex items-center gap-2 mb-4">
-        <SlidersHorizontal size={16} className="text-ink-soft" />
-        <h3 className="font-semibold text-ink">Global assumptions</h3>
-        <InfoTip text="Corporate-level settings shared across the whole scenario — shown here are the ones this lever uses." />
-      </div>
+    <DetailCard title="Global assumptions">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {isRefrigerant ? (
-          <NumberField label="Carbon price" tip="Internal carbon price. Because refrigerant GWPs are huge, even a small price makes retrofits look worthwhile." value={a.carbonPricePerTonne} step={250} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ carbonPricePerTonne: v })} />
+          <NumField label="Carbon price" hint="Internal carbon price. Because refrigerant GWPs are huge, even a small price makes retrofits look worthwhile." value={a.carbonPricePerTonne} step={250} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ carbonPricePerTonne: v })} />
         ) : (
           <>
-            <NumberField label="Renewable sourcing" tip="Share of new electricity that is clean (solar/PPA) — cuts the Scope 2 electrification adds." value={a.renewableSourcingPct} step={5} suffix="%" onChange={(v) => updateAssumptions({ renewableSourcingPct: v })} />
-            <NumberField label="Grid emission factor" tip="How dirty the local grid is per unit of electricity." value={a.gridEf} step={0.01} suffix="kgCO₂e/kWh" onChange={(v) => updateAssumptions({ gridEf: v })} />
-            <NumberField label="REC cost" tip="Price of a renewable certificate per tonne, if offsetting leftover grid power." value={a.recCostPerTonne} step={100} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ recCostPerTonne: v })} />
-            <NumberField label="Infrastructure CAPEX" tip="One-off charging / grid-upgrade cost for electrification." value={a.infraCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateAssumptions({ infraCapex: v })} />
+            <NumField label="Renewable sourcing" hint="Share of new electricity that is clean (solar/PPA) — cuts the Scope 2 electrification adds." value={a.renewableSourcingPct} step={5} suffix="%" onChange={(v) => updateAssumptions({ renewableSourcingPct: v })} />
+            <NumField label="Grid emission factor" hint="How dirty the local grid is per unit of electricity." value={a.gridEf} step={0.01} suffix="kgCO₂e/kWh" onChange={(v) => updateAssumptions({ gridEf: v })} />
+            <NumField label="REC cost" hint="Price of a renewable certificate per tonne, if offsetting leftover grid power." value={a.recCostPerTonne} step={100} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ recCostPerTonne: v })} />
+            <NumField label="Infrastructure CAPEX" hint="One-off charging / grid-upgrade cost for electrification." value={a.infraCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateAssumptions({ infraCapex: v })} />
           </>
         )}
       </div>
-    </Card>
-  );
-}
-
-/* ============================================================
-   Small shared controls
-   ============================================================ */
-
-function AdvancedDrawer({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-4">
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 text-sm font-medium text-ink-soft hover:text-ink">
-        <ChevronDown size={16} className={cn("transition-transform", open && "rotate-180")} />
-        Advanced
-      </button>
-      {open && <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>}
-    </div>
-  );
-}
-
-function CountField({
-  label, tip, value, max, onChange, suffix,
-}: {
-  label: string; tip: string; value: number; max: number; onChange: (v: number) => void; suffix?: string;
-}) {
-  const clamp = (v: number) => Math.max(0, Math.min(max, v));
-  return (
-    <div>
-      <span className="text-sm font-medium text-ink flex items-center gap-1.5">{label} <InfoTip text={tip} /></span>
-      <div className="mt-2 flex items-center gap-2">
-        <button onClick={() => onChange(clamp(value - 1))} className="w-8 h-8 rounded-lg border border-line grid place-items-center hover:bg-surface-muted" aria-label="Decrease"><Minus size={14} /></button>
-        <input type="number" value={value} min={0} max={max} onChange={(e) => onChange(clamp(Number(e.target.value)))} className="w-16 text-center text-sm border border-line rounded-lg px-2 py-1.5 bg-white tabular-nums font-semibold focus:outline-none focus:border-brand-400" />
-        <button onClick={() => onChange(clamp(value + 1))} className="w-8 h-8 rounded-lg border border-line grid place-items-center hover:bg-surface-muted" aria-label="Increase"><Plus size={14} /></button>
-        {suffix && <span className="text-sm text-ink-faint">{suffix}</span>}
-      </div>
-    </div>
-  );
-}
-
-function YearField({
-  label, tip, value, min, max, onChange,
-}: {
-  label: string; tip: string; value: number; min: number; max: number; onChange: (v: number) => void;
-}) {
-  return (
-    <div>
-      <span className="text-sm font-medium text-ink flex items-center gap-1.5">{label} <InfoTip text={tip} /></span>
-      <input type="number" value={value} min={min} max={max} onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value))))} className="mt-2 w-28 text-sm border border-line rounded-lg px-3 py-1.5 bg-white tabular-nums focus:outline-none focus:border-brand-400" />
-    </div>
-  );
-}
-
-function NumberField({
-  label, value, onChange, step = 1, suffix, tip,
-}: {
-  label: string; value: number; onChange: (v: number) => void; step?: number; suffix?: string; tip?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs text-ink-soft font-medium flex items-center gap-1.5">{label} {tip && <InfoTip text={tip} />}</span>
-      <div className="mt-1 flex items-center gap-1.5">
-        <input type="number" value={value} step={step} onChange={(e) => onChange(Number(e.target.value))} className="w-full text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white tabular-nums focus:outline-none focus:border-brand-400" />
-        {suffix && <span className="text-xs text-ink-faint whitespace-nowrap">{suffix}</span>}
-      </div>
-    </label>
+    </DetailCard>
   );
 }
 
