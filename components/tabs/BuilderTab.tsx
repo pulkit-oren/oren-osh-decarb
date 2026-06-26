@@ -10,6 +10,7 @@ import { useScenario } from "@/lib/store";
 import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM } from "@/lib/model/factors";
 import { applyAssetActions, defaultActions, defaultFlexFuel, defaultSystemActions, flexFuelCapable } from "@/lib/model/segments";
 import { endUseProfile } from "@/lib/model/end-use";
+import { refrigClassProfile } from "@/lib/model/refrigerant-class";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { CURRENCY } from "@/lib/defaults";
@@ -76,14 +77,76 @@ function segStats(
   return { count: assets.length, active, abated };
 }
 
+function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset | RefrigerationSystem; onOpen: () => void }) {
+  const { settings } = useScenario();
+  let sub: string;
+  let abated = 0;
+  let active = 0;
+  const excluded = source.excluded ?? false;
+
+  if (seg === "refrigerant") {
+    const sys = source as RefrigerationSystem;
+    const acts = settings.bySystem[sys.id];
+    const cls = refrigClassProfile(sys);
+    sub = `${SYSTEM_TYPE_LABELS[sys.systemType]}${cls ? ` · ${cls.label}` : ""}`;
+    if (acts) {
+      if (acts.gasSwitch.enabled) active++;
+      if (acts.leakFix.enabled) active++;
+      const after = applyRefrigerant(sys, {
+        transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0,
+        altRefrigerant: acts.gasSwitch.altRefrigerant,
+        leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
+      });
+      abated = Math.max(0, refrigerantCO2e(sys) - Math.max(0, after.newFugitiveT));
+    }
+  } else {
+    const a = source as CombustionAsset;
+    const acts = settings.byAsset[a.id];
+    const eu = endUseProfile(a);
+    sub = `${FUELS[a.fuelType].label} · ${a.category}${eu ? ` · ${eu.label}` : ""}`;
+    if (acts) {
+      if (acts.electrify.enabled) active++;
+      if (acts.fuelSwitch.enabled) active++;
+      if (acts.flexFuel?.enabled) active++;
+      const res = applyAssetActions(a, acts, settings.assumptions);
+      abated = res.scope1AbatementT + res.fuelAbatementT;
+    }
+  }
+  const hasPlan = !!(seg === "refrigerant" ? settings.bySystem[(source as RefrigerationSystem).id] : settings.byAsset[(source as CombustionAsset).id]);
+
+  return (
+    <button
+      onClick={onOpen}
+      className={cn(
+        "group flex items-center gap-3 rounded-xl3 border border-line/60 bg-surface shadow-card px-5 py-4 text-left w-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-lg",
+        excluded && "opacity-60",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-ink truncate">{source.name}</span>
+          {excluded && <span className="text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Excluded</span>}
+        </div>
+        <span className="text-[11px] text-ink-soft">{sub}</span>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-sm font-extrabold tabular-nums text-brand-600">{hasPlan ? `−${fmt(abated)} t` : "—"}</div>
+        <div className="text-[10px] text-ink-faint">{hasPlan ? `${active} lever${active === 1 ? "" : "s"} on` : "No plan yet"}</div>
+      </div>
+      <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
+    </button>
+  );
+}
+
 export function BuilderTab() {
-  const [view, setView] = useState<"home" | Seg>("home");
+  const [view, setView] = useState<"home" | Seg | { seg: Seg; sourceId: string }>("home");
   const [name, setName] = useState("");
 
-  if (view === "home") {
-    return <ModellerHome onOpen={setView} name={name} setName={setName} />;
+  if (view === "home") return <ModellerHome onOpen={setView} name={name} setName={setName} />;
+  if (typeof view === "string") {
+    return <SegmentScreen seg={view} onBack={() => setView("home")} onOpenSource={(id) => setView({ seg: view, sourceId: id })} />;
   }
-  return <SegmentScreen seg={view} onBack={() => setView("home")} />;
+  return <SourceScenarioScreen seg={view.seg} sourceId={view.sourceId} onBack={() => setView(view.seg)} />;
 }
 
 function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; name: string; setName: (v: string) => void }) {
@@ -167,7 +230,7 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
   );
 }
 
-function SegmentScreen({ seg, onBack }: { seg: Seg; onBack: () => void }) {
+function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => void; onOpenSource: (id: string) => void }) {
   const { baseAssets, baseSystems, settings } = useScenario();
   const m = SEG_META[seg];
   const Icon = m.icon;
@@ -196,19 +259,48 @@ function SegmentScreen({ seg, onBack }: { seg: Seg; onBack: () => void }) {
       <LiveResult />
 
       {seg === "refrigerant" ? (
-        <RefrigerantControls />
+        <RefrigerantControls onOpenSource={onOpenSource} />
       ) : segAssets.length === 0 ? (
         <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6"><p className="text-sm text-ink-faint">No {m.label.toLowerCase()} assets yet — add them in Data input.</p></div>
       ) : (
         groupByBu(segAssets).map(([bu, assets]) => (
           <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
-            <div className="flex flex-col gap-4">
-              {assets.map((a) => <AssetActionCard key={a.id} asset={a} />)}
+            <div className="flex flex-col gap-3">
+              {assets.map((a) => <SourceBox key={a.id} seg={seg} source={a} onOpen={() => onOpenSource(a.id)} />)}
             </div>
           </Collapsible>
         ))
       )}
+    </div>
+  );
+}
 
+function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: string; onBack: () => void }) {
+  const { baseAssets, baseSystems } = useScenario();
+  const label = SEG_META[seg].label;
+  const back = (
+    <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
+      <ChevronDown size={16} className="rotate-90" /> Back to {label}
+    </button>
+  );
+
+  if (seg === "refrigerant") {
+    const sys = baseSystems.find((s) => s.id === sourceId);
+    if (!sys) { onBack(); return null; }
+    return (
+      <div className="screen-in flex flex-col gap-5">
+        {back}
+        <SystemActionCard system={sys} />
+        <AssumptionsCard seg="refrigerant" />
+      </div>
+    );
+  }
+  const a = baseAssets.find((x) => x.id === sourceId);
+  if (!a) { onBack(); return null; }
+  return (
+    <div className="screen-in flex flex-col gap-5">
+      {back}
+      <AssetActionCard asset={a} />
       <AssumptionsCard seg={seg} />
     </div>
   );
@@ -273,7 +365,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
               )}
             </div>
             <p className="text-sm text-ink-soft mt-0.5">
-              {isMobile ? `${asset.unitCount} vehicles` : "1 unit"} · {fmt(asset.annualVolume)} {asset.unit}/yr
+              {isMobile ? `${asset.unitCount} vehicles` : "1 unit"} · {fmt(asset.annualVolume)} {asset.unit}/yr{(() => { const eu = endUseProfile(asset); return eu ? <> · <span className="font-medium text-ink">{eu.label}</span></> : null; })()}
             </p>
             {!asset.excluded && asset.annualVolume === 0 && (
               <p className="text-[11px] text-ink-faint mt-0.5">No consumption entered yet</p>
@@ -497,7 +589,7 @@ function ActionRow({
    Refrigerant — per-system cards (Switch gas | Fix leaks)
    ============================================================ */
 
-function RefrigerantControls() {
+function RefrigerantControls({ onOpenSource }: { onOpenSource: (id: string) => void }) {
   const { baseSystems, setSettings } = useScenario();
   const applyPreset = (gasOn: boolean, transitionPct: number, leakImprovementPct: number) =>
     setSettings((p) => {
@@ -531,8 +623,8 @@ function RefrigerantControls() {
       ) : (
         groupByBu(baseSystems).map(([bu, systems]) => (
           <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
-            <div className="flex flex-col gap-4">
-              {systems.map((sys) => <SystemActionCard key={sys.id} system={sys} />)}
+            <div className="flex flex-col gap-3">
+              {systems.map((sys) => <SourceBox key={sys.id} seg="refrigerant" source={sys} onOpen={() => onOpenSource(sys.id)} />)}
             </div>
           </Collapsible>
         ))
@@ -606,7 +698,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
               )}
             </div>
             <p className="text-sm text-ink-soft mt-0.5 flex items-center gap-2 flex-wrap">
-              {SYSTEM_TYPE_LABELS[system.systemType]} · {fmt(system.toppedUpKg)} kg topped up/yr
+              {SYSTEM_TYPE_LABELS[system.systemType]}{(() => { const c = refrigClassProfile(system); return c ? <> · <span className="font-medium text-ink">{c.label}</span></> : null; })()} · {fmt(system.toppedUpKg)} kg topped up/yr
               <span className="font-medium text-ink">{current.label} · GWP {fmt(current.gwp)}</span>
               <span className={cn("text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5", era.cls)}>{era.label}</span>
             </p>

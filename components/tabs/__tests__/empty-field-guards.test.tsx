@@ -236,6 +236,8 @@ function renderBuilderWithAsset(annualVolume: number) {
 
   // Switch to the Stationary segment
   fireEvent.click(screen.getByText("Stationary"));
+  // Segment now shows source boxes — click the asset box to open its scenario screen
+  fireEvent.click(screen.getByText("Volume Test Boiler"));
 }
 
 describe("AssetActionCard — E2c: annualVolume=0 hint", () => {

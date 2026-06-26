@@ -110,12 +110,12 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
     );
     // Navigate from home into Mobile segment
     fireEvent.click(screen.getByText("Mobile"));
-    // Both BU groups must appear
+    // Both BU groups must appear (as Collapsible headers)
     expect(screen.getByText("Pune")).toBeTruthy();
     expect(screen.getByText("Mumbai")).toBeTruthy();
   });
 
-  it("renders an 'Excluded from totals' badge on the Mumbai (excluded) card", () => {
+  it("renders an 'Excluded' badge on the Mumbai (excluded) source box", () => {
     seedMobileAssets();
     render(
       <Wrapper>
@@ -124,7 +124,8 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
     );
     // Navigate from home into Mobile segment
     fireEvent.click(screen.getByText("Mobile"));
-    expect(screen.getByText(/Excluded from totals/i)).toBeTruthy();
+    // The segment screen shows source boxes; Mumbai is excluded
+    expect(screen.getByText(/Excluded/i)).toBeTruthy();
   });
 
   it("does NOT show excluded badge for the non-excluded Pune asset", () => {
@@ -137,7 +138,7 @@ describe("BuilderTab — BU grouping + excluded badge (Task 4)", () => {
     // Navigate from home into Mobile segment
     fireEvent.click(screen.getByText("Mobile"));
     // There should be exactly one excluded badge (Mumbai only)
-    const badges = screen.queryAllByText(/Excluded from totals/i);
+    const badges = screen.queryAllByText(/^Excluded$/i);
     expect(badges.length).toBe(1);
   });
 });
@@ -207,9 +208,25 @@ describe("BuilderTab — electrify feasibility warning visible when lever is OFF
         <BuilderTab />
       </Wrapper>,
     );
+    // Step 1: Navigate from home into the Stationary segment
+    fireEvent.click(screen.getByText("Stationary"));
+    // Step 2: The segment now shows source boxes — click the "Kiln Furnace" box to open its scenario screen
+    fireEvent.click(screen.getByText("Kiln Furnace"));
+    // Step 3: The warning badge must be visible regardless of the toggle state
+    expect(screen.getByText(/electrification is limited/i)).toBeTruthy();
+  });
+
+  it("source box for furnaceKiln shows the end-use label in its sublabel", () => {
+    seedFurnaceKilnAsset();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
     // Navigate from home into the Stationary segment
     fireEvent.click(screen.getByText("Stationary"));
-    // The warning badge must be visible regardless of the toggle state
-    expect(screen.getByText(/electrification is limited/i)).toBeTruthy();
+    // The source box sublabel should include the end-use label for furnaceKiln
+    // endUseProfile({ endUse: "furnaceKiln" }).label === "Furnace / Kiln (high-temp)"
+    expect(screen.getByText(/Furnace \/ Kiln \(high-temp\)/i)).toBeTruthy();
   });
 });
