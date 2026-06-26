@@ -39,7 +39,7 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
             🏢 Business units{buReg.units.length > 0 ? ` · ${buReg.units.length}` : ""}
           </button>
           <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Financial year</span>
+            <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Base year</span>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400">
               {fyYears.map((y) => <option key={y} value={y}>{fyLabel(y)}</option>)}
             </select>

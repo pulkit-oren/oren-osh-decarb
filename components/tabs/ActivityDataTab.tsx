@@ -29,8 +29,13 @@ export function ActivityDataTab() {
   const [nav, setNav] = useState<Nav>({ level: "home" });
   const { buReg, addBu, removeBu } = useBuConfig(activeId);
 
-  const year = s1.selectedYear;
-  const setYear = (y: number) => { s1.setSelectedYear(y); s2.setSelectedYear(y); };
+  // The Data-input financial-year picker IS the scenario base year — keep the
+  // working/selected year in sync with it on both scopes.
+  const year = s1.baseYear;
+  const setYear = (y: number) => {
+    s1.setBaseYear(y); s1.setSelectedYear(y);
+    s2.setBaseYear(y); s2.setSelectedYear(y);
+  };
 
   const b1 = s1.selectedBaseline;
   const b2 = s2.selectedBaseline;
