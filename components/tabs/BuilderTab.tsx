@@ -3,8 +3,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Factory, Truck, Snowflake, RotateCcw, ChevronDown, Save, Trash2,
-  Zap, Fuel, AlertTriangle, Wrench, Info,
+  Zap, Fuel, AlertTriangle, Wrench, Info, Lightbulb,
 } from "lucide-react";
+import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem, electrifyTip, fuelSwitchTip, flexFuelTip, gasSwitchTip, leakFixTip, type Suggestion, type SuggestedAction } from "@/lib/model/suggestions";
 import { outlivesAsset, retirementYear } from "@/lib/model/validate";
 import { useScenario } from "@/lib/store";
 import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM } from "@/lib/model/factors";
@@ -290,6 +291,8 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
     return (
       <div className="screen-in flex flex-col gap-5">
         {back}
+        <SuggestionCard kind="system" id={sys.id} />
+        <SourceImpact kind="system" id={sys.id} />
         <SystemActionCard system={sys} />
         <AssumptionsCard seg="refrigerant" />
       </div>
@@ -300,6 +303,8 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
   return (
     <div className="screen-in flex flex-col gap-5">
       {back}
+      <SuggestionCard kind="asset" id={a.id} />
+      <SourceImpact kind="asset" id={a.id} />
       <AssetActionCard asset={a} />
       <AssumptionsCard seg={seg} />
     </div>
@@ -372,7 +377,6 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
             )}
           </div>
         </div>
-        <ImpactBar base={baseT} after={afterT} />
       </div>
 
       {/* electrify + fuel switch, side by side on desktop */}
@@ -420,6 +424,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
         {e.enabled && outlivesAsset(asset, baseYear, e.targetYear) && (
           <LifespanWarning asset={asset} baseYear={baseYear} />
         )}
+        <p className="text-[11px] text-ink-faint mt-2">{electrifyTip(isMobile)}</p>
       </ActionRow>
 
       <FuelSwitchControls asset={asset} />
@@ -489,11 +494,7 @@ function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
             options={compatible.map((id) => ({ value: id, label: ALT_FUELS[id].label }))}
             onChange={(id) => updateAction(asset.id, "fuelSwitch", { altFuel: id, blendPct: Math.min(maxBlendPctFor(asset.category, id), f.blendPct) })}
           />
-          {blendNote && (
-            <p className="text-[11px] text-ink-soft mt-2 flex items-start gap-1.5 bg-surface-muted rounded-lg px-2.5 py-1.5">
-              <Info size={12} className="text-ink-faint shrink-0 mt-0.5" /> {blendNote}
-            </p>
-          )}
+          <p className="text-[11px] text-ink-faint mt-2">{fuelSwitchTip(ALT_FUELS[effectiveAlt].label, maxBlend, asset.category)}</p>
         </div>
       </div>
       <Collapsible title="Advanced">
@@ -555,6 +556,7 @@ function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
             ? <>Removes <span className="font-semibold text-brand-600">{fmt(res.flexAbatementT)} tCO₂e/yr</span> with {flex.unitsToConvert} of {asset.unitCount} vehicles on {altLabel} at {flex.highBlendPct}%.</>
             : <>Use this only for blends above E20/B20 — it buys flex-fuel vehicles. For low blends, use Fuel switch instead.</>}
         </p>
+        <p className="text-[11px] text-ink-faint mt-2">{flexFuelTip()}</p>
       </ActionRow>
     </div>
   );
@@ -704,7 +706,6 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
             </p>
           </div>
         </div>
-        <ImpactBar base={baseT} after={afterT} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 border-t border-line/70 mt-1 pt-4">
@@ -751,6 +752,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
               <NumField label="Start year" hint="The year the transition begins." value={gs.startYear} step={1} min={2021} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { startYear: Math.max(2021, Math.min(2050, v)) })} />
             </div>
           </Collapsible>
+          <p className="text-[11px] text-ink-faint mt-2">{gasSwitchTip(alt.label, alt.gwp)}</p>
         </ActionRow>
 
         <ActionRow
@@ -781,6 +783,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
               Very ambitious — sustained leak reduction above 70% needs continuous monitoring and rapid repair.
             </p>
           )}
+          <p className="text-[11px] text-ink-faint mt-2">{leakFixTip()}</p>
         </ActionRow>
       </div>
       <p className="text-[11px] text-ink-faint mt-3">Carbon price is set once in <strong>Global assumptions</strong> below and applied across the scenario.</p>
@@ -821,22 +824,83 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Live before → after emissions bar for one asset. */
-function ImpactBar({ base, after }: { base: number; after: number }) {
-  const abated = Math.max(0, base - after);
-  const cut = base > 0 ? abated / base : 0;
+function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) {
+  const { baseAssets, baseSystems, setSettings } = useScenario();
+  const asset = kind === "asset" ? baseAssets.find((a) => a.id === id) : undefined;
+  const system = kind === "system" ? baseSystems.find((s) => s.id === id) : undefined;
+  if (!asset && !system) return null;
+  const sug: Suggestion = asset ? suggestForAsset(asset) : suggestForSystem(system!);
+
+  const apply = (actions: SuggestedAction[]) => {
+    setSettings((p) => {
+      if (asset) {
+        const cur = p.byAsset[asset.id] ?? defaultActions(asset);
+        const next: typeof cur = { ...cur };
+        for (const a of actions) (next as unknown as Record<string, unknown>)[a.lever] = { ...(next as unknown as Record<string, Record<string, unknown>>)[a.lever], ...a.patch };
+        return { ...p, byAsset: { ...p.byAsset, [asset.id]: next } };
+      }
+      const cur = p.bySystem[system!.id] ?? defaultSystemActions(system!);
+      const next: typeof cur = { ...cur };
+      for (const a of actions) (next as unknown as Record<string, unknown>)[a.lever] = { ...(next as unknown as Record<string, Record<string, unknown>>)[a.lever], ...a.patch };
+      return { ...p, bySystem: { ...p.bySystem, [system!.id]: next } };
+    });
+  };
+
   return (
-    <div className="w-44 sm:w-56">
-      <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">Impact</span>
-        <span className="text-xs font-bold text-brand-600 tabular-nums">−{fmt(abated)} t · {pct(cut)}</span>
+    <div className="rounded-xl3 border border-brand-200 bg-brand-50/50 shadow-card p-5">
+      <div className="flex items-start gap-3">
+        <span className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center shrink-0"><Lightbulb size={18} className="text-brand-700" /></span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] uppercase tracking-wide text-brand-700 font-bold">Suggested for this source</div>
+          <div className="mt-0.5 font-bold text-ink">{sug.headline}</div>
+          <p className="text-xs text-ink-soft mt-1">{sug.why}</p>
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <button onClick={() => apply(sug.actions)} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Apply suggestion</button>
+            {sug.altHeadline && sug.altActions && (
+              <button onClick={() => apply(sug.altActions!)} className="text-sm font-medium text-brand-700 hover:underline">{sug.altHeadline}</button>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="h-2.5 rounded-full bg-surface-muted overflow-hidden flex">
-        <div className="h-full bg-brand-500 transition-all duration-300" style={{ width: `${cut * 100}%` }} title="abated" />
-        <div className="h-full bg-ink/10" style={{ width: `${(1 - cut) * 100}%` }} title="remaining" />
+    </div>
+  );
+}
+
+function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
+  const { baseAssets, baseSystems, settings } = useScenario();
+  let baseT = 0, afterT = 0, capex = 0;
+  if (kind === "asset") {
+    const a = baseAssets.find((x) => x.id === id); if (!a) return null;
+    baseT = combustionCO2e(a);
+    const acts = settings.byAsset[a.id];
+    if (acts) { const res = applyAssetActions(a, acts, settings.assumptions); afterT = Math.max(0, baseT - res.scope1AbatementT - res.fuelAbatementT); capex = capexForAsset(a, acts); }
+    else afterT = baseT;
+  } else {
+    const s = baseSystems.find((x) => x.id === id); if (!s) return null;
+    baseT = refrigerantCO2e(s);
+    const acts = settings.bySystem[s.id];
+    if (acts) {
+      const after = applyRefrigerant(s, { transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0, altRefrigerant: acts.gasSwitch.altRefrigerant, leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0 });
+      afterT = Math.max(0, after.newFugitiveT); capex = capexForSystem(acts);
+    } else afterT = baseT;
+  }
+  const abated = Math.max(0, baseT - afterT);
+  const cut = baseT > 0 ? abated / baseT : 0;
+  return (
+    <div className="sticky top-2 z-20 rounded-xl3 border border-line/60 bg-surface shadow-card p-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-baseline gap-3">
+          <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Impact</span>
+          <span className="text-2xl font-extrabold tabular-nums text-ink">{fmt(baseT)} <span className="text-sm text-ink-faint">→</span> {fmt(afterT)} <span className="text-sm font-semibold text-ink-soft">tCO₂e</span></span>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Cut</div><div className="text-lg font-extrabold tabular-nums text-brand-600">−{fmt(abated)} t · {pct(cut)}</div></div>
+          <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-lg font-extrabold tabular-nums text-ink">{fmtMoney(capex)}</div></div>
+        </div>
       </div>
-      <div className="flex justify-between text-[10px] text-ink-faint mt-1 tabular-nums">
-        <span>{fmt(base)} t now</span><span>{fmt(after)} t after</span>
+      <div className="mt-3 h-2.5 rounded-full bg-surface-muted overflow-hidden flex">
+        <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${cut * 100}%` }} />
+        <div className="h-full bg-ink/10" style={{ width: `${(1 - cut) * 100}%` }} />
       </div>
     </div>
   );

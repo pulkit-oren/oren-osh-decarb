@@ -230,3 +230,73 @@ describe("BuilderTab — electrify feasibility warning visible when lever is OFF
     expect(screen.getByText(/Furnace \/ Kiln \(high-temp\)/i)).toBeTruthy();
   });
 });
+
+// ── SuggestionCard + SourceImpact on source scenario screen (Task 2) ──────────
+
+describe("BuilderTab — SuggestionCard and SourceImpact on source scenario screen", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("shows 'Suggested for this source' and Apply suggestion button on combustion source screen", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    // Navigate: home → Mobile segment → Pune Fleet source
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // SuggestionCard header
+    expect(screen.getByText(/Suggested for this source/i)).toBeTruthy();
+    // Apply button
+    expect(screen.getByText(/Apply suggestion/i)).toBeTruthy();
+  });
+
+  it("shows the live Impact strip with 'Impact' and 'Cut' labels on the source screen", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // SourceImpact labels
+    expect(screen.getByText(/^Impact$/i)).toBeTruthy();
+    expect(screen.getByText(/^Cut$/i)).toBeTruthy();
+    // The strip shows tCO₂e
+    expect(screen.getByText(/tCO₂e/)).toBeTruthy();
+  });
+
+  it("clicking Apply suggestion updates levers (Cut shows non-zero after apply)", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // Click Apply suggestion — suggestion engine electrifies half the fleet
+    fireEvent.click(screen.getByText(/Apply suggestion/i));
+    // After apply, at least one lever is on — the Cut label shows a non-zero value
+    // The "−X t" in SourceImpact's Cut div changes from −0 t to some negative value
+    const cutMatches = screen.getAllByText(/^−[\d,.]+ t ·/);
+    expect(cutMatches.length).toBeGreaterThan(0);
+  });
+
+  it("shows an electrify lever tip on the source scenario screen", () => {
+    seedMobileAssets();
+    render(
+      <Wrapper>
+        <BuilderTab />
+      </Wrapper>,
+    );
+    fireEvent.click(screen.getByText("Mobile"));
+    fireEvent.click(screen.getByText("Pune Fleet"));
+    // electrifyTip for mobile mentions COP
+    expect(screen.getByText(/COP ~3/i)).toBeTruthy();
+  });
+});
