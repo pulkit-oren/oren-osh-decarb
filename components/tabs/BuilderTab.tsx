@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Factory, Truck, Snowflake, RotateCcw, ChevronDown, Save, Trash2,
-  Zap, Fuel, AlertTriangle, Wrench, Info, Lightbulb,
+  Zap, Fuel, AlertTriangle, Wrench, Info, Lightbulb, Scale,
 } from "lucide-react";
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem, electrifyTip, fuelSwitchTip, flexFuelTip, gasSwitchTip, leakFixTip, type Suggestion, type SuggestedAction } from "@/lib/model/suggestions";
 import { outlivesAsset, retirementYear } from "@/lib/model/validate";
@@ -22,6 +22,7 @@ import { DeltaPill } from "../ui/DeltaPill";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, SelectField } from "@/components/tabs/activity/fields";
 import { groupByBu } from "@/lib/group-by-bu";
+import { applyDials, energyMix, suggestMix, type BalanceDials } from "@/lib/model/energy-balance";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
 
@@ -140,17 +141,18 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
 }
 
 export function BuilderTab() {
-  const [view, setView] = useState<"home" | Seg | { seg: Seg; sourceId: string }>("home");
+  const [view, setView] = useState<"home" | "balance" | Seg | { seg: Seg; sourceId: string }>("home");
   const [name, setName] = useState("");
 
-  if (view === "home") return <ModellerHome onOpen={setView} name={name} setName={setName} />;
+  if (view === "home") return <ModellerHome onOpen={setView} onOpenBalance={() => setView("balance")} name={name} setName={setName} />;
+  if (view === "balance") return <EnergyBalanceScreen onBack={() => setView("home")} />;
   if (typeof view === "string") {
     return <SegmentScreen seg={view} onBack={() => setView("home")} onOpenSource={(id) => setView({ seg: view, sourceId: id })} />;
   }
   return <SourceScenarioScreen seg={view.seg} sourceId={view.sourceId} onBack={() => setView(view.seg)} />;
 }
 
-function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; name: string; setName: (v: string) => void }) {
+function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Seg) => void; onOpenBalance: () => void; name: string; setName: (v: string) => void }) {
   const { baseAssets, baseSystems, settings, result, scenarios, saveScenario, deleteScenario, setSettings, resetSettings, baseYear } = useScenario();
   const k = result.kpis;
   const segs = Object.keys(SEG_META) as Seg[];
@@ -189,6 +191,14 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
               </button>
             );
           })}
+          <button onClick={onOpenBalance} className="group flex items-center gap-3 rounded-xl3 border-2 border-dashed border-brand-300 bg-brand-50/40 px-5 py-3 text-left hover:border-brand-400 hover:bg-brand-50 transition-colors shrink-0">
+            <span className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center shrink-0"><Scale size={18} className="text-brand-700" /></span>
+            <div className="min-w-0 flex-1">
+              <span className="block font-bold text-ink">Energy balance</span>
+              <span className="text-xs text-ink-soft">Balance the fuel / electricity / renewable mix to a target</span>
+            </div>
+            <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
+          </button>
         </div>
 
         <aside className="relative overflow-hidden rounded-xl3 bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 text-white shadow-card-lg p-6 flex flex-col">
@@ -227,6 +237,75 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function EnergyBalanceScreen({ onBack }: { onBack: () => void }) {
+  const { baseAssets, baseSystems, settings, setSettings, result, baseYear } = useScenario();
+  const assets = baseAssets.filter((a) => !a.excluded);
+  const systems = baseSystems.filter((s) => !s.excluded);
+  const [dials, setDials] = useState<BalanceDials>({ electrifyPct: 0, renewablePct: settings.assumptions.renewableSourcingPct ?? 0, bioBlendPct: 0, refrigPct: 0 });
+  const [targetPct, setTargetPct] = useState(50);
+
+  const applyAndStore = (next: BalanceDials) => { setDials(next); setSettings((p) => applyDials(assets, systems, p, next)); };
+  const set = (k: keyof BalanceDials, v: number) => applyAndStore({ ...dials, [k]: v });
+  const onSuggest = () => applyAndStore(suggestMix(assets, systems, settings, targetPct / 100, baseYear));
+
+  const mix = energyMix(assets, settings);
+  const totalGJ = mix.fossilFuelGJ + mix.gridElecGJ + mix.renewableGJ;
+  const share = (v: number) => (totalGJ > 0 ? (v / totalGJ) * 100 : 0);
+  const k = result.kpis;
+  const onTrack = k.reduction2030 >= targetPct / 100;
+
+  return (
+    <div className="screen-in flex flex-col gap-5">
+      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit"><ChevronDown size={16} className="rotate-90" /> Back to modeller</button>
+
+      <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60">
+        <h1 className="text-2xl font-extrabold text-ink leading-tight">Energy balance</h1>
+        <p className="text-sm text-ink-soft mt-0.5">Shift the fuel / electricity / renewable mix and watch Scope 1 move toward your target. Dials set the per-source levers — open any source to fine-tune.</p>
+      </div>
+
+      {/* result vs target */}
+      <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-5 flex flex-wrap items-center gap-x-8 gap-y-3">
+        <label className="flex items-center gap-2 text-sm"><span className="text-ink-soft font-medium">Target</span>
+          <input type="number" value={targetPct} min={0} max={100} onChange={(e) => setTargetPct(Math.max(0, Math.min(100, Number(e.target.value))))} className="w-20 text-right tabular-nums rounded-lg border border-line px-2 py-1.5" /> <span className="text-ink-faint text-sm">% by 2030</span>
+        </label>
+        <div><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Reduction 2030</div><div className={cn("text-2xl font-extrabold tabular-nums", onTrack ? "text-brand-600" : "text-amber-600")}>{pct(k.reduction2030)}</div></div>
+        <div><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Net 2030</div><div className="text-2xl font-extrabold tabular-nums text-ink">{fmt(k.net2030)} t</div></div>
+        <div><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Total CAPEX</div><div className="text-2xl font-extrabold tabular-nums text-ink">{fmtMoney(k.totalCapex)}</div></div>
+        <span className={cn("ml-auto text-xs font-bold rounded-full px-3 py-1", onTrack ? "bg-brand-50 text-brand-700" : "bg-amber-50 text-amber-700")}>{onTrack ? "On track to target" : "Below target"}</span>
+      </div>
+
+      {/* mix bar */}
+      <DetailCard title="Energy mix">
+        <div className="flex h-3 rounded-full overflow-hidden bg-surface-muted">
+          <div className="h-full bg-slate-500" style={{ width: `${share(mix.fossilFuelGJ)}%` }} title="Fossil fuel" />
+          <div className="h-full bg-sky-500" style={{ width: `${share(mix.gridElecGJ)}%` }} title="Grid electricity" />
+          <div className="h-full bg-brand-500" style={{ width: `${share(mix.renewableGJ)}%` }} title="Renewable" />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-500" /> Fossil fuel <strong className="tabular-nums">{Math.round(share(mix.fossilFuelGJ))}%</strong></span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-sky-500" /> Grid electricity <strong className="tabular-nums">{Math.round(share(mix.gridElecGJ))}%</strong></span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-brand-500" /> Renewable <strong className="tabular-nums">{Math.round(share(mix.renewableGJ))}%</strong></span>
+        </div>
+        <p className="text-[11px] text-ink-faint mt-2">Indicative energy split across Scope 1 fuel use. Scope 2 purchased electricity is managed on the Scope 2 side.</p>
+      </DetailCard>
+
+      {/* dials */}
+      <DetailCard title="Balance dials">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+          <SliderField label="Electrify fossil energy" suffix="%" min={0} max={100} value={dials.electrifyPct} onChange={(v) => set("electrifyPct", v)} hint="Turns on electrification across feasible sources to ~this share (skips hard-to-electrify like kilns)." />
+          <SliderField label="Renewable sourcing" suffix="%" min={0} max={100} value={dials.renewablePct} onChange={(v) => set("renewablePct", v)} hint="Clean share of the new electricity (sets the global assumption)." />
+          <SliderField label="Bio-blend remaining fuel" suffix="%" min={0} max={100} value={dials.bioBlendPct} onChange={(v) => set("bioBlendPct", v)} hint="Drop-in bio blend on sources still on fuel (capped at each one's limit)." />
+          <SliderField label="Low-GWP refrigerant" suffix="%" min={0} max={100} value={dials.refrigPct} onChange={(v) => set("refrigPct", v)} hint="Transition share to the recommended low-GWP gas across cooling systems." />
+        </div>
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <button onClick={onSuggest} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Suggest a mix for {targetPct}% by 2030</button>
+          <span className="text-[11px] text-ink-faint">Heuristic: layers electrification first, then renewables, then bio-blend, then refrigerant — a starting point, not an optimum.</span>
+        </div>
+      </DetailCard>
     </div>
   );
 }
