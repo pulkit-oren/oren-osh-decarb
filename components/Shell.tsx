@@ -6,7 +6,8 @@ import { Scope2Provider } from "@/lib/scope2/store";
 import { CompanyProvider, useCompany } from "@/lib/company/store";
 import { scope1Key, scope2Key } from "@/lib/company/helpers";
 import { DEFAULT_PERSONA, isPersona, lensTabs, personaLanding, personaStorageKey, type Persona } from "@/lib/persona";
-import { Sidebar, MobileNav, type AnyTabKey, type Scope, type Scope2TabKey, type TabKey } from "./Sidebar";
+import { cn } from "@/lib/utils";
+import { Sidebar, MobileNav, type Scope, type TabKey } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CeoOverviewTab } from "./tabs/CeoOverviewTab";
 import { ActivityDataTab } from "./tabs/ActivityDataTab";
@@ -28,16 +29,43 @@ export function Shell() {
   );
 }
 
+const SCOPE_OPTS: { key: Scope; label: string; sub: string }[] = [
+  { key: "s1", label: "Scope 1", sub: "Fuel & gas" },
+  { key: "s2", label: "Scope 2", sub: "Electricity" },
+];
+
+/** In-page Scope 1 / Scope 2 switch, shown only on tabs that have both. */
+function ScopeToggle({ scope, setScope }: { scope: Scope; setScope: (s: Scope) => void }) {
+  return (
+    <div className="mt-4 inline-flex items-center gap-1 rounded-full bg-surface-muted p-1">
+      {SCOPE_OPTS.map((o) => {
+        const on = scope === o.key;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => setScope(o.key)}
+            aria-pressed={on}
+            className={cn(
+              "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors inline-flex items-center gap-2",
+              on ? "bg-white text-brand-700 shadow-card" : "text-ink-soft hover:text-ink",
+            )}
+          >
+            {o.label}
+            <span className={cn("text-[11px] font-medium", on ? "text-brand-500" : "text-ink-faint")}>{o.sub}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* Keyed by company id: switching company remounts both stores so they
    re-hydrate from that company's own localStorage namespace. */
 function CompanyScopedShell() {
   const { activeId } = useCompany();
-  const [scope, setScope] = useState<Scope>("s1");
-  // Each scope remembers its own active tab across switches.
-  // Default landing is the Activity Data screen for both scopes.
-  const [tabS1, setTabS1] = useState<TabKey>("data");
-  const [tabS2, setTabS2] = useState<Scope2TabKey>("data2");
-
+  const [scope, setScope] = useState<Scope>("s1"); // only affects the dual-scope tabs
+  const [tab, setTab] = useState<TabKey>("data");  // single logical nav; default = Activity data
   const [persona, setPersonaState] = useState<Persona>(DEFAULT_PERSONA);
 
   // Hydrate this company's saved persona on mount / company switch.
@@ -51,41 +79,36 @@ function CompanyScopedShell() {
     if (typeof window !== "undefined") window.localStorage.setItem(personaStorageKey(activeId), persona);
   }, [persona, activeId]);
 
-  const tab: AnyTabKey = scope === "s1" ? tabS1 : tabS2;
-  const setTab = (t: AnyTabKey) =>
-    scope === "s1" ? setTabS1(t as TabKey) : setTabS2(t as Scope2TabKey);
-
   // If the current tab isn't in this persona's lens, jump to the lens landing.
   useEffect(() => {
-    const allowed = lensTabs(scope, persona);
-    if (!allowed.includes(tab)) setTab(personaLanding(scope, persona));
-  }, [persona, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+    const allowed = lensTabs(persona);
+    if (!allowed.includes(tab)) setTab(personaLanding(persona));
+  }, [persona]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // These tabs exist separately for Scope 1 (fuel) and Scope 2 (electricity).
+  const dualScope = tab === "overview" || tab === "builder" || tab === "action" || tab === "compare";
 
   return (
     <ScenarioProvider key={`s1-${activeId}`} storageKey={scope1Key(activeId)}>
       <Scope2Provider key={`s2-${activeId}`} storageKey={scope2Key(activeId)}>
         <div className="flex min-h-screen p-3 md:p-4 gap-4">
-          <Sidebar scope={scope} setScope={setScope} tab={tab} setTab={setTab} persona={persona} />
+          <Sidebar tab={tab} setTab={setTab} persona={persona} />
           <main className="flex-1 min-w-0">
             <div className="bg-surface/90 backdrop-blur-md rounded-xl3 shadow-card-lg p-4 md:p-7 min-h-[calc(100vh-2rem)] pb-24 md:pb-7">
               <Topbar scope={scope} tab={tab} persona={persona} setPersona={setPersonaState} />
-              <div key={tab} className="tab-fade mt-6">
-                {tab === "overview" && <CeoOverviewTab />}
+              {dualScope && <ScopeToggle scope={scope} setScope={setScope} />}
+              <div key={`${tab}-${dualScope ? scope : "x"}`} className="tab-fade mt-6">
+                {tab === "overview" && (scope === "s1" ? <CeoOverviewTab /> : <Scope2CeoOverviewTab />)}
                 {tab === "data" && <ActivityDataTab />}
-                {tab === "builder" && <BuilderTab />}
-                {tab === "action" && <ActionPlanTab />}
+                {tab === "builder" && (scope === "s1" ? <BuilderTab /> : <Scope2BuilderTab />)}
+                {tab === "action" && (scope === "s1" ? <ActionPlanTab /> : <Scope2ActionPlanTab />)}
                 {tab === "finance" && <CfoFinanceTab />}
                 {tab === "refrigerant" && <RefrigerantTab />}
-                {tab === "compare" && <CompareTab />}
-                {tab === "overview2" && <Scope2CeoOverviewTab />}
-                {tab === "data2" && <ActivityDataTab />}
-                {tab === "builder2" && <Scope2BuilderTab />}
-                {tab === "action2" && <Scope2ActionPlanTab />}
-                {tab === "compare2" && <Scope2CompareTab />}
+                {tab === "compare" && (scope === "s1" ? <CompareTab /> : <Scope2CompareTab />)}
               </div>
             </div>
           </main>
-          <MobileNav scope={scope} setScope={setScope} tab={tab} setTab={setTab} persona={persona} />
+          <MobileNav tab={tab} setTab={setTab} persona={persona} />
         </div>
       </Scope2Provider>
     </ScenarioProvider>

@@ -2,29 +2,26 @@ import { describe, expect, it } from "vitest";
 import { lensTabs, personaLanding, isPersona, PERSONAS, DEFAULT_PERSONA } from "../persona";
 
 describe("persona lens map", () => {
-  it("ESG sees every tab in each scope", () => {
-    expect(lensTabs("s1", "esg")).toEqual(["data", "builder", "action", "refrigerant", "compare"]);
-    expect(lensTabs("s2", "esg")).toEqual(["data2", "builder2", "action2", "compare2"]);
+  it("ESG sees every logical tab", () => {
+    expect(lensTabs("esg")).toEqual(["data", "builder", "action", "refrigerant", "compare"]);
   });
-  it("CEO lands on the boardroom overview (Scope 1)", () => {
-    expect(lensTabs("s1", "ceo")).toEqual(["overview", "compare"]);
-    expect(lensTabs("s2", "ceo")).toEqual(["overview2", "compare2"]);
+  it("CEO lands on the boardroom overview", () => {
+    expect(lensTabs("ceo")).toEqual(["overview", "compare"]);
+    expect(personaLanding("ceo")).toBe("overview");
   });
-  it("CFO lands on the finance screen (Scope 1)", () => {
-    expect(lensTabs("s1", "cfo")).toEqual(["finance", "action", "compare"]);
-    expect(personaLanding("s1", "cfo")).toBe("finance");
+  it("CFO lands on the finance screen", () => {
+    expect(lensTabs("cfo")).toEqual(["finance", "action", "compare"]);
+    expect(personaLanding("cfo")).toBe("finance");
   });
   it("Plant Head is data + feasible levers + pipeline", () => {
-    expect(lensTabs("s1", "plant")).toEqual(["data", "builder", "action"]);
+    expect(lensTabs("plant")).toEqual(["data", "builder", "action"]);
+    expect(personaLanding("plant")).toBe("data");
   });
-  it("landing is the first tab of the lens", () => {
-    expect(personaLanding("s1", "ceo")).toBe("overview");
-    expect(personaLanding("s2", "plant")).toBe("data2");
-  });
-  it("default persona is ESG and is listed", () => {
+  it("default persona is ESG and lands on data", () => {
     expect(DEFAULT_PERSONA).toBe("esg");
     expect(PERSONAS.map((p) => p.key)).toContain("esg");
     expect(PERSONAS).toHaveLength(4);
+    expect(personaLanding(DEFAULT_PERSONA)).toBe("data");
   });
   it("isPersona guards unknown values", () => {
     expect(isPersona("ceo")).toBe(true);

@@ -1,4 +1,4 @@
-import type { AnyTabKey, Scope } from "@/components/Sidebar";
+import type { TabKey } from "@/components/Sidebar";
 
 export type Persona = "esg" | "ceo" | "plant" | "cfo";
 
@@ -11,20 +11,21 @@ export const PERSONAS: { key: Persona; label: string; sub: string; dotClass: str
   { key: "cfo",   label: "CFO",        sub: "Neha",   dotClass: "bg-warn" },
 ];
 
-// Tab keys visible per persona × scope, in display order. ESG = everything.
-const LENS: Record<Persona, { s1: AnyTabKey[]; s2: AnyTabKey[] }> = {
-  esg:   { s1: ["data", "builder", "action", "refrigerant", "compare"], s2: ["data2", "builder2", "action2", "compare2"] },
-  plant: { s1: ["data", "builder", "action"],                            s2: ["data2", "builder2", "action2"] },
-  cfo:   { s1: ["finance", "action", "compare"],                         s2: ["builder2", "action2", "compare2"] },
-  ceo:   { s1: ["overview", "compare"],                                  s2: ["overview2", "compare2"] },
+// Logical tabs visible per persona, in display order. ESG = everything.
+// Scope (1 vs 2) is chosen in-page on the dual-scope tabs, not here.
+const LENS: Record<Persona, TabKey[]> = {
+  esg:   ["data", "builder", "action", "refrigerant", "compare"],
+  plant: ["data", "builder", "action"],
+  cfo:   ["finance", "action", "compare"],
+  ceo:   ["overview", "compare"],
 };
 
-export function lensTabs(scope: Scope, persona: Persona): AnyTabKey[] {
-  return LENS[persona][scope === "s1" ? "s1" : "s2"];
+export function lensTabs(persona: Persona): TabKey[] {
+  return LENS[persona];
 }
 
-export function personaLanding(scope: Scope, persona: Persona): AnyTabKey {
-  return lensTabs(scope, persona)[0];
+export function personaLanding(persona: Persona): TabKey {
+  return LENS[persona][0];
 }
 
 export function isPersona(v: unknown): v is Persona {

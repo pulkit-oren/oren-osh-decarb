@@ -18,11 +18,6 @@ const TITLES: Record<string, { eyebrow: string; title: string }> = {
   finance: { eyebrow: "Finance", title: "Scope 1 business case" },
   refrigerant: { eyebrow: "Advisory", title: "Refrigerant advisor" },
   compare: { eyebrow: "Step 4", title: "Compare & track to target" },
-  overview2: { eyebrow: "Boardroom", title: "Scope 2 overview" },
-  data2: { eyebrow: "Step 1 · Baseline", title: "Activity data" },
-  builder2: { eyebrow: "Step 2", title: "Scope 2 Scenario Modeller" },
-  action2: { eyebrow: "Step 3", title: "Scope 2 action plan" },
-  compare2: { eyebrow: "Step 4", title: "Compare & track to target" },
 };
 
 export function Topbar({ scope, tab, persona, setPersona }: {
