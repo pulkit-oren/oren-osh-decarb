@@ -43,6 +43,7 @@ interface Scope2StoreShape {
     patch: Partial<EfficiencyAction> & Partial<GenerationAction>,
   ) => void;
   updateProcurement: (patch: Partial<ProcurementSettings>) => void;
+  setLevers: (updater: (prev: Scope2Levers) => Scope2Levers) => void;
   resetLevers: () => void;
   saveScenario: (name: string) => void;
   deleteScenario: (id: string) => void;
@@ -175,7 +176,7 @@ export function Scope2Provider({
     facilities, levers, scenarios, selectedYear, baseYear,
     setSelectedYear, setBaseYear,
     addFacility, addFacilityRecord, delFacility, updateFacility, copyFacilities,
-    updateFacilityAction, updateProcurement, resetLevers, saveScenario, deleteScenario,
+    updateFacilityAction, updateProcurement, setLevers: setLeversState, resetLevers, saveScenario, deleteScenario,
     result, baseFacilities, selectedFacilities, selectedBaseline,
   };
 
