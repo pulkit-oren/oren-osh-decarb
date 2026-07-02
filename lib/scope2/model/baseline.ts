@@ -1,6 +1,10 @@
 /* Baseline Scope 2 picture — load, cost, and location-based emissions per
-   facility before any levers. Pure: same inputs → same output. */
+   facility before any levers. Contract instrument records (VPPA / I-REC)
+   entered in Data input count as existing renewable coverage: they lower the
+   market-based baseline but are not physical load. Pure: same inputs → same
+   output. */
 
+import { contractCoverageByFacility, isContractRecord } from "./instruments";
 import type { Facility } from "./types";
 
 export interface FacilityBaseline {
@@ -31,7 +35,15 @@ export interface Scope2Baseline {
   isolatedLoadKwh: number;
 }
 
+/** All renewable kWh already covering a facility: the legacy per-facility
+ *  percentage plus this facility's share of its BU's VPPA/I-REC records,
+ *  capped at the facility's load. */
+export function coveredKwhOf(f: Facility, contractCov: Record<string, number>): number {
+  return Math.min(f.annualLoadKwh, existingCoveredKwh(f) + (contractCov[f.id] ?? 0));
+}
+
 export function baselineScope2(facilities: Facility[]): Scope2Baseline {
+  const contractCov = contractCoverageByFacility(facilities);
   const perFacility = facilities.map((f) => ({
     id: f.id,
     name: f.name,
@@ -41,15 +53,18 @@ export function baselineScope2(facilities: Facility[]): Scope2Baseline {
     isolated: f.isolated,
   }));
   const marketBaselineT = facilities.reduce(
-    (s, f) => s + (Math.max(0, f.annualLoadKwh - existingCoveredKwh(f)) * f.gridEf) / 1000, 0,
+    (s, f) => s + (Math.max(0, f.annualLoadKwh - coveredKwhOf(f, contractCov)) * f.gridEf) / 1000, 0,
   );
+  // Contract records (VPPA / I-REC) are coverage, not consumption — keep them
+  // out of the physical load and cost totals.
+  const physical = perFacility.filter((x) => !isContractRecord(x));
   return {
     perFacility,
-    totalLoadKwh: perFacility.reduce((s, x) => s + x.loadKwh, 0),
-    totalCost: perFacility.reduce((s, x) => s + x.costPerYear, 0),
+    totalLoadKwh: physical.reduce((s, x) => s + x.loadKwh, 0),
+    totalCost: physical.reduce((s, x) => s + x.costPerYear, 0),
     totalLocationT: perFacility.reduce((s, x) => s + x.locationT, 0),
     marketBaselineT,
-    existingContractedKwh: facilities.reduce((s, f) => s + existingCoveredKwh(f), 0),
+    existingContractedKwh: facilities.reduce((s, f) => s + coveredKwhOf(f, contractCov), 0),
     isolatedLoadKwh: perFacility.filter((x) => x.isolated).reduce((s, x) => s + x.loadKwh, 0),
   };
 }

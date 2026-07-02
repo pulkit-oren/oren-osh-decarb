@@ -6,7 +6,7 @@
    the deployed site). Pure except for the Storage it's handed.
    ============================================================ */
 
-import { loadRegistry, REGISTRY_KEY, scope1Key, scope2Key, type StorageLike } from "./helpers";
+import { esgKey, goalsKey, loadRegistry, REGISTRY_KEY, scope1Key, scope2Key, type StorageLike } from "./helpers";
 
 export interface DataBundle {
   app: "osh-decarb";
@@ -22,10 +22,10 @@ export function exportAllData(storage: StorageLike, now: number): DataBundle {
   const reg_raw = storage.getItem(REGISTRY_KEY);
   if (reg_raw) entries[REGISTRY_KEY] = reg_raw;
   for (const c of reg.companies) {
-    const s1 = storage.getItem(scope1Key(c.id));
-    if (s1 !== null) entries[scope1Key(c.id)] = s1;
-    const s2 = storage.getItem(scope2Key(c.id));
-    if (s2 !== null) entries[scope2Key(c.id)] = s2;
+    for (const key of [scope1Key(c.id), scope2Key(c.id), goalsKey(c.id), esgKey(c.id)]) {
+      const v = storage.getItem(key);
+      if (v !== null) entries[key] = v;
+    }
   }
   return { app: "osh-decarb", version: 1, exportedAt: now, entries };
 }

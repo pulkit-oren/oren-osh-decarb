@@ -29,6 +29,35 @@ export function applyDials2(facilities: Facility[], base: Scope2Levers, d: Balan
   return { byFacility, procurement };
 }
 
+/* ---------- Derived dials ----------
+   Computed from the per-facility levers (the single source of truth), so
+   fine-tuning a facility moves the dials — no drift. */
+
+export function deriveDials2(facilities: Facility[], levers: Scope2Levers): BalanceDials2 {
+  const fac = facilities.filter((f) => !f.excluded && f.gridEf > 0);
+
+  let effNum = 0, effDen = 0;
+  let kwpOn = 0, kwpCap = 0;
+  for (const f of fac) {
+    const acts = levers.byFacility[f.id] ?? defaultFacilityActions(f);
+    const e = acts.efficiency;
+    const effV = e.enabled ? (e.ledPct + e.motorPct + e.bmsPct) / 3 : 0;
+    effNum += effV * f.annualLoadKwh;
+    effDen += f.annualLoadKwh;
+    const cap = roofCapKwp(f);
+    if (cap > 0) {
+      kwpCap += cap;
+      if (acts.generation.enabled) kwpOn += Math.min(acts.generation.solarKwp, cap);
+    }
+  }
+  const p = levers.procurement;
+  return {
+    efficiencyPct: Math.round(effDen > 0 ? effNum / effDen : 0),
+    solarPct: Math.round(kwpCap > 0 ? (kwpOn / kwpCap) * 100 : 0),
+    procurementPct: p.enabled ? Math.round(Math.min(100, p.ppaPct + p.greenTariffPct + p.recPct)) : 0,
+  };
+}
+
 /** Indicative remaining-electricity mix (post-efficiency): grid vs renewable. */
 export function energyMix2(facilities: Facility[], levers: Scope2Levers): { gridKwh: number; renewableKwh: number } {
   let grid = 0, renew = 0;

@@ -13,6 +13,7 @@ import type { ComputeResult } from "@/lib/model";
 import { cn, fmt, fmtK, fmtMoney, fmtNum, pct } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
+import { CombinedCompare } from "./CombinedCompare";
 
 interface Col {
   id: string;
@@ -20,6 +21,7 @@ interface Col {
   result: ComputeResult;
   current?: boolean;
   savedAt?: number;
+  note?: string;
 }
 
 export function CompareTab() {
@@ -34,6 +36,7 @@ export function CompareTab() {
         id: s.id,
         name: s.name,
         savedAt: s.savedAt,
+        note: s.note,
         result: compute(baseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), s.settings, baseYear),
       })),
   ];
@@ -107,6 +110,9 @@ export function CompareTab() {
                         {new Date(c.savedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                       </div>
                     )}
+                    {c.note && (
+                      <div className="text-[10px] text-ink-soft font-normal normal-case max-w-[160px] truncate" title={c.note}>{c.note}</div>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -146,7 +152,7 @@ export function CompareTab() {
         {cols.map((c, idx) => (
           <Card key={c.id}>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-ink text-sm">{c.name}</h3>
+              <h3 className="font-semibold text-ink text-sm">{c.name}{c.note && <span className="block text-[11px] font-normal text-ink-soft truncate" title={c.note}>{c.note}</span>}</h3>
               <span className="flex items-center gap-1.5">
                 {c.result.kpis.onTrack2030 ? (
                   <span className="text-[11px] font-semibold text-brand-600 flex items-center gap-1"><Check size={12} /> on track 2030</span>
@@ -167,6 +173,8 @@ export function CompareTab() {
           </Card>
         ))}
       </div>
+
+      <CombinedCompare />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
+import { EsgProvider } from "@/lib/esg/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "../ActivityDataTab";
 import { FacilityDetailContent } from "@/components/scope2/DataInputTab";
@@ -19,7 +20,9 @@ function Wrapper({ children }: { children: React.ReactNode }) {
     <CompanyProvider>
       <ScenarioProvider>
         <Scope2Provider>
-          {children}
+          <EsgProvider>
+            {children}
+          </EsgProvider>
         </Scope2Provider>
       </ScenarioProvider>
     </CompanyProvider>
@@ -144,7 +147,7 @@ describe("ScopeScreen — Change 2: hide zero-raw-value rows", () => {
 
     render(
       <Wrapper>
-        <ActivityDataTab />
+        <ActivityDataTab initialNav={{ level: "home" }} />
       </Wrapper>,
     );
 

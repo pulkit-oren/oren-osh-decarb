@@ -19,6 +19,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
+import { EsgProvider } from "@/lib/esg/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "../ActivityDataTab";
 import { BuilderTab } from "../BuilderTab";
@@ -31,7 +32,9 @@ function Wrapper({ children }: { children: React.ReactNode }) {
     <CompanyProvider>
       <ScenarioProvider>
         <Scope2Provider>
-          {children}
+          <EsgProvider>
+            {children}
+          </EsgProvider>
         </Scope2Provider>
       </ScenarioProvider>
     </CompanyProvider>
@@ -79,7 +82,7 @@ async function openFuelEntryWithOpex(opex: number) {
 
   render(
     <Wrapper>
-      <ActivityDataTab />
+      <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
 

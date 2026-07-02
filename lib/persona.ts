@@ -13,11 +13,14 @@ export const PERSONAS: { key: Persona; label: string; sub: string; dotClass: str
 
 // Logical tabs visible per persona, in display order. ESG = everything.
 // Scope (1 vs 2) is chosen in-page on the dual-scope tabs, not here.
+// First entry = the persona's landing tab. Sidebar display order is governed by
+// the global NAV array (Sidebar.tsx), so "goals" still renders right after
+// Overview regardless of its position here.
 const LENS: Record<Persona, TabKey[]> = {
-  esg:   ["data", "builder", "action", "refrigerant", "compare"],
-  plant: ["data", "builder", "action"],
-  cfo:   ["finance", "action", "compare"],
-  ceo:   ["overview", "compare"],
+  esg:   ["data", "goals", "builder", "action", "refrigerant", "compare"],
+  plant: ["data", "goals", "builder", "action"],
+  cfo:   ["finance", "goals", "action", "compare"],
+  ceo:   ["overview", "goals", "compare"],
 };
 
 export function lensTabs(persona: Persona): TabKey[] {

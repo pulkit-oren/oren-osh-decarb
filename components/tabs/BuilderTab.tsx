@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Factory, Truck, Snowflake, RotateCcw, ChevronDown, Save, Trash2,
-  Zap, Fuel, AlertTriangle, Wrench, Info, Lightbulb, Scale,
+  Factory, Truck, Snowflake, RotateCcw, ChevronDown, Save,
+  Zap, Fuel, AlertTriangle, Wrench, Info, Lightbulb, Search,
 } from "lucide-react";
+import { combustionGrade, refrigerantGrade, type Grade } from "@/lib/data-quality";
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem, electrifyTip, fuelSwitchTip, flexFuelTip, gasSwitchTip, leakFixTip, type Suggestion, type SuggestedAction } from "@/lib/model/suggestions";
 import { outlivesAsset, retirementYear } from "@/lib/model/validate";
 import { useScenario } from "@/lib/store";
@@ -18,11 +19,18 @@ import { CURRENCY } from "@/lib/defaults";
 import type { CombustionAsset, FlexFuelAction, FuelSwitchAction, RefrigerantEra, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
 import { cn, fmt, fmtK, fmtMoney, fmtNum, pct } from "@/lib/utils";
 import { InfoTip } from "../ui/InfoTip";
-import { DeltaPill } from "../ui/DeltaPill";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, SelectField } from "@/components/tabs/activity/fields";
 import { groupByBu } from "@/lib/group-by-bu";
-import { applyDials, energyMix, suggestMix, type BalanceDials } from "@/lib/model/energy-balance";
+import { suggestAllSettings } from "@/lib/model/suggest-all";
+import { buildPathways } from "@/lib/model/pathways";
+import type { LeverSettings } from "@/lib/model/types";
+import { boardroomVariants } from "@/lib/boardroom-scenarios";
+import { ScenarioCalcPanel } from "./ScenarioCalcPanel";
+import { MiniTrajectory } from "@/components/charts/MiniTrajectory";
+import { LeverImpactList } from "@/components/ui/LeverImpactList";
+import { ScenarioList } from "@/components/ui/ScenarioList";
+import { diffFlat, diffLeverMaps, type DiffRow } from "@/lib/scenario-diff";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
 
@@ -79,6 +87,41 @@ function segStats(
   return { count: assets.length, active, abated };
 }
 
+/** What the suggestion engine could still cut on a source with no plan (t/yr). */
+function suggestedAbatementFor(seg: Seg, source: CombustionAsset | RefrigerationSystem, assumptions: ReturnType<typeof useScenario>["settings"]["assumptions"]): number {
+  if (seg === "refrigerant") {
+    const sys = source as RefrigerationSystem;
+    const st = suggestAllSettings([], [sys], { byAsset: {}, bySystem: {}, assumptions });
+    const acts = st.bySystem[sys.id];
+    if (!acts) return 0;
+    const after = applyRefrigerant(sys, {
+      transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0,
+      altRefrigerant: acts.gasSwitch.altRefrigerant,
+      leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
+    });
+    return Math.max(0, refrigerantCO2e(sys) - Math.max(0, after.newFugitiveT));
+  }
+  const a = source as CombustionAsset;
+  const st = suggestAllSettings([a], [], { byAsset: {}, bySystem: {}, assumptions });
+  const acts = st.byAsset[a.id];
+  if (!acts) return 0;
+  const res = applyAssetActions(a, acts, assumptions);
+  return res.scope1AbatementT + res.fuelAbatementT;
+}
+
+/** Small amber/grey pill when the underlying data isn't metered. */
+function GradeBadge({ grade }: { grade: Grade }) {
+  if (grade === "measured") return null;
+  return (
+    <span className={cn(
+      "text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5",
+      grade === "estimated" ? "bg-amber-50 text-amber-700" : "bg-surface-muted text-ink-faint",
+    )}>
+      {grade === "estimated" ? "Estimated" : "No data"}
+    </span>
+  );
+}
+
 function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset | RefrigerationSystem; onOpen: () => void }) {
   const { settings } = useScenario();
   let sub: string;
@@ -115,6 +158,8 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
     }
   }
   const hasPlan = !!(seg === "refrigerant" ? settings.bySystem[(source as RefrigerationSystem).id] : settings.byAsset[(source as CombustionAsset).id]);
+  const grade = seg === "refrigerant" ? refrigerantGrade(source as RefrigerationSystem) : combustionGrade(source as CombustionAsset);
+  const potential = !hasPlan && !excluded ? suggestedAbatementFor(seg, source, settings.assumptions) : 0;
 
   return (
     <button
@@ -128,39 +173,111 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-ink truncate">{source.name}</span>
           {excluded && <span className="text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Excluded</span>}
+          <GradeBadge grade={grade} />
         </div>
         <span className="text-[11px] text-ink-soft">{sub}</span>
       </div>
       <div className="text-right shrink-0">
-        <div className="text-sm font-extrabold tabular-nums text-brand-600">{hasPlan ? `−${fmt(abated)} t` : "—"}</div>
-        <div className="text-[10px] text-ink-faint">{hasPlan ? `${active} lever${active === 1 ? "" : "s"} on` : "No plan yet"}</div>
+        {hasPlan ? (
+          <>
+            <div className="text-sm font-extrabold tabular-nums text-brand-600">−{fmt(abated)} t</div>
+            <div className="text-[10px] text-ink-faint">{active} lever{active === 1 ? "" : "s"} on</div>
+          </>
+        ) : potential > 0.05 ? (
+          <>
+            <div className="text-sm font-extrabold tabular-nums text-ink-soft">≈−{fmt(potential)} t</div>
+            <div className="text-[10px] text-brand-700 font-semibold">available · no plan yet</div>
+          </>
+        ) : (
+          <>
+            <div className="text-sm font-extrabold tabular-nums text-ink-faint">—</div>
+            <div className="text-[10px] text-ink-faint">No plan yet</div>
+          </>
+        )}
       </div>
       <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
     </button>
   );
 }
 
+/* Per-source Scope 1 planning. The cross-scope "Balance to target" dials live
+   one level up in the BuilderHub. */
 export function BuilderTab() {
-  const [view, setView] = useState<"home" | "balance" | Seg | { seg: Seg; sourceId: string }>("home");
+  const [view, setView] = useState<"home" | Seg | { seg: Seg; sourceId: string }>("home");
   const [name, setName] = useState("");
 
-  if (view === "home") return <ModellerHome onOpen={setView} onOpenBalance={() => setView("balance")} name={name} setName={setName} />;
-  if (view === "balance") return <EnergyBalanceScreen onBack={() => setView("home")} />;
-  if (typeof view === "string") {
-    return <SegmentScreen seg={view} onBack={() => setView("home")} onOpenSource={(id) => setView({ seg: view, sourceId: id })} />;
-  }
-  return <SourceScenarioScreen seg={view.seg} sourceId={view.sourceId} onBack={() => setView(view.seg)} />;
+  return (
+    <div className="flex flex-col gap-4">
+      {view === "home" ? (
+        <ModellerHome onOpen={setView} name={name} setName={setName} />
+      ) : typeof view === "string" ? (
+        <SegmentScreen seg={view} onBack={() => setView("home")} onOpenSource={(id) => setView({ seg: view, sourceId: id })} />
+      ) : (
+        <SourceScenarioScreen seg={view.seg} sourceId={view.sourceId} onBack={() => setView(view.seg)} />
+      )}
+    </div>
+  );
 }
 
-function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Seg) => void; onOpenBalance: () => void; name: string; setName: (v: string) => void }) {
-  const { baseAssets, baseSystems, settings, result, scenarios, saveScenario, deleteScenario, setSettings, resetSettings, baseYear } = useScenario();
+function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; name: string; setName: (v: string) => void }) {
+  const { baseAssets, baseSystems, settings, result, scenarios, saveScenario, duplicateScenario, deleteScenario, setSettings, resetSettings, baseYear } = useScenario();
+  const [note, setNote] = useState("");
   const k = result.kpis;
   const segs = Object.keys(SEG_META) as Seg[];
+
+  const suggestAll = () => setSettings((p) => suggestAllSettings(baseAssets, baseSystems, p));
+  const applyVariant = (id: "bau" | "accelerated") => {
+    const v = boardroomVariants(settings).find((x) => x.id === id);
+    if (v) setSettings(() => v.settings);
+  };
+
+  // What the suggestion engine could still add on top of the current plan, per segment.
+  const suggestedSettings = useMemo(
+    () => suggestAllSettings(baseAssets, baseSystems, settings),
+    [baseAssets, baseSystems, settings],
+  );
+
+  type LM = Parameters<typeof diffLeverMaps>[0];
+  const diffRowsFor = (id: string): DiffRow[] => {
+    const s = scenarios.find((x) => x.id === id);
+    if (!s) return [];
+    const assetName = (aid: string) => baseAssets.find((a) => a.id === aid)?.name ?? aid;
+    const sysName = (sid: string) => baseSystems.find((sy) => sy.id === sid)?.name ?? sid;
+    return [
+      ...diffLeverMaps(settings.byAsset as unknown as LM, s.settings.byAsset as unknown as LM, assetName),
+      ...diffLeverMaps(settings.bySystem as unknown as LM, s.settings.bySystem as unknown as LM, sysName),
+      ...diffFlat(settings.assumptions, s.settings.assumptions, "Global assumptions"),
+    ];
+  };
+
   return (
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-10rem)]">
       <div className="rounded-xl3 border border-line/50 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60 px-5 py-4 shrink-0">
         <h1 className="text-xl font-extrabold text-ink">Scenario modeller</h1>
         <p className="text-sm text-ink-soft">Pick a segment to plan its levers — the live result updates on the right.</p>
+      </div>
+
+      <div className="rounded-xl3 border border-brand-200 bg-brand-50/50 shadow-card px-4 py-3 shrink-0 flex items-center gap-2 flex-wrap">
+        <Lightbulb size={16} className="text-brand-700 shrink-0" />
+        <span className="text-sm font-bold text-ink mr-1">Quick start</span>
+        <button onClick={suggestAll} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3 py-1.5 hover:bg-brand-600 transition-colors">
+          Suggest a plan for me
+        </button>
+        <button onClick={() => applyVariant("accelerated")} className="text-sm font-medium rounded-lg border border-brand-300 bg-white text-brand-700 px-3 py-1.5 hover:bg-brand-50 transition-colors" title="Push every enabled lever to full tilt by 2030">
+          Accelerated · 2030
+        </button>
+        <button onClick={() => applyVariant("bau")} className="text-sm font-medium rounded-lg border border-line bg-white text-ink-soft px-3 py-1.5 hover:border-brand-300 transition-colors" title="Switch every lever off — the do-nothing baseline">
+          Business as usual
+        </button>
+        <span className="text-[11px] text-ink-faint">
+          Suggest applies each source&apos;s recommended levers in one go — then fine-tune below.
+        </span>
+      </div>
+
+      <div className="shrink-0">
+        <Collapsible title="Pathway options — three strategies, scored with your data">
+          <PathwaysPanel onApply={(s) => setSettings(() => s)} />
+        </Collapsible>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr] gap-5 items-stretch lg:flex-1 lg:min-h-0">
@@ -169,6 +286,7 @@ function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Se
             const m = SEG_META[key];
             const Icon = m.icon;
             const st = segStats(key, baseAssets, baseSystems, settings);
+            const potential = Math.max(0, segStats(key, baseAssets, baseSystems, suggestedSettings).abated - st.abated);
             const color = FAMILY_COLORS[m.colorIdx];
             return (
               <button
@@ -182,6 +300,9 @@ function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Se
                 <div className="min-w-0 flex-1">
                   <span className="block text-xl font-extrabold text-ink truncate">{m.label}</span>
                   <span className="text-xs text-ink-soft">{st.count} asset{st.count === 1 ? "" : "s"} · {st.active} with a plan</span>
+                  {potential > 0.05 && (
+                    <span className="block text-[11px] font-semibold text-brand-700">≈−{fmt(potential)} t more available via suggestions</span>
+                  )}
                 </div>
                 <div className="text-right shrink-0 mr-1">
                   <div className="text-[9px] uppercase tracking-wide text-ink-soft font-bold">Abatement</div>
@@ -191,14 +312,6 @@ function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Se
               </button>
             );
           })}
-          <button onClick={onOpenBalance} className="group flex items-center gap-3 rounded-xl3 border-2 border-dashed border-brand-300 bg-brand-50/40 px-5 py-3 text-left hover:border-brand-400 hover:bg-brand-50 transition-colors shrink-0">
-            <span className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center shrink-0"><Scale size={18} className="text-brand-700" /></span>
-            <div className="min-w-0 flex-1">
-              <span className="block font-bold text-ink">Energy balance</span>
-              <span className="text-xs text-ink-soft">Balance the fuel / electricity / renewable mix to a target</span>
-            </div>
-            <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
-          </button>
         </div>
 
         <aside className="relative overflow-hidden rounded-xl3 bg-gradient-to-br from-brand-400 via-brand-500 to-brand-700 text-white shadow-card-lg p-6 flex flex-col">
@@ -212,27 +325,34 @@ function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Se
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Status</p><p className="text-xl font-extrabold">{k.onTrack2030 ? "On track" : "Behind"}</p></div>
           </div>
 
+          <div className="relative mt-4 space-y-3">
+            <MiniTrajectory rows={result.trajectory} label="Pathway to 2045" />
+            <LeverImpactList levers={result.levers} />
+          </div>
+
           <div className="relative mt-auto pt-5 border-t border-white/20">
             <div className="flex items-center gap-2">
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name this scenario…" className="flex-1 min-w-0 text-sm rounded-lg px-3 py-2 text-ink bg-white/95 focus:outline-none" />
-              <button onClick={() => { if (name.trim()) { saveScenario(name.trim()); setName(""); } }} disabled={!name.trim()} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-white text-brand-700 px-3 py-2 hover:bg-white/90 disabled:opacity-50">
+              <button onClick={() => { if (name.trim()) { saveScenario(name.trim(), note); setName(""); setNote(""); } }} disabled={!name.trim()} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-white text-brand-700 px-3 py-2 hover:bg-white/90 disabled:opacity-50">
                 <Save size={15} /> Save
               </button>
             </div>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional) — e.g. board option A…" className="mt-1.5 w-full text-xs rounded-lg px-3 py-1.5 text-ink bg-white/80 focus:outline-none placeholder:text-ink-faint" />
             {scenarios.length > 0 && (
-              <div className="mt-3 space-y-1.5 max-h-28 overflow-y-auto">
-                {scenarios.map((s) => (
-                  <div key={s.id} className="flex items-center gap-2 rounded-lg bg-white/12 px-2.5 py-1.5 text-sm">
-                    <span className="flex-1 truncate">{s.name}</span>
-                    <button onClick={() => setSettings(() => s.settings)} className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-white/20 hover:bg-white/30" title="Load">Load</button>
-                    <button onClick={() => deleteScenario(s.id)} aria-label="Delete scenario" className="text-white/70 hover:text-white"><Trash2 size={13} /></button>
-                  </div>
-                ))}
-              </div>
+              <ScenarioList
+                items={scenarios}
+                onLoad={(id) => { const s = scenarios.find((x) => x.id === id); if (s) setSettings(() => s.settings); }}
+                onDuplicate={duplicateScenario}
+                onDelete={deleteScenario}
+                diffRowsFor={diffRowsFor}
+              />
             )}
-            <button onClick={resetSettings} className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/80 hover:text-white">
-              <RotateCcw size={12} /> Reset all to default
-            </button>
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
+              <button onClick={resetSettings} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/80 hover:text-white">
+                <RotateCcw size={12} /> Reset all to default
+              </button>
+              <ScenarioCalcPanel tone="onDark" />
+            </div>
             <p className="mt-2 text-[10px] text-white/60">Base year FY {baseYear}-{String((baseYear + 1) % 100).padStart(2, "0")} · full pathway in Action plan.</p>
           </div>
         </aside>
@@ -241,74 +361,43 @@ function ModellerHome({ onOpen, onOpenBalance, name, setName }: { onOpen: (s: Se
   );
 }
 
-function EnergyBalanceScreen({ onBack }: { onBack: () => void }) {
-  const { baseAssets, baseSystems, settings, setSettings, result, baseYear } = useScenario();
-  const assets = baseAssets.filter((a) => !a.excluded);
-  const systems = baseSystems.filter((s) => !s.excluded);
-  const [dials, setDials] = useState<BalanceDials>({ electrifyPct: 0, renewablePct: settings.assumptions.renewableSourcingPct ?? 0, bioBlendPct: 0, refrigPct: 0 });
-  const [targetPct, setTargetPct] = useState(50);
-
-  const applyAndStore = (next: BalanceDials) => { setDials(next); setSettings((p) => applyDials(assets, systems, p, next)); };
-  const set = (k: keyof BalanceDials, v: number) => applyAndStore({ ...dials, [k]: v });
-  const onSuggest = () => applyAndStore(suggestMix(assets, systems, settings, targetPct / 100, baseYear));
-
-  const mix = energyMix(assets, settings);
-  const totalGJ = mix.fossilFuelGJ + mix.gridElecGJ + mix.renewableGJ;
-  const share = (v: number) => (totalGJ > 0 ? (v / totalGJ) * 100 : 0);
-  const k = result.kpis;
-  const onTrack = k.reduction2030 >= targetPct / 100;
+/* Three auto-built strategies (quick wins / balanced / max), each scored with
+   the real model — computed only while the collapsible is open. */
+function PathwaysPanel({ onApply }: { onApply: (s: LeverSettings) => void }) {
+  const { baseAssets, baseSystems, settings, baseYear } = useScenario();
+  const pathways = useMemo(
+    () => buildPathways(baseAssets, baseSystems, settings, baseYear),
+    [baseAssets, baseSystems, settings, baseYear],
+  );
 
   return (
-    <div className="screen-in flex flex-col gap-5">
-      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit"><ChevronDown size={16} className="rotate-90" /> Back to modeller</button>
-
-      <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60">
-        <h1 className="text-2xl font-extrabold text-ink leading-tight">Energy balance</h1>
-        <p className="text-sm text-ink-soft mt-0.5">Shift the fuel / electricity / renewable mix and watch Scope 1 move toward your target. Dials set the per-source levers — open any source to fine-tune.</p>
-      </div>
-
-      {/* result vs target */}
-      <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-        <label className="flex items-center gap-2 text-sm"><span className="text-ink-soft font-medium">Target</span>
-          <input type="number" value={targetPct} min={0} max={100} onChange={(e) => setTargetPct(Math.max(0, Math.min(100, Number(e.target.value))))} className="w-20 text-right tabular-nums rounded-lg border border-line px-2 py-1.5" /> <span className="text-ink-faint text-sm">% by 2030</span>
-        </label>
-        <div><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Reduction 2030</div><div className={cn("text-2xl font-extrabold tabular-nums", onTrack ? "text-brand-600" : "text-amber-600")}>{pct(k.reduction2030)}</div></div>
-        <div><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Net 2030</div><div className="text-2xl font-extrabold tabular-nums text-ink">{fmt(k.net2030)} t</div></div>
-        <div><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Total CAPEX</div><div className="text-2xl font-extrabold tabular-nums text-ink">{fmtMoney(k.totalCapex)}</div></div>
-        <span className={cn("ml-auto text-xs font-bold rounded-full px-3 py-1", onTrack ? "bg-brand-50 text-brand-700" : "bg-amber-50 text-amber-700")}>{onTrack ? "On track to target" : "Below target"}</span>
-      </div>
-
-      {/* mix bar */}
-      <DetailCard title="Energy mix">
-        <div className="flex h-3 rounded-full overflow-hidden bg-surface-muted">
-          <div className="h-full bg-slate-500" style={{ width: `${share(mix.fossilFuelGJ)}%` }} title="Fossil fuel" />
-          <div className="h-full bg-sky-500" style={{ width: `${share(mix.gridElecGJ)}%` }} title="Grid electricity" />
-          <div className="h-full bg-brand-500" style={{ width: `${share(mix.renewableGJ)}%` }} title="Renewable" />
+    <div className="flex flex-col divide-y divide-line/60">
+      {pathways.map((p) => (
+        <div key={p.id} className="flex items-center gap-4 py-3 flex-wrap">
+          <div className="min-w-[180px] flex-1">
+            <div className="font-bold text-ink text-sm">{p.name}</div>
+            <p className="text-[11px] text-ink-soft mt-0.5">{p.blurb}</p>
+          </div>
+          <div className="flex items-center gap-5 text-right">
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cut by 2030</div><div className="text-sm font-extrabold tabular-nums text-brand-600">{pct(p.kpis.reduction2030)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(p.kpis.totalCapex)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost / t</div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmt(p.kpis.costPerTonne)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Payback</div><div className="text-sm font-extrabold tabular-nums text-ink">{p.kpis.paybackYears != null ? `${fmtNum(p.kpis.paybackYears, 1)} yr` : "—"}</div></div>
+          </div>
+          <button
+            onClick={() => onApply(p.settings)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-brand-300 bg-white text-brand-700 px-3 py-1.5 hover:bg-brand-50 transition-colors shrink-0"
+          >
+            Apply {p.name}
+          </button>
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-500" /> Fossil fuel <strong className="tabular-nums">{Math.round(share(mix.fossilFuelGJ))}%</strong></span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-sky-500" /> Grid electricity <strong className="tabular-nums">{Math.round(share(mix.gridElecGJ))}%</strong></span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-brand-500" /> Renewable <strong className="tabular-nums">{Math.round(share(mix.renewableGJ))}%</strong></span>
-        </div>
-        <p className="text-[11px] text-ink-faint mt-2">Indicative energy split across Scope 1 fuel use. Scope 2 purchased electricity is managed on the Scope 2 side.</p>
-      </DetailCard>
-
-      {/* dials */}
-      <DetailCard title="Balance dials">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
-          <SliderField label="Electrify fossil energy" suffix="%" min={0} max={100} value={dials.electrifyPct} onChange={(v) => set("electrifyPct", v)} hint="Turns on electrification across feasible sources to ~this share (skips hard-to-electrify like kilns)." />
-          <SliderField label="Renewable sourcing" suffix="%" min={0} max={100} value={dials.renewablePct} onChange={(v) => set("renewablePct", v)} hint="Clean share of the new electricity (sets the global assumption)." />
-          <SliderField label="Bio-blend remaining fuel" suffix="%" min={0} max={100} value={dials.bioBlendPct} onChange={(v) => set("bioBlendPct", v)} hint="Drop-in bio blend on sources still on fuel (capped at each one's limit)." />
-          <SliderField label="Low-GWP refrigerant" suffix="%" min={0} max={100} value={dials.refrigPct} onChange={(v) => set("refrigPct", v)} hint="Transition share to the recommended low-GWP gas across cooling systems." />
-        </div>
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <button onClick={onSuggest} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Suggest a mix for {targetPct}% by 2030</button>
-          <span className="text-[11px] text-ink-faint">Heuristic: layers electrification first, then renewables, then bio-blend, then refrigerant — a starting point, not an optimum.</span>
-        </div>
-      </DetailCard>
+      ))}
+      <p className="text-[11px] text-ink-faint pt-3">Each option replaces the current plan — save the current one first if you want to keep it. Numbers use your entered data and assumptions.</p>
     </div>
   );
 }
+
+type SourceSort = "baseline" | "abatement" | "name";
 
 function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => void; onOpenSource: (id: string) => void }) {
   const { baseAssets, baseSystems, settings } = useScenario();
@@ -317,6 +406,30 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
   const color = FAMILY_COLORS[m.colorIdx];
   const st = segStats(seg, baseAssets, baseSystems, settings);
   const segAssets = baseAssets.filter((a) => a.category === seg);
+
+  const [q, setQ] = useState("");
+  const [onlyUnplanned, setOnlyUnplanned] = useState(false);
+  const [sort, setSort] = useState<SourceSort>("baseline");
+
+  const assetMetrics = (a: CombustionAsset) => {
+    const acts = settings.byAsset[a.id];
+    const planned = !!acts && (acts.electrify.enabled || acts.fuelSwitch.enabled || !!acts.flexFuel?.enabled);
+    const res = acts ? applyAssetActions(a, acts, settings.assumptions) : null;
+    return { baseline: combustionCO2e(a), abated: res ? res.scope1AbatementT + res.fuelAbatementT : 0, planned };
+  };
+  const visibleAssets = (assets: CombustionAsset[]) =>
+    assets
+      .filter((a) => a.name.toLowerCase().includes(q.trim().toLowerCase()))
+      .filter((a) => !onlyUnplanned || !assetMetrics(a).planned)
+      .sort((a, b) => {
+        if (sort === "name") return a.name.localeCompare(b.name);
+        const ma = assetMetrics(a), mb = assetMetrics(b);
+        return sort === "abatement" ? mb.abated - ma.abated : mb.baseline - ma.baseline;
+      });
+  const buRollup = (assets: CombustionAsset[]) => {
+    const ms = assets.map(assetMetrics);
+    return { abated: ms.reduce((s2, x) => s2 + x.abated, 0), planned: ms.filter((x) => x.planned).length, n: assets.length };
+  };
 
   return (
     <div className="screen-in flex flex-col gap-5">
@@ -336,20 +449,64 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
         </div>
       </div>
 
-      <LiveResult />
+      <div className="flex justify-end">
+        <ScenarioCalcPanel target={{ kind: "segment", seg }} />
+      </div>
 
       {seg === "refrigerant" ? (
         <RefrigerantControls onOpenSource={onOpenSource} />
       ) : segAssets.length === 0 ? (
         <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6"><p className="text-sm text-ink-faint">No {m.label.toLowerCase()} assets yet — add them in Data input.</p></div>
       ) : (
-        groupByBu(segAssets).map(([bu, assets]) => (
-          <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
-            <div className="flex flex-col gap-3">
-              {assets.map((a) => <SourceBox key={a.id} seg={seg} source={a} onOpen={() => onOpenSource(a.id)} />)}
+        <>
+          {segAssets.length > 5 && (
+            <div className="rounded-xl3 border border-line/60 bg-surface shadow-card px-4 py-3 flex items-center gap-4 flex-wrap">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search sources…"
+                  aria-label="Search sources"
+                  className="text-sm border border-line rounded-lg pl-8 pr-3 py-1.5 bg-white focus:outline-none focus:border-brand-400 w-52"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-ink-soft cursor-pointer">
+                <input type="checkbox" checked={onlyUnplanned} onChange={(e) => setOnlyUnplanned(e.target.checked)} className="w-4 h-4 accent-brand-500" />
+                No plan yet only
+              </label>
+              <label className="flex items-center gap-2 text-sm ml-auto">
+                <span className="text-ink-faint text-xs font-semibold uppercase tracking-wide">Sort</span>
+                <select value={sort} onChange={(e) => setSort(e.target.value as SourceSort)} aria-label="Sort sources" className="text-sm border border-line rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:border-brand-400">
+                  <option value="baseline">Biggest baseline</option>
+                  <option value="abatement">Biggest abatement</option>
+                  <option value="name">Name</option>
+                </select>
+              </label>
             </div>
-          </Collapsible>
-        ))
+          )}
+          {groupByBu(segAssets).map(([bu, assets]) => {
+            const shown = visibleAssets(assets);
+            if (shown.length === 0) return null;
+            const roll = buRollup(assets);
+            return (
+              <Collapsible
+                key={bu}
+                title={bu || "Company-wide"}
+                right={
+                  <span className="text-xs font-bold tabular-nums text-brand-600 normal-case tracking-normal">
+                    −{fmt(roll.abated)} t <span className="text-ink-faint font-medium">· {roll.planned}/{roll.n} planned</span>
+                  </span>
+                }
+                defaultOpen
+              >
+                <div className="flex flex-col gap-3">
+                  {shown.map((a) => <SourceBox key={a.id} seg={seg} source={a} onOpen={() => onOpenSource(a.id)} />)}
+                </div>
+              </Collapsible>
+            );
+          })}
+        </>
       )}
     </div>
   );
@@ -372,6 +529,7 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
         {back}
         <SuggestionCard kind="system" id={sys.id} />
         <SourceImpact kind="system" id={sys.id} />
+        <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "system", id: sys.id }} /></div>
         <SystemActionCard system={sys} />
         <AssumptionsCard seg="refrigerant" />
       </div>
@@ -393,6 +551,7 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
       </DetailCard>
       <SuggestionCard kind="asset" id={a.id} />
       <SourceImpact kind="asset" id={a.id} />
+      <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "asset", id: a.id }} /></div>
       <AssetActionCard asset={a} />
       <AssumptionsCard seg={seg} />
     </div>
@@ -476,6 +635,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
         color={eColor}
         enabled={e.enabled}
         onToggle={() => updateAction(asset.id, "electrify", { enabled: !e.enabled })}
+        info="Replace fuel-burning equipment or vehicles with electric ones (heat pump, electric boiler, EV). Emissions move off your fuel (Scope 1) onto electricity (Scope 2), which is cleaner and can be greened."
         className="lg:pr-7"
         warning={electrifyWarn ? (
           <p className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 text-[11px] font-medium">
@@ -553,7 +713,7 @@ function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
 
   if (!hasBio || !effectiveAlt) {
     return (
-      <ActionRow title="Fuel switch" sub="Bio / green blend" icon={Fuel} color={FAMILY_COLORS[2]} enabled={false} onToggle={() => {}} disabled className={rowClass}>
+      <ActionRow title="Fuel switch" sub="Bio / green blend" icon={Fuel} color={FAMILY_COLORS[2]} enabled={false} onToggle={() => {}} disabled className={rowClass} info="Blend a drop-in bio-fuel (biodiesel, ethanol, bio-CNG) into the existing equipment, up to the safe blend limit — cuts fossil CO₂ with no new kit.">
         <p className="text-sm text-ink-soft">
           No drop-in bio fuel for <strong>{FUELS[asset.fuelType].label}</strong>. Consider <strong>Electrification</strong>
           {asset.category === "mobile" ? " — or moving these vehicles to CNG / bio-CNG" : " — or biomass co-firing"}.
@@ -571,6 +731,7 @@ function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
       enabled={f.enabled}
       onToggle={() => updateAction(asset.id, "fuelSwitch", { enabled: !f.enabled })}
       className={rowClass}
+      info="Blend a drop-in bio-fuel (biodiesel, ethanol, bio-CNG) into the existing equipment, up to the safe blend limit — cuts fossil CO₂ with no new kit."
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
         <SliderField label="Blend percentage" value={Math.min(f.blendPct, maxBlend)} min={0} max={maxBlend} suffix="%" accent={FAMILY_COLORS[2]} onChange={(v) => updateAction(asset.id, "fuelSwitch", { blendPct: Math.min(maxBlend, v) })} hint={`Share of this asset's fuel energy replaced with ${ALT_FUELS[effectiveAlt].label}. Capped at ${maxBlend}% for existing equipment.`} />
@@ -620,6 +781,7 @@ function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
         color={FAMILY_COLORS[3]}
         enabled={flex.enabled}
         onToggle={() => set({ enabled: !flex.enabled })}
+        info="Replace specific vehicles with flex-fuel models that run high bio blends (E85/B100) beyond the normal drop-in limit. Counted per vehicle."
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 items-end">
           <Stepper
@@ -651,11 +813,11 @@ function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
 }
 
 function ActionRow({
-  title, sub, icon: Icon, color, enabled, onToggle, children, className, disabled, warning,
+  title, sub, icon: Icon, color, enabled, onToggle, children, className, disabled, warning, info,
 }: {
   title: string; sub: string; icon: React.ElementType; color: string;
   enabled: boolean; onToggle: () => void; children: ReactNode; className?: string; disabled?: boolean;
-  warning?: ReactNode;
+  warning?: ReactNode; info?: string;
 }) {
   return (
     <div className={cn("min-w-0", className)}>
@@ -663,7 +825,7 @@ function ActionRow({
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg grid place-items-center" style={{ background: `${color}1A` }}><Icon size={16} style={{ color }} /></div>
           <div>
-            <div className="font-semibold text-ink text-sm">{title}</div>
+            <div className="font-semibold text-ink text-sm flex items-center gap-1">{title}{info && <InfoTip text={info} />}</div>
             <div className="text-[11px] text-ink-faint">{sub}</div>
           </div>
         </div>
@@ -680,7 +842,23 @@ function ActionRow({
    ============================================================ */
 
 function RefrigerantControls({ onOpenSource }: { onOpenSource: (id: string) => void }) {
-  const { baseSystems, setSettings } = useScenario();
+  const { baseSystems, settings, setSettings } = useScenario();
+
+  const sysRollup = (systems: RefrigerationSystem[]) => {
+    let abated = 0, planned = 0;
+    for (const sys of systems) {
+      const acts = settings.bySystem[sys.id];
+      if (!acts) continue;
+      if (acts.gasSwitch.enabled || acts.leakFix.enabled) planned++;
+      const after = applyRefrigerant(sys, {
+        transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0,
+        altRefrigerant: acts.gasSwitch.altRefrigerant,
+        leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
+      });
+      abated += Math.max(0, refrigerantCO2e(sys) - Math.max(0, after.newFugitiveT));
+    }
+    return { abated, planned, n: systems.length };
+  };
   const applyPreset = (gasOn: boolean, transitionPct: number, leakImprovementPct: number) =>
     setSettings((p) => {
       const bySystem = { ...p.bySystem };
@@ -711,13 +889,25 @@ function RefrigerantControls({ onOpenSource }: { onOpenSource: (id: string) => v
       {baseSystems.length === 0 ? (
         <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6"><p className="text-sm text-ink-faint">No cooling systems yet — add them in Data input.</p></div>
       ) : (
-        groupByBu(baseSystems).map(([bu, systems]) => (
-          <Collapsible key={bu} title={bu || "Company-wide"} defaultOpen>
-            <div className="flex flex-col gap-3">
-              {systems.map((sys) => <SourceBox key={sys.id} seg="refrigerant" source={sys} onOpen={() => onOpenSource(sys.id)} />)}
-            </div>
-          </Collapsible>
-        ))
+        groupByBu(baseSystems).map(([bu, systems]) => {
+          const roll = sysRollup(systems);
+          return (
+            <Collapsible
+              key={bu}
+              title={bu || "Company-wide"}
+              right={
+                <span className="text-xs font-bold tabular-nums text-brand-600 normal-case tracking-normal">
+                  −{fmt(roll.abated)} t <span className="text-ink-faint font-medium">· {roll.planned}/{roll.n} planned</span>
+                </span>
+              }
+              defaultOpen
+            >
+              <div className="flex flex-col gap-3">
+                {systems.map((sys) => <SourceBox key={sys.id} seg="refrigerant" source={sys} onOpen={() => onOpenSource(sys.id)} />)}
+              </div>
+            </Collapsible>
+          );
+        })
       )}
     </>
   );
@@ -805,6 +995,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
           enabled={gs.enabled}
           onToggle={() => updateSystemAction(system.id, "gasSwitch", { enabled: !gs.enabled })}
           className="lg:pr-7"
+          info="Move a cooling system to a lower-GWP refrigerant, so each kilogram that leaks causes far less warming."
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
             <div className="md:col-span-2">
@@ -850,6 +1041,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
           color="#D9774B"
           enabled={lf.enabled}
           onToggle={() => updateSystemAction(system.id, "leakFix", { enabled: !lf.enabled })}
+          info="Better maintenance and monitoring cut how much refrigerant leaks each year — usually the cheapest win."
           className="max-lg:border-t max-lg:border-line/70 max-lg:mt-4 max-lg:pt-4 lg:border-l lg:border-line/70 lg:pl-7"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
@@ -882,35 +1074,6 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
 /* ============================================================
    Global assumptions
    ============================================================ */
-
-/** Sticky live projection — instant feedback while you build. */
-function LiveResult() {
-  const { result } = useScenario();
-  const k = result.kpis;
-  return (
-    <div className="sticky top-2 z-20 rounded-xl2 bg-surface shadow-card border border-line/60 px-4 py-3 flex items-center gap-x-5 gap-y-2 flex-wrap">
-      <div className="flex items-center gap-2">
-        <span className={cn("w-2.5 h-2.5 rounded-full", k.onTrack2030 ? "bg-brand-500" : "bg-amber-500")} />
-        <span className="text-sm font-semibold text-ink">Live projection</span>
-      </div>
-      <Metric label="Reduction 2030" value={pct(k.reduction2030)} />
-      <Metric label="Net 2030" value={`${fmtK(k.net2030)} t`} />
-      <Metric label="Cost / t" value={`${CURRENCY}${fmt(k.costPerTonne)}`} />
-      <Metric label="Years to target" value={k.yearsToTarget ? String(k.yearsToTarget) : "—"} />
-      <DeltaPill tone={k.onTrack2030 ? "good" : "warn"}>{k.onTrack2030 ? "On track" : "Behind"}</DeltaPill>
-      <span className="text-[11px] text-ink-faint ml-auto hidden md:inline">Full pathway & charts → Action plan</span>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold leading-none">{label}</div>
-      <div className="text-sm font-extrabold text-ink tabular-nums mt-0.5">{value}</div>
-    </div>
-  );
-}
 
 function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) {
   const { baseAssets, baseSystems, setSettings } = useScenario();
@@ -956,12 +1119,12 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
 
 function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
   const { baseAssets, baseSystems, settings } = useScenario();
-  let baseT = 0, afterT = 0, capex = 0;
+  let baseT = 0, afterT = 0, capex = 0, spillT = 0;
   if (kind === "asset") {
     const a = baseAssets.find((x) => x.id === id); if (!a) return null;
     baseT = combustionCO2e(a);
     const acts = settings.byAsset[a.id];
-    if (acts) { const res = applyAssetActions(a, acts, settings.assumptions); afterT = Math.max(0, baseT - res.scope1AbatementT - res.fuelAbatementT); capex = capexForAsset(a, acts); }
+    if (acts) { const res = applyAssetActions(a, acts, settings.assumptions); afterT = Math.max(0, baseT - res.scope1AbatementT - res.fuelAbatementT); capex = capexForAsset(a, acts); spillT = res.scope2AddedT; }
     else afterT = baseT;
   } else {
     const s = baseSystems.find((x) => x.id === id); if (!s) return null;
@@ -983,6 +1146,12 @@ function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Cut</div><div className="text-lg font-extrabold tabular-nums text-brand-600">−{fmt(abated)} t · {pct(cut)}</div></div>
+          {spillT > 0.05 && (
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">Scope 2 added <InfoTip text="Electrification moves this energy onto electricity — after your renewable-sourcing assumption, this much lands as Scope 2. Green the supply to shrink it." /></div>
+              <div className="text-lg font-extrabold tabular-nums text-amber-600">+{fmt(spillT)} t</div>
+            </div>
+          )}
           <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-lg font-extrabold tabular-nums text-ink">{fmtMoney(capex)}</div></div>
         </div>
       </div>

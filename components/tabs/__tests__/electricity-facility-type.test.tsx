@@ -4,16 +4,17 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { CompanyProvider } from "@/lib/company/store";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
+import { EsgProvider } from "@/lib/esg/store";
 import { ActivityDataTab } from "../ActivityDataTab";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
-    <CompanyProvider><ScenarioProvider><Scope2Provider>{children}</Scope2Provider></ScenarioProvider></CompanyProvider>
+    <CompanyProvider><ScenarioProvider><Scope2Provider><EsgProvider>{children}</EsgProvider></Scope2Provider></ScenarioProvider></CompanyProvider>
   );
 }
 
 async function openCompanyElectricity() {
-  render(<Wrapper><ActivityDataTab /></Wrapper>);
+  render(<Wrapper><ActivityDataTab initialNav={{ level: "home" }} /></Wrapper>);
   fireEvent.click(screen.getByText("Electricity").closest("button")!);
   fireEvent.click(screen.getByText(/Company-wide/i).closest("button")!);
 }

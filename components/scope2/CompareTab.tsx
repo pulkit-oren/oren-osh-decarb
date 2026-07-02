@@ -8,6 +8,7 @@ import { useScope2 } from "@/lib/scope2/store";
 import { cn, fmt, fmtMoney, pct } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
 import { Scope2TrajectoryChart, type TrajectorySeries } from "./TrajectoryChart";
+import { CombinedCompare } from "@/components/tabs/CombinedCompare";
 
 const SERIES_COLORS = [FAMILY_COLORS[5], FAMILY_COLORS[0], FAMILY_COLORS[7]];
 const MAX_COMPARE = 3;
@@ -80,6 +81,7 @@ export function Scope2CompareTab() {
                       aria-label={`Compare ${sc.name}`}
                     />
                     <span className={cn("font-medium truncate", on ? "text-ink" : "text-ink-soft")}>{sc.name}</span>
+                    {sc.note && <span className="text-xs text-ink-soft truncate" title={sc.note}>· {sc.note}</span>}
                     <span className="text-xs text-ink-faint shrink-0">{new Date(sc.savedAt).toLocaleDateString()}</span>
                   </label>
                   <button onClick={() => deleteScenario(sc.id)} className="text-ink-faint hover:text-red-500 p-1 shrink-0" aria-label={`Delete ${sc.name}`}>
@@ -135,6 +137,8 @@ export function Scope2CompareTab() {
         <CardHeader title="Trajectory overlay" subtitle="Location-based solid · market-based dashed, per scenario, against BAU and the SBTi 1.5°C target." />
         <Scope2TrajectoryChart series={series} height={320} />
       </Card>
+
+      <CombinedCompare />
     </div>
   );
 }

@@ -45,7 +45,8 @@ interface Scope2StoreShape {
   updateProcurement: (patch: Partial<ProcurementSettings>) => void;
   setLevers: (updater: (prev: Scope2Levers) => Scope2Levers) => void;
   resetLevers: () => void;
-  saveScenario: (name: string) => void;
+  saveScenario: (name: string, note?: string) => void;
+  duplicateScenario: (id: string) => void;
   deleteScenario: (id: string) => void;
 
   result: Scope2ComputeResult;
@@ -160,11 +161,20 @@ export function Scope2Provider({
   const updateProcurement = (patch: Partial<ProcurementSettings>) =>
     setLeversState((p) => ({ ...p, procurement: { ...p.procurement, ...patch } }));
   const resetLevers = () => setLeversState(DEFAULT_SCOPE2_LEVERS);
-  const saveScenario = (name: string) =>
+  const saveScenario = (name: string, note?: string) =>
     setScenarios((prev) => [
       ...prev,
-      { id: uniqueId("s2c", prev.map((s) => s.id)), name, levers: clone(levers), savedAt: Date.now() },
+      { id: uniqueId("s2c", prev.map((s) => s.id)), name, note: note?.trim() || undefined, levers: clone(levers), savedAt: Date.now() },
     ]);
+  const duplicateScenario = (id: string) =>
+    setScenarios((prev) => {
+      const src = prev.find((s) => s.id === id);
+      if (!src) return prev;
+      return [
+        ...prev,
+        { id: uniqueId("s2c", prev.map((s) => s.id)), name: `${src.name} (copy)`, note: src.note, levers: clone(src.levers), savedAt: Date.now() },
+      ];
+    });
   const deleteScenario = (id: string) => setScenarios((prev) => prev.filter((s) => s.id !== id));
 
   const baseFacilities = useMemo(() => resolveFacilities(facilities, baseYear), [facilities, baseYear]);
@@ -176,7 +186,7 @@ export function Scope2Provider({
     facilities, levers, scenarios, selectedYear, baseYear,
     setSelectedYear, setBaseYear,
     addFacility, addFacilityRecord, delFacility, updateFacility, copyFacilities,
-    updateFacilityAction, updateProcurement, setLevers: setLeversState, resetLevers, saveScenario, deleteScenario,
+    updateFacilityAction, updateProcurement, setLevers: setLeversState, resetLevers, saveScenario, duplicateScenario, deleteScenario,
     result, baseFacilities, selectedFacilities, selectedBaseline,
   };
 

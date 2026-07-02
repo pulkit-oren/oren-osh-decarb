@@ -3,21 +3,24 @@
 import { useEffect, useState } from "react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
+import { GoalsProvider } from "@/lib/goals/store";
+import { EsgProvider } from "@/lib/esg/store";
+import type { GoalCategory } from "@/lib/goals/types";
 import { CompanyProvider, useCompany } from "@/lib/company/store";
-import { scope1Key, scope2Key } from "@/lib/company/helpers";
+import { esgKey, goalsKey, scope1Key, scope2Key } from "@/lib/company/helpers";
 import { DEFAULT_PERSONA, isPersona, lensTabs, personaLanding, personaStorageKey, type Persona } from "@/lib/persona";
 import { cn } from "@/lib/utils";
 import { Sidebar, MobileNav, type Scope, type TabKey } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CeoOverviewTab } from "./tabs/CeoOverviewTab";
 import { ActivityDataTab } from "./tabs/ActivityDataTab";
-import { BuilderTab } from "./tabs/BuilderTab";
+import { BuilderHub } from "./tabs/BuilderHub";
 import { ActionPlanTab } from "./tabs/ActionPlanTab";
 import { CfoFinanceTab } from "./tabs/CfoFinanceTab";
 import { RefrigerantTab } from "./tabs/RefrigerantTab";
 import { CompareTab } from "./tabs/CompareTab";
+import { GoalsTab } from "./tabs/GoalsTab";
 import { Scope2CeoOverviewTab } from "./scope2/CeoOverviewTab";
-import { Scope2BuilderTab } from "./scope2/BuilderTab";
 import { Scope2ActionPlanTab } from "./scope2/ActionPlanTab";
 import { Scope2CompareTab } from "./scope2/CompareTab";
 
@@ -65,8 +68,20 @@ function ScopeToggle({ scope, setScope }: { scope: Scope; setScope: (s: Scope) =
 function CompanyScopedShell() {
   const { activeId } = useCompany();
   const [scope, setScope] = useState<Scope>("s1"); // only affects the dual-scope tabs
-  const [tab, setTab] = useState<TabKey>("data");  // single logical nav; default = Activity data
+  const [tab, setTabState] = useState<TabKey>("data");  // single logical nav; default = Activity data
   const [persona, setPersonaState] = useState<Persona>(DEFAULT_PERSONA);
+  // Set when a Data-input screen deep-links into goal creation (e.g. Water →
+  // "Set a water goal"); cleared as soon as the user navigates elsewhere.
+  const [goalSetupCategory, setGoalSetupCategory] = useState<GoalCategory | null>(null);
+
+  const setTab = (t: TabKey) => {
+    if (t !== "goals") setGoalSetupCategory(null);
+    setTabState(t);
+  };
+  const openGoalSetup = (c: GoalCategory) => {
+    setGoalSetupCategory(c);
+    setTabState("goals");
+  };
 
   // Hydrate this company's saved persona on mount / company switch.
   useEffect(() => {
@@ -86,11 +101,14 @@ function CompanyScopedShell() {
   }, [persona]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // These tabs exist separately for Scope 1 (fuel) and Scope 2 (electricity).
-  const dualScope = tab === "overview" || tab === "builder" || tab === "action" || tab === "compare";
+  // The builder is unified (Balance to target → Scope 1 → Scope 2 inside).
+  const dualScope = tab === "overview" || tab === "action" || tab === "compare";
 
   return (
     <ScenarioProvider key={`s1-${activeId}`} storageKey={scope1Key(activeId)}>
       <Scope2Provider key={`s2-${activeId}`} storageKey={scope2Key(activeId)}>
+        <GoalsProvider key={`g-${activeId}`} storageKey={goalsKey(activeId)}>
+        <EsgProvider key={`e-${activeId}`} storageKey={esgKey(activeId)}>
         <div className="flex min-h-screen p-3 md:p-4 gap-4">
           <Sidebar tab={tab} setTab={setTab} persona={persona} />
           <main className="flex-1 min-w-0">
@@ -99,8 +117,9 @@ function CompanyScopedShell() {
               {dualScope && <ScopeToggle scope={scope} setScope={setScope} />}
               <div key={`${tab}-${dualScope ? scope : "x"}`} className="tab-fade mt-6">
                 {tab === "overview" && (scope === "s1" ? <CeoOverviewTab /> : <Scope2CeoOverviewTab />)}
-                {tab === "data" && <ActivityDataTab />}
-                {tab === "builder" && (scope === "s1" ? <BuilderTab /> : <Scope2BuilderTab />)}
+                {tab === "goals" && <GoalsTab persona={persona} setupCategory={goalSetupCategory ?? undefined} />}
+                {tab === "data" && <ActivityDataTab onOpenGoalSetup={openGoalSetup} />}
+                {tab === "builder" && <BuilderHub />}
                 {tab === "action" && (scope === "s1" ? <ActionPlanTab /> : <Scope2ActionPlanTab />)}
                 {tab === "finance" && <CfoFinanceTab />}
                 {tab === "refrigerant" && <RefrigerantTab />}
@@ -110,6 +129,8 @@ function CompanyScopedShell() {
           </main>
           <MobileNav tab={tab} setTab={setTab} persona={persona} />
         </div>
+        </EsgProvider>
+        </GoalsProvider>
       </Scope2Provider>
     </ScenarioProvider>
   );

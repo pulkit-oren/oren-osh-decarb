@@ -103,4 +103,6 @@ export interface Scope2Scenario {
   name: string;
   levers: Scope2Levers;
   savedAt: number;
+  /** Optional context ("board option A", "CFO-constrained"…). */
+  note?: string;
 }

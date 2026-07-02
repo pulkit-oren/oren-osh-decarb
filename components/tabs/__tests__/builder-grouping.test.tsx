@@ -87,10 +87,11 @@ describe("BuilderTab — home screen (Task 1)", () => {
         <BuilderTab />
       </Wrapper>,
     );
-    // All three segment card labels must be visible on the home
-    expect(screen.getByText("Mobile")).toBeTruthy();
-    expect(screen.getByText("Stationary")).toBeTruthy();
-    expect(screen.getByText("Refrigerant")).toBeTruthy();
+    // All three segment card labels must be visible on the home (the lever
+    // impact list on the aside may repeat a label like "Refrigerant")
+    expect(screen.getAllByText("Mobile").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Stationary").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Refrigerant").length).toBeGreaterThan(0);
     // The results side-panel header must also be visible
     expect(screen.getByText("Live projection")).toBeTruthy();
   });
@@ -301,54 +302,8 @@ describe("BuilderTab — SuggestionCard and SourceImpact on source scenario scre
   });
 });
 
-// ── Energy Balance screen (Task 2 Energy Balance) ──────────────────────────────
-
-describe("BuilderTab — Energy Balance screen", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it("shows Energy balance entry on modeller home", () => {
-    render(
-      <Wrapper>
-        <BuilderTab />
-      </Wrapper>,
-    );
-    expect(screen.getByText("Energy balance")).toBeTruthy();
-  });
-
-  it("clicking Energy balance navigates to the EnergyBalanceScreen with Balance dials card and dial labels", () => {
-    seedMobileAssets();
-    render(
-      <Wrapper>
-        <BuilderTab />
-      </Wrapper>,
-    );
-    fireEvent.click(screen.getByText("Energy balance"));
-    // Balance dials card title
-    expect(screen.getByText("Balance dials")).toBeTruthy();
-    // Four dial labels
-    expect(screen.getByText("Electrify fossil energy")).toBeTruthy();
-    expect(screen.getByText("Renewable sourcing")).toBeTruthy();
-    expect(screen.getByText("Bio-blend remaining fuel")).toBeTruthy();
-    expect(screen.getByText("Low-GWP refrigerant")).toBeTruthy();
-    // Suggest button
-    expect(screen.getByText(/Suggest a mix/i)).toBeTruthy();
-  });
-
-  it("clicking Suggest a mix does not crash and shows Reduction 2030 readout", () => {
-    seedMobileAssets();
-    render(
-      <Wrapper>
-        <BuilderTab />
-      </Wrapper>,
-    );
-    fireEvent.click(screen.getByText("Energy balance"));
-    fireEvent.click(screen.getByText(/Suggest a mix/i));
-    // Reduction 2030 label must remain visible after suggest
-    expect(screen.getByText(/Reduction 2030/i)).toBeTruthy();
-  });
-});
+// The Balance-to-target screen moved up to the BuilderHub (cross-scope) —
+// see components/tabs/__tests__/builder-hub.test.tsx.
 
 // ── End-use / vehicle-equipment-type selector on source scenario screen ─────────
 

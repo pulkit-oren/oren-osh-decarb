@@ -3,6 +3,7 @@
 import { Flame, Droplets, Mountain, Snowflake, Zap, Wind, Award, Sun, Leaf, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FuelFamily } from "@/lib/activity-groups";
+import { INSTRUMENTS } from "@/lib/scope2/model/instruments";
 import type { Facility } from "@/lib/scope2/model/types";
 
 // ─── Navigation state ──────────────────────────────────────────────────────
@@ -10,7 +11,11 @@ import type { Facility } from "@/lib/scope2/model/types";
 export type CatKey = FuelFamily | "refrigerants" | "electricity";
 
 export type Nav =
-  | { level: "home" }
+  | { level: "esg" }          // E / S / G pillar pre-screen (entry point)
+  | { level: "env" }          // Environment pillar: Energy & Emissions / Water / Waste
+  | { level: "water" }
+  | { level: "waste" }
+  | { level: "home" }         // Energy & Emissions home (the Scope 1+2 categories)
   | { level: "bus" }
   | { level: "scope"; scope: 1 | 2 }
   | { level: "biogenic" }
@@ -36,10 +41,10 @@ export const CAT_DEFS: CatDef[] = [
 // ─── Electricity sub-types ─────────────────────────────────────────────────
 
 export const ELEC_TYPES: { key: string; label: string; gridEf: number; sub: string; icon: React.ElementType }[] = [
-  { key: "grid", label: "Purchased electricity", gridEf: 0.71, sub: "Metered grid supply (location-based)", icon: Zap },
-  { key: "vppa", label: "Virtual PPA", gridEf: 0, sub: "Contractual renewable — market-based", icon: Wind },
-  { key: "solar", label: "Solar onsite", gridEf: 0, sub: "On-site solar generation, self-consumed", icon: Sun },
-  { key: "irec", label: "I-REC", gridEf: 0, sub: "Renewable energy certificates", icon: Award },
+  { key: "grid", label: INSTRUMENTS.grid, gridEf: 0.71, sub: "Metered grid supply (location-based)", icon: Zap },
+  { key: "vppa", label: INSTRUMENTS.vppa, gridEf: 0, sub: "Contractual renewable — lowers market-based Scope 2", icon: Wind },
+  { key: "solar", label: INSTRUMENTS.solar, gridEf: 0, sub: "On-site solar generation, self-consumed", icon: Sun },
+  { key: "irec", label: INSTRUMENTS.irec, gridEf: 0, sub: "Certificates — lower market-based Scope 2", icon: Award },
 ];
 
 // ─── Visual maps ───────────────────────────────────────────────────────────

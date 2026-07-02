@@ -1,17 +1,18 @@
 "use client";
 
-import { Database, Wand2, ClipboardList, Snowflake, GitCompare, Settings, LogOut, LayoutDashboard, Wallet } from "lucide-react";
+import { Database, Wand2, ClipboardList, Snowflake, GitCompare, Settings, LogOut, LayoutDashboard, Wallet, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { lensTabs, type Persona } from "@/lib/persona";
 import { OrenLogo } from "./ui/OrenLogo";
 
 export type Scope = "s1" | "s2";
-export type TabKey = "overview" | "data" | "builder" | "action" | "finance" | "refrigerant" | "compare";
+export type TabKey = "overview" | "goals" | "data" | "builder" | "action" | "finance" | "refrigerant" | "compare";
 // Kept as an alias so existing imports stay valid; navigation is now a single logical set.
 export type AnyTabKey = TabKey;
 
 const NAV: { key: TabKey; icon: React.ElementType; label: string }[] = [
   { key: "overview", icon: LayoutDashboard, label: "Overview" },
+  { key: "goals", icon: Target, label: "Goals & targets" },
   { key: "data", icon: Database, label: "Data input" },
   { key: "builder", icon: Wand2, label: "Scenario modeller" },
   { key: "action", icon: ClipboardList, label: "Action plan" },

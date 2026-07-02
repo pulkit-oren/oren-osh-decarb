@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import { ScenarioProvider } from "@/lib/store";
+import { Scope2Provider } from "@/lib/scope2/store";
 import { ActionPlanTab } from "../ActionPlanTab";
 import { RefrigerantTab } from "../RefrigerantTab";
 import { CompareTab } from "../CompareTab";
@@ -22,7 +23,9 @@ describe("scope 1 decision tabs render", () => {
     it(`${name} renders with seeded defaults`, () => {
       const html = renderToString(
         <ScenarioProvider>
-          <Tab />
+          <Scope2Provider>
+            <Tab />
+          </Scope2Provider>
         </ScenarioProvider>,
       );
       expect(html.length).toBeGreaterThan(500);
@@ -82,15 +85,20 @@ describe("scope 1 decision tabs render", () => {
     expect(html).not.toContain("phase out</span>");
   });
 
-  it("CompareTab shows the trimmed board metrics", () => {
+  it("CompareTab shows the trimmed board metrics and the combined S1+S2 pathway", () => {
     const html = renderToString(
       <ScenarioProvider>
-        <CompareTab />
+        <Scope2Provider>
+          <CompareTab />
+        </Scope2Provider>
       </ScenarioProvider>,
     );
     expect(html).toContain("Which option wins?");
     expect(html).toContain("Emissions cut by 2030");
     expect(html).toContain("Investment needed");
     expect(html).not.toContain("Biogenic CO₂"); // technical row removed from the board table
+    expect(html).toContain("Combined Scope 1 + 2 pathway");
+    expect(html).toContain("Scope 1 plan");
+    expect(html).toContain("Scope 2 plan");
   });
 });

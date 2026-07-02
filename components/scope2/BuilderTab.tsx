@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  ChevronDown, RotateCcw, Save, Trash2,
-  Lightbulb, Sun, Landmark, Scale, Info,
+  ChevronDown, RotateCcw, Save,
+  Lightbulb, Sun, Landmark, Info,
 } from "lucide-react";
+import { facilityGrade } from "@/lib/data-quality";
 import { useScope2 } from "@/lib/scope2/store";
 import { defaultFacilityActions } from "@/lib/scope2/defaults";
 import { facilityTypeProfile } from "@/lib/scope2/model/facility-type";
@@ -16,19 +17,34 @@ import {
   efficiencyTip,
   solarTip,
 } from "@/lib/scope2/model/suggestions";
-import { applyDials2, energyMix2, suggestMix2, type BalanceDials2 } from "@/lib/scope2/model/energy-balance";
+import { suggestAllScope2 } from "@/lib/scope2/model/suggest-all";
+import { buildScope2Pathways } from "@/lib/scope2/model/pathways";
+import type { Scope2Levers } from "@/lib/scope2/model/types";
 import { groupByBu } from "@/lib/group-by-bu";
 import { cn, fmt, fmtMoney, pct } from "@/lib/utils";
 import { DetailCard, SliderField, ToggleSwitch, NumField, SelectField } from "@/components/tabs/activity/fields";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
+import { Scope2CalcPanel } from "./Scope2CalcPanel";
+import { PillNav } from "@/components/ui/PillNav";
+import { InfoTip } from "../ui/InfoTip";
+import { MiniTrajectory } from "@/components/charts/MiniTrajectory";
+import { LeverImpactList } from "@/components/ui/LeverImpactList";
+import { ScenarioList } from "@/components/ui/ScenarioList";
+import { diffFlat, diffLeverMaps, type DiffRow } from "@/lib/scenario-diff";
+import { simplePayback } from "@/lib/model/finance";
 
 /* ============================================================
    Router
    ============================================================ */
 
+type S2Mode = "facilities" | "procurement";
+
+/* Per-facility Scope 2 planning + portfolio procurement. The cross-scope
+   "Balance to target" dials live one level up in the BuilderHub. */
 export function Scope2BuilderTab() {
   const { baseFacilities } = useScope2();
-  const [view, setView] = useState<"home" | "procurement" | "balance" | { facilityId: string }>("home");
+  const [mode, setMode] = useState<S2Mode>("facilities");
+  const [view, setView] = useState<"home" | { facilityId: string }>("home");
   const [name, setName] = useState("");
 
   if (!baseFacilities.length) {
@@ -39,23 +55,54 @@ export function Scope2BuilderTab() {
     );
   }
 
-  if (view === "home") return <Scope2Home setView={setView} name={name} setName={setName} />;
-  if (view === "procurement") return <ProcurementScreen onBack={() => setView("home")} />;
-  if (view === "balance") return <Scope2EnergyBalanceScreen onBack={() => setView("home")} />;
-  return <FacilityScenarioScreen facilityId={view.facilityId} onBack={() => setView("home")} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <PillNav
+        items={[
+          { key: "facilities", label: "Plan by source" },
+          { key: "procurement", label: "Procurement" },
+        ]}
+        active={mode}
+        onSelect={(k) => setMode(k as S2Mode)}
+      />
+
+      {mode === "procurement" ? (
+        <ProcurementScreen />
+      ) : view === "home" ? (
+        <Scope2Home setView={setView} name={name} setName={setName} />
+      ) : (
+        <FacilityScenarioScreen facilityId={view.facilityId} onBack={() => setView("home")} />
+      )}
+    </div>
+  );
 }
 
 /* ============================================================
    Home screen — facility boxes + results panel
    ============================================================ */
 
-type SetView = (v: "home" | "procurement" | "balance" | { facilityId: string }) => void;
+type SetView = (v: "home" | { facilityId: string }) => void;
 
 function Scope2Home({ setView, name, setName }: { setView: SetView; name: string; setName: (v: string) => void }) {
-  const { baseFacilities, levers, result, scenarios, saveScenario, deleteScenario, resetLevers, setLevers, baseYear } = useScope2();
+  const { baseFacilities, levers, result, scenarios, saveScenario, duplicateScenario, deleteScenario, resetLevers, setLevers, baseYear } = useScope2();
+  const [note, setNote] = useState("");
   const k = result.kpis;
   const gridFacilities = baseFacilities.filter((f) => !f.excluded && f.gridEf > 0);
   const groups = groupByBu(gridFacilities);
+
+  // What the suggestion engine could still add per facility (shown on unplanned rows).
+  const suggestedLevers = useMemo(() => suggestAllScope2(baseFacilities, levers), [baseFacilities, levers]);
+
+  type LM = Parameters<typeof diffLeverMaps>[0];
+  const diffRowsFor = (id: string): DiffRow[] => {
+    const s = scenarios.find((x) => x.id === id);
+    if (!s) return [];
+    const facName = (fid: string) => baseFacilities.find((f) => f.id === fid)?.name ?? fid;
+    return [
+      ...diffLeverMaps(levers.byFacility as unknown as LM, s.levers.byFacility as unknown as LM, facName),
+      ...diffFlat(levers.procurement, s.levers.procurement, "Procurement"),
+    ];
+  };
 
   return (
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-10rem)]">
@@ -64,16 +111,45 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
         <p className="text-sm text-ink-soft">Pick a facility to plan efficiency and solar levers — the live result updates on the right.</p>
       </div>
 
+      <div className="rounded-xl3 border border-brand-200 bg-brand-50/50 shadow-card px-4 py-3 shrink-0 flex items-center gap-2 flex-wrap">
+        <Lightbulb size={16} className="text-brand-700 shrink-0" />
+        <span className="text-sm font-bold text-ink mr-1">Quick start</span>
+        <button
+          onClick={() => setLevers((p) => suggestAllScope2(baseFacilities, p))}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3 py-1.5 hover:bg-brand-600 transition-colors"
+        >
+          Suggest a plan for me
+        </button>
+        <span className="text-[11px] text-ink-faint">
+          Applies each facility&apos;s recommended efficiency + solar in one go — procurement stays yours to set.
+        </span>
+      </div>
+
+      <div className="shrink-0">
+        <Collapsible title="Pathway options — three strategies, scored with your data">
+          <Scope2PathwaysPanel onApply={(l) => setLevers(() => l)} />
+        </Collapsible>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr] gap-5 items-stretch lg:flex-1 lg:min-h-0">
         {/* left: facility list + action tiles */}
         <div className="flex flex-col gap-3 min-h-0">
           {groups.length === 0 ? (
             <p className="text-sm text-ink-faint">No grid-supplied facilities.</p>
           ) : (
-            groups.map(([bu, facilities]) => (
+            groups.map(([bu, facilities]) => {
+              const groupAbated = facilities.reduce((s, f) => {
+                const acts = levers.byFacility[f.id] ?? defaultFacilityActions(f);
+                const { baseT, afterT } = facilityImpact(f, acts);
+                return s + (baseT - afterT);
+              }, 0);
+              return (
               <div key={bu || "__cw__"}>
                 {groups.length > 1 && (
-                  <div className="text-[10px] uppercase tracking-wider text-ink-faint font-semibold mb-1.5">{bu || "Company-wide"}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-ink-faint font-semibold mb-1.5 flex items-baseline gap-2">
+                    {bu || "Company-wide"}
+                    {groupAbated > 0.05 && <span className="text-brand-600 font-bold tabular-nums normal-case tracking-normal text-xs">−{fmt(groupAbated)} t</span>}
+                  </div>
                 )}
                 <div className="flex flex-col gap-2">
                   {facilities.map((f) => {
@@ -83,6 +159,11 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
                     const activeLevers = (acts.efficiency.enabled ? 1 : 0) + (acts.generation.enabled ? 1 : 0);
                     const prof = facilityTypeProfile(f);
                     const sub = `${prof?.label ?? "Facility"}${f.bu ? ` · ${f.bu}` : ""}`;
+                    const sugActs = suggestedLevers.byFacility[f.id];
+                    const potential = activeLevers === 0 && sugActs
+                      ? Math.max(0, facilityImpact(f, sugActs).baseT - facilityImpact(f, sugActs).afterT)
+                      : 0;
+                    const noData = facilityGrade(f) !== "measured";
                     return (
                       <button
                         key={f.id}
@@ -95,16 +176,27 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-ink truncate">{f.name}</span>
                             {f.isolated && <span className="text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Isolated</span>}
+                            {noData && <span className="text-[10px] font-semibold uppercase tracking-wide bg-surface-muted text-ink-faint rounded-full px-2 py-0.5">No data</span>}
                           </div>
                           <span className="text-[11px] text-ink-soft">{sub}</span>
                         </div>
                         <div className="text-right shrink-0">
-                          <div className="text-sm font-extrabold tabular-nums text-brand-600">
-                            {activeLevers > 0 ? `−${fmt(abated)} t` : "—"}
-                          </div>
-                          <div className="text-[10px] text-ink-faint">
-                            {activeLevers > 0 ? `${activeLevers} lever${activeLevers === 1 ? "" : "s"} on` : "No plan yet"}
-                          </div>
+                          {activeLevers > 0 ? (
+                            <>
+                              <div className="text-sm font-extrabold tabular-nums text-brand-600">−{fmt(abated)} t</div>
+                              <div className="text-[10px] text-ink-faint">{activeLevers} lever{activeLevers === 1 ? "" : "s"} on</div>
+                            </>
+                          ) : potential > 0.05 ? (
+                            <>
+                              <div className="text-sm font-extrabold tabular-nums text-ink-soft">≈−{fmt(potential)} t</div>
+                              <div className="text-[10px] text-brand-700 font-semibold">available · no plan yet</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-sm font-extrabold tabular-nums text-ink-faint">—</div>
+                              <div className="text-[10px] text-ink-faint">No plan yet</div>
+                            </>
+                          )}
                         </div>
                         <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
                       </button>
@@ -112,38 +204,10 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
                   })}
                 </div>
               </div>
-            ))
+              );
+            })
           )}
 
-          {/* Procurement tile */}
-          <button
-            onClick={() => setView("procurement")}
-            className="group flex items-center gap-3 rounded-xl3 border-2 border-dashed border-brand-300 bg-brand-50/40 px-5 py-3 text-left hover:border-brand-400 hover:bg-brand-50 transition-colors shrink-0"
-          >
-            <span className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center shrink-0">
-              <Landmark size={18} className="text-brand-700" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className="block font-bold text-ink">Procurement</span>
-              <span className="text-xs text-ink-soft">PPA, green tariff, RECs — portfolio-wide market instruments</span>
-            </div>
-            <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
-          </button>
-
-          {/* Energy balance tile */}
-          <button
-            onClick={() => setView("balance")}
-            className="group flex items-center gap-3 rounded-xl3 border-2 border-dashed border-brand-300 bg-brand-50/40 px-5 py-3 text-left hover:border-brand-400 hover:bg-brand-50 transition-colors shrink-0"
-          >
-            <span className="w-9 h-9 rounded-xl bg-brand-100 grid place-items-center shrink-0">
-              <Scale size={18} className="text-brand-700" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className="block font-bold text-ink">Energy balance</span>
-              <span className="text-xs text-ink-soft">Balance efficiency / solar / procurement mix to a 2030 target</span>
-            </div>
-            <ChevronDown size={18} className="-rotate-90 text-ink-soft/70 group-hover:text-ink transition-colors shrink-0" />
-          </button>
         </div>
 
         {/* right: results panel */}
@@ -170,6 +234,11 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
             </div>
           </div>
 
+          <div className="relative mt-4 space-y-3">
+            <MiniTrajectory rows={result.trajectoryMarket} label="Market-based pathway to 2045" />
+            <LeverImpactList levers={result.levers} />
+          </div>
+
           <div className="relative mt-auto pt-5 border-t border-white/20">
             <div className="flex items-center gap-2">
               <input
@@ -179,39 +248,69 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
                 className="flex-1 min-w-0 text-sm rounded-lg px-3 py-2 text-ink bg-white/95 focus:outline-none"
               />
               <button
-                onClick={() => { if (name.trim()) { saveScenario(name.trim()); setName(""); } }}
+                onClick={() => { if (name.trim()) { saveScenario(name.trim(), note); setName(""); setNote(""); } }}
                 disabled={!name.trim()}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-white text-brand-700 px-3 py-2 hover:bg-white/90 disabled:opacity-50"
               >
                 <Save size={15} /> Save
               </button>
             </div>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional) — e.g. board option A…" className="mt-1.5 w-full text-xs rounded-lg px-3 py-1.5 text-ink bg-white/80 focus:outline-none placeholder:text-ink-faint" />
             {scenarios.length > 0 && (
-              <div className="mt-3 space-y-1.5 max-h-28 overflow-y-auto">
-                {scenarios.map((s) => (
-                  <div key={s.id} className="flex items-center gap-2 rounded-lg bg-white/12 px-2.5 py-1.5 text-sm">
-                    <span className="flex-1 truncate">{s.name}</span>
-                    <button
-                      onClick={() => setLevers(() => s.levers)}
-                      className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-white/20 hover:bg-white/30"
-                      title="Load"
-                    >
-                      Load
-                    </button>
-                    <button onClick={() => deleteScenario(s.id)} aria-label="Delete scenario" className="text-white/70 hover:text-white">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <ScenarioList
+                items={scenarios}
+                onLoad={(id) => { const s = scenarios.find((x) => x.id === id); if (s) setLevers(() => s.levers); }}
+                onDuplicate={duplicateScenario}
+                onDelete={deleteScenario}
+                diffRowsFor={diffRowsFor}
+              />
             )}
-            <button onClick={resetLevers} className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/80 hover:text-white">
-              <RotateCcw size={12} /> Reset all to default
-            </button>
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
+              <button onClick={resetLevers} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/80 hover:text-white">
+                <RotateCcw size={12} /> Reset all to default
+              </button>
+              <Scope2CalcPanel tone="onDark" target={{ kind: "all" }} />
+            </div>
             <p className="mt-2 text-[10px] text-white/60">Base year FY {baseYear}–{String((baseYear + 1) % 100).padStart(2, "0")} · full pathway in Action plan.</p>
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+/* Three auto-built Scope 2 strategies (efficiency-first / balanced / RE100),
+   each scored with the real model — computed only while the collapsible is open. */
+function Scope2PathwaysPanel({ onApply }: { onApply: (l: Scope2Levers) => void }) {
+  const { baseFacilities, levers, baseYear } = useScope2();
+  const pathways = useMemo(
+    () => buildScope2Pathways(baseFacilities, levers, baseYear),
+    [baseFacilities, levers, baseYear],
+  );
+
+  return (
+    <div className="flex flex-col divide-y divide-line/60">
+      {pathways.map((p) => (
+        <div key={p.id} className="flex items-center gap-4 py-3 flex-wrap">
+          <div className="min-w-[180px] flex-1">
+            <div className="font-bold text-ink text-sm">{p.name}</div>
+            <p className="text-[11px] text-ink-soft mt-0.5">{p.blurb}</p>
+          </div>
+          <div className="flex items-center gap-5 text-right">
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cut by 2030</div><div className="text-sm font-extrabold tabular-nums text-brand-600">{pct(p.kpis.reduction2030)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Market net</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmt(p.kpis.marketNowT)} t</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(p.kpis.totalCapex)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">OPEX Δ / yr</div><div className={cn("text-sm font-extrabold tabular-nums", p.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-ink")}>{fmtMoney(p.kpis.annualOpexDelta)}</div></div>
+          </div>
+          <button
+            onClick={() => onApply(p.levers)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-brand-300 bg-white text-brand-700 px-3 py-1.5 hover:bg-brand-50 transition-colors shrink-0"
+          >
+            Apply {p.name}
+          </button>
+        </div>
+      ))}
+      <p className="text-[11px] text-ink-faint pt-3">Each option replaces the current plan — save the current one first if you want to keep it. Market-based numbers include your entered VPPA / I-REC coverage.</p>
     </div>
   );
 }
@@ -241,6 +340,7 @@ function FacilityScenarioScreen({ facilityId, onBack }: { facilityId: string; on
 
       <Scope2SuggestionCard facilityId={facilityId} />
       <FacilityImpact facilityId={facilityId} />
+      <div className="flex justify-end -mt-2"><Scope2CalcPanel target={{ kind: "facility", id: facilityId }} /></div>
       <EfficiencyCard facilityId={facilityId} />
       <SolarCard facilityId={facilityId} />
     </div>
@@ -299,7 +399,7 @@ function Scope2SuggestionCard({ facilityId }: { facilityId: string }) {
    ============================================================ */
 
 function FacilityImpact({ facilityId }: { facilityId: string }) {
-  const { baseFacilities, levers } = useScope2();
+  const { baseFacilities, levers, result } = useScope2();
   const f = baseFacilities.find((x) => x.id === facilityId);
   if (!f) return null;
   const acts = levers.byFacility[f.id] ?? defaultFacilityActions(f);
@@ -308,6 +408,10 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
   const abated = baseT - afterT;
   const cutFraction = baseT > 0 ? abated / baseT : 0;
   const barW = baseT > 0 ? Math.max(4, Math.round((afterT / baseT) * 100)) : 100;
+  // Live running-cost picture for THIS facility's levers (efficiency + solar).
+  const pf = result.perFacility[f.id];
+  const annualSaving = (acts.efficiency.enabled ? pf?.eff.opexSaving ?? 0 : 0) + (acts.generation.enabled ? pf?.gen.opexSaving ?? 0 : 0);
+  const payback = simplePayback(capex, annualSaving);
 
   return (
     <div className="rounded-xl3 border border-line/60 bg-surface shadow-card px-5 py-4">
@@ -328,6 +432,16 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</p>
           <p className="text-lg font-extrabold tabular-nums text-ink">{fmtMoney(capex)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">OPEX / yr <InfoTip text="Annual running-cost change from these levers — avoided grid electricity and export credits. Negative = saving." /></p>
+          <p className={cn("text-lg font-extrabold tabular-nums", annualSaving > 0 ? "text-brand-600" : "text-ink")}>
+            {annualSaving > 0 ? `saves ${fmtMoney(annualSaving)}` : "±0"}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">Payback <InfoTip text="Simple payback: CAPEX ÷ annual saving." /></p>
+          <p className="text-lg font-extrabold tabular-nums text-ink">{payback != null ? `${payback.toFixed(1)} yr` : "—"}</p>
         </div>
       </div>
       <div className="h-2 rounded-full bg-surface-muted overflow-hidden">
@@ -356,7 +470,7 @@ function EfficiencyCard({ facilityId }: { facilityId: string }) {
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <Lightbulb size={16} className="text-brand-600" />
-          <span className="font-semibold text-ink text-sm">Energy efficiency · {f.name}</span>
+          <span className="font-semibold text-ink text-sm flex items-center gap-1">Energy efficiency · {f.name} <InfoTip text="Use less electricity for the same output — LED lighting, high-efficiency motors/VFDs, and building-management systems. Cuts both location- and market-based emissions." /></span>
         </div>
         <ToggleSwitch
           on={eff.enabled}
@@ -438,7 +552,7 @@ function SolarCard({ facilityId }: { facilityId: string }) {
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <Sun size={16} className="text-amber-500" />
-          <span className="font-semibold text-ink text-sm">On-site generation · {f.name}</span>
+          <span className="font-semibold text-ink text-sm flex items-center gap-1">On-site generation · {f.name} <InfoTip text="Generate your own electricity on-site with rooftop solar (plus optional battery), displacing grid power. Cuts both location- and market-based emissions." /></span>
         </div>
         <ToggleSwitch
           on={gen.enabled}
@@ -511,27 +625,31 @@ function SolarCard({ facilityId }: { facilityId: string }) {
    Procurement screen — portfolio-wide
    ============================================================ */
 
-function ProcurementScreen({ onBack }: { onBack: () => void }) {
+function ProcurementScreen({ onBack }: { onBack?: () => void }) {
   const { levers, result, updateProcurement } = useScope2();
   const p = levers.procurement;
   const procSum = p.ppaPct + p.greenTariffPct + p.recPct;
 
   return (
     <div className="screen-in flex flex-col gap-5">
-      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
-        <ChevronDown size={16} className="rotate-90" /> Back to facilities
-      </button>
+      {onBack && (
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
+          <ChevronDown size={16} className="rotate-90" /> Back to facilities
+        </button>
+      )}
 
       <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60">
         <h1 className="text-2xl font-extrabold text-ink leading-tight">Procurement</h1>
         <p className="text-sm text-ink-soft mt-0.5">Market instruments covering the grid draw across all facilities. Moves the market-based number only — location-based stays physical.</p>
       </div>
 
+      <div className="flex justify-end"><Scope2CalcPanel target={{ kind: "procurement" }} /></div>
+
       <DetailCard title="Procurement (all facilities)">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <Landmark size={16} className="text-brand-600" />
-            <span className="font-semibold text-ink text-sm">Renewable procurement · portfolio-wide</span>
+            <span className="font-semibold text-ink text-sm flex items-center gap-1">Renewable procurement · portfolio-wide <InfoTip text="Buy renewable electricity via PPAs, green tariffs or RECs. Lowers your market-based emissions across all facilities without changing physical grid use." /></span>
           </div>
           <ToggleSwitch
             on={p.enabled}
@@ -606,6 +724,11 @@ function ProcurementScreen({ onBack }: { onBack: () => void }) {
           </div>
 
           <div className="rounded-xl bg-surface-muted px-3 py-2.5 text-xs text-ink-soft space-y-0.5">
+            {result.kpis.existingContractedKwh > 0 && (
+              <p className="text-brand-700 font-medium">
+                Already contracted {fmt(result.kpis.existingContractedKwh)} kWh (VPPA / I-REC entered in Data input) — counted in the market-based baseline; the sliders below add on top.
+              </p>
+            )}
             <p>Addressable load {fmt(result.procurement.addressableKwh)} kWh · covered {fmt(result.procurement.coveredKwh)} kWh</p>
             <p className="font-semibold text-ink">
               Procurement cost {fmtMoney(result.procurement.annualCost)} / yr
@@ -618,125 +741,3 @@ function ProcurementScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-/* ============================================================
-   Energy balance screen (Task 4)
-   ============================================================ */
-
-export function Scope2EnergyBalanceScreen({ onBack }: { onBack: () => void }) {
-  const { baseFacilities, levers, result, setLevers, baseYear } = useScope2();
-  const facilities = baseFacilities.filter((f) => !f.excluded);
-  const [dials, setDials] = useState<BalanceDials2>({ efficiencyPct: 0, solarPct: 0, procurementPct: 0 });
-  const [targetPct, setTargetPct] = useState(50);
-
-  const applyAndStore = (next: BalanceDials2) => {
-    setDials(next);
-    setLevers((p) => applyDials2(facilities, p, next));
-  };
-  const set = (k: keyof BalanceDials2, v: number) => applyAndStore({ ...dials, [k]: v });
-  const onSuggest = () => applyAndStore(suggestMix2(facilities, levers, targetPct / 100, baseYear));
-
-  const mix = energyMix2(facilities, levers);
-  const totalKwh = mix.gridKwh + mix.renewableKwh;
-  const share = (v: number) => (totalKwh > 0 ? (v / totalKwh) * 100 : 0);
-  const k = result.kpis;
-  const onTrack = k.reduction2030 >= targetPct / 100;
-
-  return (
-    <div className="screen-in flex flex-col gap-5">
-      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
-        <ChevronDown size={16} className="rotate-90" /> Back to facilities
-      </button>
-
-      <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60">
-        <h1 className="text-2xl font-extrabold text-ink leading-tight">Energy balance</h1>
-        <p className="text-sm text-ink-soft mt-0.5">Shift efficiency / solar / procurement and watch Scope 2 move toward your target. Dials set portfolio-wide levers — open any facility or Procurement to fine-tune.</p>
-      </div>
-
-      {/* result vs target */}
-      <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-5 flex flex-wrap items-center gap-x-8 gap-y-3">
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-ink-soft font-medium">Target</span>
-          <input
-            type="number"
-            value={targetPct}
-            min={0}
-            max={100}
-            onChange={(e) => setTargetPct(Math.max(0, Math.min(100, Number(e.target.value))))}
-            className="w-20 text-right tabular-nums rounded-lg border border-line px-2 py-1.5"
-          />
-          <span className="text-ink-faint text-sm">% by 2030</span>
-        </label>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Reduction 2030</div>
-          <div className={cn("text-2xl font-extrabold tabular-nums", onTrack ? "text-brand-600" : "text-amber-600")}>{pct(k.reduction2030)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Market-based net</div>
-          <div className="text-2xl font-extrabold tabular-nums text-ink">{fmt(k.marketNowT)} t</div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Total CAPEX</div>
-          <div className="text-2xl font-extrabold tabular-nums text-ink">{fmtMoney(k.totalCapex)}</div>
-        </div>
-        <span className={cn("ml-auto text-xs font-bold rounded-full px-3 py-1", onTrack ? "bg-brand-50 text-brand-700" : "bg-amber-50 text-amber-700")}>
-          {onTrack ? "On track to target" : "Below target"}
-        </span>
-      </div>
-
-      {/* mix bar */}
-      <DetailCard title="Energy mix">
-        <div className="flex h-3 rounded-full overflow-hidden bg-surface-muted">
-          <div className="h-full bg-sky-500" style={{ width: `${share(mix.gridKwh)}%` }} title="Grid electricity" />
-          <div className="h-full bg-brand-500" style={{ width: `${share(mix.renewableKwh)}%` }} title="Renewable" />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-sky-500" /> Grid electricity <strong className="tabular-nums">{Math.round(share(mix.gridKwh))}%</strong></span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-brand-500" /> Renewable (on-site + procured) <strong className="tabular-nums">{Math.round(share(mix.renewableKwh))}%</strong></span>
-        </div>
-        <p className="text-[11px] text-ink-faint mt-2">Indicative electricity split after efficiency and on-site generation. Procurement (PPA/RECs) shifts grid draw into the renewable share.</p>
-      </DetailCard>
-
-      {/* dials */}
-      <DetailCard title="Balance dials">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
-          <SliderField
-            label="Efficiency %"
-            suffix="%"
-            min={0}
-            max={100}
-            value={dials.efficiencyPct}
-            onChange={(v) => set("efficiencyPct", v)}
-            hint="Applies LED/VFD/BMS efficiency at this percentage across all facilities."
-          />
-          <SliderField
-            label="Solar %"
-            suffix="%"
-            min={0}
-            max={100}
-            value={dials.solarPct}
-            onChange={(v) => set("solarPct", v)}
-            hint="Deploys solar PV at this share of each facility's roof capacity."
-          />
-          <SliderField
-            label="Procurement clean %"
-            suffix="%"
-            min={0}
-            max={100}
-            value={dials.procurementPct}
-            onChange={(v) => set("procurementPct", v)}
-            hint="Covers this share of the portfolio grid draw via PPA/green-tariff/RECs."
-          />
-        </div>
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <button
-            onClick={onSuggest}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors"
-          >
-            Suggest a mix for {targetPct}% by 2030
-          </button>
-          <span className="text-[11px] text-ink-faint">Heuristic order: efficiency first, then solar, then procurement — a starting point, not an optimum.</span>
-        </div>
-      </DetailCard>
-    </div>
-  );
-}

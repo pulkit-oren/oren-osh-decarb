@@ -291,6 +291,8 @@ export interface Scenario {
   name: string;
   settings: LeverSettings;
   savedAt: number;
+  /** Optional context ("board option A", "CFO-constrained"…). */
+  note?: string;
 }
 
 /* ---------- Multi-year data entry (FY 2021 → 2027) ---------- */

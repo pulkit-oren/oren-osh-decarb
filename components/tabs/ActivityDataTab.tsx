@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
+import { useEsg } from "@/lib/esg/store";
 import { useCompany } from "@/lib/company/store";
+import type { GoalCategory } from "@/lib/goals/types";
 import { FUELS, REFRIGERANTS } from "@/lib/model/factors";
 import { combustionBreakdown, combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { fuelFamily, type FuelFamily } from "@/lib/activity-groups";
@@ -13,6 +15,10 @@ import type { Facility } from "@/lib/scope2/model/types";
 
 import { CAT_DEFS, ELEC_TYPES, facCO2e, newId, type Nav, type CatKey, type CatDef } from "./activity/shared";
 import { useBuConfig } from "./activity/useBuConfig";
+import { EsgScreen } from "./activity/EsgScreen";
+import { EnvironmentScreen } from "./activity/EnvironmentScreen";
+import { WaterScreen } from "./activity/WaterScreen";
+import { WasteScreen } from "./activity/WasteScreen";
 import { HomeScreen } from "./activity/HomeScreen";
 import { BusinessUnitsScreen } from "./activity/BusinessUnitsScreen";
 import { CategoryScreen } from "./activity/CategoryScreen";
@@ -22,20 +28,27 @@ import { EntryScreen } from "./activity/EntryScreen";
 import { ScopeScreen } from "./activity/ScopeScreen";
 import { BiogenicScreen } from "./activity/BiogenicScreen";
 
-export function ActivityDataTab() {
+export function ActivityDataTab({
+  onOpenGoalSetup,
+  initialNav = { level: "esg" },
+}: {
+  /** Deep link into Goals → Set up with a category preselected (wired by the Shell). */
+  onOpenGoalSetup?: (category: GoalCategory) => void;
+  /** Start on a specific screen — tests use this to skip the E/S/G pre-screen. */
+  initialNav?: Nav;
+}) {
   const s1 = useScenario();
   const s2 = useScope2();
+  const esg = useEsg();
   const { activeId } = useCompany();
-  const [nav, setNav] = useState<Nav>({ level: "home" });
+  const [nav, setNav] = useState<Nav>(initialNav);
   const { buReg, addBu, removeBu } = useBuConfig(activeId);
 
-  // The Data-input financial-year picker IS the scenario base year — keep the
-  // working/selected year in sync with it on both scopes.
-  const year = s1.baseYear;
-  const setYear = (y: number) => {
-    s1.setBaseYear(y); s1.setSelectedYear(y);
-    s2.setBaseYear(y); s2.setSelectedYear(y);
-  };
+  // The Data-input picker chooses WHICH financial year you're entering data for
+  // (the selected/working year), independent of the base year (set in the top
+  // bar). Kept in sync across both scopes.
+  const year = s1.selectedYear;
+  const setYear = (y: number) => { s1.setSelectedYear(y); s2.setSelectedYear(y); };
 
   const b1 = s1.selectedBaseline;
   const b2 = s2.selectedBaseline;
@@ -99,6 +112,53 @@ export function ActivityDataTab() {
   const facById = (id: string) => s2.selectedFacilities.find((f) => f.id === id);
 
   // ── Route ─────────────────────────────────────────────────────────────────
+
+  if (nav.level === "esg") {
+    return <EsgScreen setNav={setNav} />;
+  }
+
+  if (nav.level === "env") {
+    return (
+      <EnvironmentScreen
+        year={year}
+        setNav={setNav}
+        totalCo2T={scope1T + scope2T}
+        totalSources={totalSources}
+        water={esg.water[year]}
+        waste={esg.waste[year]}
+      />
+    );
+  }
+
+  if (nav.level === "water") {
+    return (
+      <WaterScreen
+        year={year}
+        setYear={setYear}
+        fyYears={FY_YEARS}
+        water={esg.water[year]}
+        setWithdrawal={esg.setWaterWithdrawal}
+        setDischarge={esg.setWaterDischarge}
+        setConsumption={esg.setWaterConsumption}
+        onBack={() => setNav({ level: "env" })}
+        onSetGoal={() => onOpenGoalSetup?.("water")}
+      />
+    );
+  }
+
+  if (nav.level === "waste") {
+    return (
+      <WasteScreen
+        year={year}
+        setYear={setYear}
+        fyYears={FY_YEARS}
+        waste={esg.waste[year]}
+        setCategory={esg.setWasteCategory}
+        onBack={() => setNav({ level: "env" })}
+        onSetGoal={() => onOpenGoalSetup?.("waste")}
+      />
+    );
+  }
 
   if (nav.level === "entry") {
     return (

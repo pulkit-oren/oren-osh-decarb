@@ -11,6 +11,7 @@ import { buildTrajectory, targetLine } from "@/lib/model/trajectory";
 import type { TrajectoryRow, Wedge } from "@/lib/model/types";
 import { defaultFacilityActions } from "../defaults";
 import { baselineScope2, existingCoveredKwh, type Scope2Baseline } from "./baseline";
+import { contractCoverageByFacility, isContractRecord } from "./instruments";
 import { applyEfficiency, type EfficiencyResult } from "./efficiency";
 import { applyGeneration, type GenerationResult } from "./generation";
 import { applyProcurement, type FacilityDraw, type ProcurementResult } from "./procurement";
@@ -77,6 +78,8 @@ export function computeScope2(
   baseYear: number,
 ): Scope2ComputeResult {
   const baseline = baselineScope2(facilities);
+  // VPPA / I-REC kWh entered in Data input, allocated to each BU's grid records.
+  const contractCov = contractCoverageByFacility(facilities);
 
   /* ---- Pillars 1+2 per facility, in physical order ---- */
   const perFacility: Record<string, { eff: EfficiencyResult; gen: GenerationResult }> = {};
@@ -91,11 +94,16 @@ export function computeScope2(
     const eff = applyEfficiency(f, acts.efficiency);
     const gen = applyGeneration(f, acts.generation, eff.residualLoadKwh);
     perFacility[f.id] = { eff, gen };
-    // Electricity already on PPAs/RECs (capped at the post-lever grid draw) — new
-    // procurement only addresses what's left, so the two never double-count.
-    const existCovered = Math.min(existingCoveredKwh(f), gen.gridDrawKwh);
+    // Electricity already on PPAs/RECs — the legacy per-facility % plus this
+    // facility's share of entered VPPA/I-REC records, capped at the post-lever
+    // grid draw. New procurement only addresses what's left, so the two never
+    // double-count. Contract records themselves are coverage, not load — they
+    // must not enter the procurement pool.
+    const existCovered = Math.min(existingCoveredKwh(f) + (contractCov[f.id] ?? 0), gen.gridDrawKwh);
     existingByFacility[f.id] = existCovered;
-    draws.push({ id: f.id, gridDrawKwh: Math.max(0, gen.gridDrawKwh - existCovered), gridEf: f.gridEf, isolated: f.isolated });
+    if (!isContractRecord(f)) {
+      draws.push({ id: f.id, gridDrawKwh: Math.max(0, gen.gridDrawKwh - existCovered), gridEf: f.gridEf, isolated: f.isolated });
+    }
 
     if (acts.efficiency.enabled && eff.savedKwh > 0) {
       effAbateT += (eff.savedKwh * f.gridEf) / 1000;

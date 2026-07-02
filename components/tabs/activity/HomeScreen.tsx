@@ -1,6 +1,6 @@
 "use client";
 
-import { Leaf, ChevronRight } from "lucide-react";
+import { Leaf, ChevronRight, ArrowLeft } from "lucide-react";
 import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, type Nav, type CatKey, type CatDef } from "./shared";
 import { fyLabel, type FY_YEARS } from "@/lib/model/types";
 import { fmt } from "@/lib/utils";
@@ -31,15 +31,18 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
     <div className="flex flex-col gap-4 lg:h-[calc(100vh-10rem)]">
       <div className="rounded-xl3 border border-line/50 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60 px-5 py-4 flex flex-wrap items-end justify-between gap-3 shrink-0">
         <div>
-          <h1 className="text-xl font-extrabold text-ink">Activity data</h1>
+          <button onClick={() => setNav({ level: "env" })} className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink mb-1">
+            <ArrowLeft size={15} /> Back to Environment
+          </button>
+          <h1 className="text-xl font-extrabold text-ink">Energy &amp; Emissions</h1>
           <p className="text-sm text-ink-soft">Pick a category to enter your sources — Scope 1 &amp; 2 in one place.</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setNav({ level: "bus" })} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-line bg-surface px-3 py-1.5 hover:border-brand-300 transition-colors">
             🏢 Business units{buReg.units.length > 0 ? ` · ${buReg.units.length}` : ""}
           </button>
-          <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Base year</span>
+          <label className="flex items-center gap-2" title="Choose which financial year you're entering data for. The base year (the target anchor) is set in the top bar.">
+            <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Data year</span>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400">
               {fyYears.map((y) => <option key={y} value={y}>{fyLabel(y)}</option>)}
             </select>

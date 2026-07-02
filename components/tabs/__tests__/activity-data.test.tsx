@@ -4,6 +4,7 @@ import { renderToString } from "react-dom/server";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
+import { EsgProvider } from "@/lib/esg/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "../ActivityDataTab";
 
@@ -14,7 +15,9 @@ function Wrapper({ children }: { children: React.ReactNode }) {
     <CompanyProvider>
       <ScenarioProvider>
         <Scope2Provider>
-          {children}
+          <EsgProvider>
+            {children}
+          </EsgProvider>
         </Scope2Provider>
       </ScenarioProvider>
     </CompanyProvider>
@@ -35,7 +38,7 @@ function renderActivityWithBu(opts: BuOpts) {
   );
   render(
     <Wrapper>
-      <ActivityDataTab />
+      <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
 }
@@ -53,12 +56,14 @@ describe("ActivityDataTab", () => {
       <CompanyProvider>
         <ScenarioProvider>
           <Scope2Provider>
-            <ActivityDataTab />
+            <EsgProvider>
+              <ActivityDataTab initialNav={{ level: "home" }} />
+            </EsgProvider>
           </Scope2Provider>
         </ScenarioProvider>
       </CompanyProvider>,
     );
-    expect(html).toContain("Activity data");
+    expect(html).toContain("Energy &amp; Emissions");
     expect(html).toContain("Fuels – Liquid");
     expect(html).toContain("Fuels – Gas");
     expect(html).toContain("Fuels – Solid");
@@ -128,7 +133,7 @@ describe("ActivityDataTab — Scope drill-down", () => {
     // Seed store-independent state — just render; the default store seeds diesel + R-404A
     render(
       <Wrapper>
-        <ActivityDataTab />
+        <ActivityDataTab initialNav={{ level: "home" }} />
       </Wrapper>,
     );
   }
@@ -188,7 +193,7 @@ describe("ActivityDataTab — Scope drill-down", () => {
 
     render(
       <Wrapper>
-        <ActivityDataTab />
+        <ActivityDataTab initialNav={{ level: "home" }} />
       </Wrapper>,
     );
 
@@ -226,7 +231,7 @@ async function openDieselBuEntry() {
   );
   render(
     <Wrapper>
-      <ActivityDataTab />
+      <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
   // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row
@@ -265,7 +270,7 @@ async function openR404aBuRow() {
   );
   render(
     <Wrapper>
-      <ActivityDataTab />
+      <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
   // Navigate: home → Refrigerants & cooling → Add a source → name + R-404A → submit
@@ -310,7 +315,7 @@ async function openElectricityCategory() {
   );
   render(
     <Wrapper>
-      <ActivityDataTab />
+      <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
   // Click the Electricity category card
@@ -384,7 +389,7 @@ async function openDieselSourceEntry() {
   );
   render(
     <Wrapper>
-      <ActivityDataTab />
+      <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
   // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row

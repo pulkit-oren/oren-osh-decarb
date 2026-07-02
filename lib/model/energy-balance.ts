@@ -1,5 +1,5 @@
 import { compute } from "./index";
-import { combustionBreakdown } from "./baseline";
+import { combustionBreakdown, refrigerantCO2e } from "./baseline";
 import { applyAssetActions, defaultActions, defaultSystemActions } from "./segments";
 import { endUseProfile } from "./end-use";
 import { refrigClassProfile } from "./refrigerant-class";
@@ -63,6 +63,49 @@ export function applyDials(assets: CombustionAsset[], systems: RefrigerationSyst
     bySystem[s.id] = { ...cur, gasSwitch };
   }
   return { ...base, byAsset, bySystem, assumptions: { ...base.assumptions, renewableSourcingPct: d.renewablePct } };
+}
+
+/* ---------- Derived dials ----------
+   The per-source levers are the single source of truth; the balance dials are
+   COMPUTED from them, so fine-tuning a source in the Scope 1 planner moves the
+   dial when you come back — the two views can never drift. Weighted so that
+   applyDials(base, d) → deriveDials ≈ d. */
+
+function wavg(pairs: { v: number; w: number }[]): number {
+  const W = pairs.reduce((s, p) => s + p.w, 0);
+  if (W <= 0) return pairs.length ? pairs.reduce((s, p) => s + p.v, 0) / pairs.length : 0;
+  return pairs.reduce((s, p) => s + p.v * p.w, 0) / W;
+}
+
+export function deriveDials(assets: CombustionAsset[], systems: RefrigerationSystem[], settings: LeverSettings): BalanceDials {
+  const act = assets.filter((a) => !a.excluded);
+  const sys = systems.filter((s) => !s.excluded);
+
+  const elecPairs = act.filter(electrifyFeasible).map((a) => {
+    const e = settings.byAsset[a.id]?.electrify;
+    const on = !!e?.enabled;
+    const v = !on ? 0 : a.category === "mobile"
+      ? (a.unitCount > 0 ? (e!.unitsToConvert / a.unitCount) * 100 : 0)
+      : e!.capacityPct;
+    return { v: Math.max(0, Math.min(100, v)), w: combustionBreakdown(a).energyGJ };
+  });
+
+  const bioPairs = act.filter((a) => bioAltFor(a)).map((a) => {
+    const f = settings.byAsset[a.id]?.fuelSwitch;
+    return { v: f?.enabled ? Math.max(0, Math.min(100, f.blendPct)) : 0, w: combustionBreakdown(a).energyGJ };
+  });
+
+  const refrigPairs = sys.map((s) => {
+    const g = settings.bySystem[s.id]?.gasSwitch;
+    return { v: g?.enabled ? Math.max(0, Math.min(100, g.transitionPct)) : 0, w: Math.max(refrigerantCO2e(s), 1e-9) };
+  });
+
+  return {
+    electrifyPct: Math.round(wavg(elecPairs)),
+    renewablePct: Math.round(settings.assumptions.renewableSourcingPct ?? 0),
+    bioBlendPct: Math.round(wavg(bioPairs)),
+    refrigPct: Math.round(wavg(refrigPairs)),
+  };
 }
 
 /** Pure: approximate energy mix (GJ) for the given settings. Indicative visualization. */

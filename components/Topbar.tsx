@@ -7,11 +7,12 @@ import { PERSONAS, type Persona } from "@/lib/persona";
 import { cn } from "@/lib/utils";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
-import { fyLabel } from "@/lib/model/types";
+import { fyLabel, FY_YEARS } from "@/lib/model/types";
 import type { AnyTabKey, Scope } from "./Sidebar";
 
 const TITLES: Record<string, { eyebrow: string; title: string }> = {
   overview: { eyebrow: "Boardroom", title: "Scope 1 overview" },
+  goals: { eyebrow: "Strategy", title: "Goals & targets" },
   data: { eyebrow: "Step 1 · Baseline", title: "Activity data" },
   builder: { eyebrow: "Step 2", title: "Decarbonization Scenario Modeller" },
   action: { eyebrow: "Step 3", title: "Action plan" },
@@ -23,13 +24,15 @@ const TITLES: Record<string, { eyebrow: string; title: string }> = {
 export function Topbar({ scope, tab, persona, setPersona }: {
   scope: Scope; tab: AnyTabKey; persona: Persona; setPersona: (p: Persona) => void;
 }) {
-  const t = TITLES[tab];
+  const t = TITLES[tab] ?? { eyebrow: "", title: tab };
   const s1 = useScenario();
   const s2 = useScope2();
   const [menuOpen, setMenuOpen] = useState(false);
   const activePersona = PERSONAS.find((p) => p.key === persona) ?? PERSONAS[0];
 
   const baseYear = scope === "s1" ? s1.baseYear : s2.baseYear;
+  // Keep both scopes on the same base year so the whole model rebaselines together.
+  const setBaseYear = (y: number) => { s1.setBaseYear(y); s2.setBaseYear(y); };
 
   return (
     <header className="flex items-center justify-between gap-4 flex-wrap">
@@ -40,10 +43,20 @@ export function Topbar({ scope, tab, persona, setPersona }: {
 
       <div className="flex items-center gap-2">
         <CompanySwitcher />
-        <div className="rounded-full bg-surface-muted border border-line/60 px-3.5 py-2 text-sm flex items-center gap-2">
+        <label className="rounded-full bg-surface-muted border border-line/60 pl-3.5 pr-2 py-1.5 text-sm flex items-center gap-2 cursor-pointer hover:border-brand-300 transition-colors" title="Select the base year the whole model is measured against">
           <span className="text-[10px] uppercase tracking-wide text-ink-faint font-semibold">Base year</span>
-          <span className="font-semibold tabular-nums">{fyLabel(baseYear)}</span>
-        </div>
+          <span className="relative flex items-center">
+            <select
+              value={baseYear}
+              onChange={(e) => setBaseYear(Number(e.target.value))}
+              className="appearance-none bg-transparent font-semibold tabular-nums pr-5 focus:outline-none cursor-pointer"
+              aria-label="Base year"
+            >
+              {FY_YEARS.map((y) => <option key={y} value={y}>{fyLabel(y)}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-0 text-ink-faint pointer-events-none" />
+          </span>
+        </label>
         <div className="relative">
           <button
             type="button"

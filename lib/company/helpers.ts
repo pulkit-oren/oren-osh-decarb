@@ -32,6 +32,8 @@ export const LEGACY_SCOPE2_KEY = "osh-scope2-planner-v1";
 
 export const scope1Key = (companyId: string) => `${LEGACY_SCOPE1_KEY}::${companyId}`;
 export const scope2Key = (companyId: string) => `${LEGACY_SCOPE2_KEY}::${companyId}`;
+export const goalsKey = (companyId: string) => `osh-goals-v1::${companyId}`;
+export const esgKey = (companyId: string) => `osh-esg-v1::${companyId}`;
 
 export const DEFAULT_COMPANY_NAME = "Acme Industries Ltd";
 
@@ -122,6 +124,8 @@ export function deleteCompanyFromRegistry(
   if (companies.length === reg.companies.length) return reg;
   storage.removeItem(scope1Key(id));
   storage.removeItem(scope2Key(id));
+  storage.removeItem(goalsKey(id));
+  storage.removeItem(esgKey(id));
   const next: CompanyRegistry = {
     companies,
     activeId: reg.activeId === id ? companies[0].id : reg.activeId,

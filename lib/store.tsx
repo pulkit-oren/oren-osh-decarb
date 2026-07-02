@@ -54,7 +54,8 @@ interface StoreShape {
   updateSystemAction: (systemId: string, lever: "gasSwitch" | "leakFix", patch: Partial<GasSwitchAction> & Partial<LeakFixAction>) => void;
   updateAssumptions: (patch: Partial<GlobalAssumptions>) => void;
   resetSettings: () => void;
-  saveScenario: (name: string) => void;
+  saveScenario: (name: string, note?: string) => void;
+  duplicateScenario: (id: string) => void;
   deleteScenario: (id: string) => void;
 
   result: ComputeResult;
@@ -239,11 +240,26 @@ export function ScenarioProvider({
   const updateAssumptions = (patch: Partial<GlobalAssumptions>) =>
     setSettingsState((p) => ({ ...p, assumptions: { ...p.assumptions, ...patch } }));
   const resetSettings = () => setSettingsState(DEFAULT_SETTINGS);
-  const saveScenario = (name: string) =>
+  const saveScenario = (name: string, note?: string) =>
     setScenarios((prev) => [
       ...prev,
-      { id: uniqueId("sc", prev.map((s) => s.id)), name, settings, savedAt: Date.now() },
+      { id: uniqueId("sc", prev.map((s) => s.id)), name, note: note?.trim() || undefined, settings, savedAt: Date.now() },
     ]);
+  const duplicateScenario = (id: string) =>
+    setScenarios((prev) => {
+      const src = prev.find((s) => s.id === id);
+      if (!src) return prev;
+      return [
+        ...prev,
+        {
+          id: uniqueId("sc", prev.map((s) => s.id)),
+          name: `${src.name} (copy)`,
+          note: src.note,
+          settings: JSON.parse(JSON.stringify(src.settings)) as typeof src.settings,
+          savedAt: Date.now(),
+        },
+      ];
+    });
   const deleteScenario = (id: string) => setScenarios((prev) => prev.filter((s) => s.id !== id));
 
   const baseAssets = useMemo(() => resolveCombustion(combustion, baseYear), [combustion, baseYear]);
@@ -259,7 +275,7 @@ export function ScenarioProvider({
     setSelectedYear, setBaseYear,
     addCombustion, delCombustion, updateCombustion, copyCombustion, importCombustion, addCombustionAsset,
     addRefrigeration, addRefrigerationSystem, delRefrigeration, updateRefrigeration, copyRefrigeration,
-    setSettings, updateAction, updateSystemAction, updateAssumptions, resetSettings, saveScenario, deleteScenario,
+    setSettings, updateAction, updateSystemAction, updateAssumptions, resetSettings, saveScenario, duplicateScenario, deleteScenario,
     result, baseAssets, baseSystems, selectedAssets, selectedSystems, selectedBaseline,
   };
 
