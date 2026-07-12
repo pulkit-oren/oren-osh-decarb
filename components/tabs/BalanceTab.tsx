@@ -24,7 +24,6 @@ import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/selec
 import { CURRENCY } from "@/lib/defaults";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { ProgressRing } from "@/components/ui/ProgressRing";
 import { cn, fmt, fmtMoney } from "@/lib/utils";
 
 /* How each basis builds its mix — shown when the card's (i) is clicked. */
@@ -233,7 +232,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(260px,1.1fr)_auto_minmax(300px,1.2fr)] items-center">
+        <div className="grid gap-6 lg:grid-cols-[minmax(260px,1fr)_minmax(300px,1.2fr)] items-center">
           {/* inputs */}
           <div className="flex flex-col gap-5">
             <label className="flex items-center justify-between gap-3 text-sm">
@@ -278,11 +277,6 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
             </p>
           </div>
 
-          {/* progress ring */}
-          <div className="rounded-xl2 bg-surface p-4 justify-self-center">
-            <ProgressRing pct={allocPct} caption="of the required cut is allocated" tone={onTrack ? "good" : "warn"} />
-          </div>
-
           {/* stat tiles */}
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl2 border border-white/20 bg-white/10 p-3.5">
@@ -302,6 +296,24 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
               <div className="text-xl font-extrabold tabular-nums mt-1">{onTrack ? "Met" : `${fmt(gapT)} t`}</div>
               <div className={cn("text-[10px] mt-0.5", onTrack ? "text-brand-700/70" : "text-amber-900/70")}>{onTrack ? "target reached" : "still to close"}</div>
             </div>
+          </div>
+        </div>
+
+        {/* progress to target */}
+        <div className="mt-6" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(allocPct * 100))} aria-label="Progress to target">
+          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold mb-1.5">
+            <span className="text-white/80">Plan progress</span>
+            <span className="tabular-nums text-white">
+              {allocPct > 1
+                ? <>target met — the plan delivers {Math.round(allocPct * 100)}% of the required cut</>
+                : <>{Math.round(allocPct * 100)}% of the required cut</>}
+            </span>
+          </div>
+          <div className="h-3 rounded-full bg-white/15 overflow-hidden">
+            <div
+              className={cn("h-full rounded-full transition-all duration-700", onTrack ? "bg-white" : "bg-amber-300")}
+              style={{ width: `${Math.min(100, Math.round(allocPct * 100))}%` }}
+            />
           </div>
         </div>
       </section>
@@ -466,7 +478,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       <Collapsible title="How this is calculated">
         <div className="text-xs text-ink-soft space-y-2 leading-relaxed">
           <p><strong className="text-ink">Required cut</strong> = combined base-year total × target = {fmt(base)} t × {target}% = <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> by {year}.</p>
-          <p><strong className="text-ink">Allocated</strong> = combined BAU {year} − net {year} = {fmt(atYear?.bau ?? 0)} − {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. The ring shows allocated ÷ required. Each lever row shows its own share — its wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
+          <p><strong className="text-ink">Allocated</strong> = combined BAU {year} − net {year} = {fmt(atYear?.bau ?? 0)} − {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. The progress bar shows allocated ÷ required, capped at 100% — a plan can over-deliver, because suggested mixes move dials in 10% steps (they land just past the target, never exactly on it), the OPEX-saving basis deliberately maximizes every self-funding lever beyond the target, and already-contracted VPPA / I-REC abatement also counts toward the allocated tonnes. Each lever row shows its own share — its wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
           <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
           <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
           <p><strong className="text-ink">Suggested mixes</strong>: each basis card in step 2 carries its own <Info size={11} className="inline -mt-0.5" /> with the exact ranking and stopping rule it uses.</p>
