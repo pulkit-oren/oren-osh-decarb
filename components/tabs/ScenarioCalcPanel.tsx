@@ -140,7 +140,7 @@ function buildContent(store: ReturnType<typeof useScenario>, target: CalcTarget)
         const acts = settings.byAsset[a.id];
         if (!acts) continue;
         const res = applyAssetActions(a, acts, settings.assumptions);
-        const cut = res.scope1AbatementT + res.fuelAbatementT;
+        const cut = res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
         if (cut <= 0) continue;
         total += cut;
         rows.push({ label: a.name, value: `−${fmt(cut)} t/yr`, color: FAMILY_COLORS[seg === "mobile" ? 5 : 6], formula: describeAsset(a, res), info: "Cut = electrification + fuel-switch abatement for this asset (see each source for the full breakdown)." });
@@ -172,7 +172,7 @@ function buildContent(store: ReturnType<typeof useScenario>, target: CalcTarget)
       const dropIn = res.fuelAbatementT - res.flexAbatementT;
       if (dropIn > 0) rows.push({ label: "Fuel switch", value: `−${fmt(dropIn)} t/yr`, color: FAMILY_COLORS[2], formula: `fuel emissions × ${pct(res.fuelFraction)} bio blend (drop-in)`, info: LEVER_FORMULA.fuelSwitch });
       if (res.flexAbatementT > 0) rows.push({ label: "Flex-fuel", value: `−${fmt(res.flexAbatementT)} t/yr`, color: FAMILY_COLORS[3], formula: `${pct(res.flexFraction)} of fleet on a high blend`, info: LEVER_FORMULA.flexFuel });
-      const cut = res.scope1AbatementT + res.fuelAbatementT;
+      const cut = res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
       rows.push({ label: "Emissions after plan", value: `${fmt(Math.max(0, base - cut))} t/yr`, emphasis: true, formula: `${fmt(base)} − ${fmt(cut)} cut`, info: "What remains once every lever on this asset is fully rolled out." });
     }
     return { title: "How this source's cut is calculated", subtitle: a.name, rows, footer: "Electrification also adds Scope 2 electricity (energy ÷ COP × grid factor); biogenic CO₂ from bio-fuels is reported separately." };

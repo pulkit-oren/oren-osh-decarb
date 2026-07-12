@@ -8,7 +8,7 @@ import { useGoals } from "@/lib/goals/store";
 import { PERSONAS, type Persona } from "@/lib/persona";
 import { FY_YEARS } from "@/lib/model/types";
 import { STATUS_COLOR, STATUS_LABEL, type Initiative, type InitiativeStatus } from "@/lib/goals/types";
-import { cn } from "@/lib/utils";
+import { cn, fmtMoney, fmtNum } from "@/lib/utils";
 
 const STATUSES = Object.keys(STATUS_LABEL) as InitiativeStatus[];
 const YEARS = [...FY_YEARS, 2028, 2029, 2030, 2035, 2040, 2045, 2050];
@@ -17,10 +17,11 @@ const cell = "w-full border border-line rounded-md px-2 py-1 text-sm bg-white fo
 
 export function InitiativeTable({ initiatives, unit }: { initiatives: Initiative[]; unit: string }) {
   const { updateInitiative, deleteInitiative } = useGoals();
+  const hasFinance = initiatives.some((i) => i.annualOpexDelta != null);
 
   return (
     <div className="overflow-x-auto -mx-1 px-1">
-      <table className="w-full text-sm min-w-[920px]">
+      <table className={cn("w-full text-sm", hasFinance ? "min-w-[1080px]" : "min-w-[920px]")}>
         <thead>
           <tr className="text-[11px] uppercase tracking-wide text-ink-faint border-b border-line/60">
             <th className="text-left font-semibold py-2 px-2">Initiative</th>
@@ -30,6 +31,8 @@ export function InitiativeTable({ initiatives, unit }: { initiatives: Initiative
             <th className="text-left font-semibold py-2 px-2">Target</th>
             <th className="text-right font-semibold py-2 px-2">Impact ({unit})</th>
             <th className="text-right font-semibold py-2 px-2">Budget (₹)</th>
+            {hasFinance && <th className="text-right font-semibold py-2 px-2">OPEX Δ/yr</th>}
+            {hasFinance && <th className="text-right font-semibold py-2 px-2">Payback</th>}
             <th className="text-right font-semibold py-2 px-2">Progress</th>
             <th className="py-2 px-2" />
           </tr>
@@ -79,6 +82,16 @@ export function InitiativeTable({ initiatives, unit }: { initiatives: Initiative
                 <td className="py-2 px-2">
                   <input type="number" min={0} className={cn(cell, "w-28 text-right")} value={i.budget} onChange={(e) => set({ budget: e.target.value === "" ? 0 : Number(e.target.value) })} />
                 </td>
+                {hasFinance && (
+                  <td className={cn("py-2 px-2 text-right tabular-nums text-sm pt-3.5", (i.annualOpexDelta ?? 0) < 0 ? "text-brand-600 font-semibold" : "text-ink-soft")}>
+                    {i.annualOpexDelta != null ? `${i.annualOpexDelta < 0 ? "−" : "+"}${fmtMoney(Math.abs(i.annualOpexDelta))}` : "—"}
+                  </td>
+                )}
+                {hasFinance && (
+                  <td className="py-2 px-2 text-right tabular-nums text-sm pt-3.5 text-ink-soft">
+                    {i.paybackYears != null ? `${fmtNum(i.paybackYears, 1)} yr` : "—"}
+                  </td>
+                )}
                 <td className="py-2 px-2">
                   <input type="number" min={0} max={100} className={cn(cell, "w-20 text-right")} value={i.progressPct ?? 0} onChange={(e) => set({ progressPct: Math.max(0, Math.min(100, e.target.value === "" ? 0 : Number(e.target.value))) })} />
                 </td>

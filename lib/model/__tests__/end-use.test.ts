@@ -11,15 +11,20 @@ describe("end-use taxonomy", () => {
     }
   });
 
-  it("splits mobile vs stationary", () => {
+  it("splits mobile vs stationary (legacy furnaceKiln hidden from the picker)", () => {
     const mobile = endUsesFor("mobile").map((p) => p.id);
     const stationary = endUsesFor("stationary").map((p) => p.id);
     expect(mobile).toEqual(["car","van","truck","bus","forklift","heavyEquip"]);
-    expect(stationary).toEqual(["boiler","furnaceKiln","generator","dryer","spaceHeat","otherProcess"]);
+    expect(stationary).toContain("boiler");
+    expect(stationary).toContain("kiln");
+    expect(stationary).toContain("firePump");
+    expect(stationary).not.toContain("furnaceKiln");
+    for (const id of stationary) expect(END_USES[id].category).toBe("stationary");
   });
 
   it("marks a high-temp kiln as hard to electrify and a truck as feasible", () => {
     expect(END_USES.furnaceKiln.electrify.feasible).toBe("hard");
+    expect(END_USES.kiln.electrify.feasible).toBe("no");
     expect(END_USES.truck.electrify.feasible).toBe("yes");
     expect(END_USES.truck.electrify.capexPerUnit).toBeGreaterThan(0);
   });

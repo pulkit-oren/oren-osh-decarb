@@ -1,9 +1,10 @@
 import { ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, REFRIGERANTS, RECOMMENDED_ALT_BY_SYSTEM } from "./factors";
-import { endUseProfile } from "./end-use";
+import { efficiencyHintFor, endUseProfile } from "./end-use";
+import { electrifyCapexFor } from "./segments";
 import { refrigClassProfile } from "./refrigerant-class";
 import type { AltFuelId, AssetActions, CombustionAsset, RefrigerationSystem, SystemActions } from "./types";
 
-export type LeverKind = "electrify" | "fuelSwitch" | "flexFuel" | "gasSwitch" | "leakFix";
+export type LeverKind = "efficiency" | "electrify" | "fuelSwitch" | "flexFuel" | "gasSwitch" | "leakFix";
 export interface SuggestedAction { lever: LeverKind; patch: Record<string, number | string | boolean>; }
 export interface Suggestion {
   headline: string;
@@ -30,6 +31,10 @@ export function suggestForAsset(asset: CombustionAsset): Suggestion {
       : { lever: "electrify", patch: { enabled: true, capacityPct: eu?.electrify.capacityHint ?? 60, cop: eu?.electrify.cop ?? 3, targetYear: TARGET_YEAR } };
   const fuelSwitchAction = (): SuggestedAction | null =>
     altFuel ? { lever: "fuelSwitch", patch: { enabled: true, altFuel, blendPct: maxBlend, targetYear: TARGET_YEAR } } : null;
+  // Step 0 everywhere: the efficiency package rides along with every suggestion
+  // ("first step regardless of fuel pathway" — the cheapest tonnes on the MACC).
+  const efficiencyAction = (): SuggestedAction =>
+    ({ lever: "efficiency", patch: { enabled: true, savingPct: efficiencyHintFor(asset.endUse), targetYear: 2028 } });
 
   const electrifyFeasible = eu ? eu.electrify.feasible === "easy" || eu.electrify.feasible === "yes" : true;
   const electrifyHard = eu ? eu.electrify.feasible === "hard" || eu.electrify.feasible === "no" : false;
@@ -38,29 +43,38 @@ export function suggestForAsset(asset: CombustionAsset): Suggestion {
     const fs = fuelSwitchAction();
     return {
       headline: isMobile
-        ? `Electrify ${halfUnits} of ${asset.unitCount} vehicles by ${TARGET_YEAR}`
-        : `Electrify ${eu?.electrify.capacityHint ?? 60}% of this asset by ${TARGET_YEAR}`,
+        ? `Efficiency first, then electrify ${halfUnits} of ${asset.unitCount} vehicles by ${TARGET_YEAR}`
+        : `Efficiency first, then electrify ${eu?.electrify.capacityHint ?? 60}% of this asset by ${TARGET_YEAR}`,
       why: eu?.electrify.note ?? "Electrification is the primary lever for this equipment.",
-      actions: [electrifyAction()],
+      actions: [efficiencyAction(), electrifyAction()],
       altHeadline: fs ? `Or run ${ALT_FUELS[altFuel!].label} at ${maxBlend}% now (drop-in)` : undefined,
-      altActions: fs ? [fs] : undefined,
+      altActions: fs ? [efficiencyAction(), fs] : undefined,
     };
   }
 
   const fs = fuelSwitchAction();
   if (fs) {
     return {
-      headline: `Run ${ALT_FUELS[altFuel!].label} at ${maxBlend}% (drop-in) by ${TARGET_YEAR}`,
+      headline: `Efficiency first, then ${ALT_FUELS[altFuel!].label} at ${maxBlend}% (drop-in) by ${TARGET_YEAR}`,
       why: eu?.fuelSwitch.note ?? "A bio-blend is the near-term lever; electrification is limited for this equipment.",
-      actions: [fs],
+      actions: [efficiencyAction(), fs],
       altHeadline: electrifyHard ? undefined : "Or electrify over the longer term",
-      altActions: electrifyHard ? undefined : [electrifyAction()],
+      altActions: electrifyHard ? undefined : [efficiencyAction(), electrifyAction()],
+    };
+  }
+  // No drop-in fuel. Only fall back to electrification when this equipment can
+  // actually take it — never suggest it for kilns, fire pumps and the like.
+  if (!electrifyHard) {
+    return {
+      headline: `Efficiency first, then electrify where feasible by ${TARGET_YEAR}`,
+      why: "No drop-in bio fuel for this fuel — consider electrification (or CNG / biomass).",
+      actions: [efficiencyAction(), electrifyAction()],
     };
   }
   return {
-    headline: `Electrify where feasible by ${TARGET_YEAR}`,
-    why: "No drop-in bio fuel for this fuel — consider electrification (or CNG / biomass).",
-    actions: [electrifyAction()],
+    headline: `Efficiency package — ~${efficiencyHintFor(asset.endUse)}% of fuel, the first step`,
+    why: eu?.electrify.note ?? "Electrification isn't commercial for this equipment and no drop-in fuel matches — efficiency is the modellable lever; see the decarbonisation alternatives below for the full pathway (AFR, biomass).",
+    actions: [efficiencyAction()],
   };
 }
 
@@ -79,13 +93,15 @@ export function suggestForSystem(system: RefrigerationSystem): Suggestion {
 
 export function capexForAsset(asset: CombustionAsset, acts: AssetActions): number {
   let c = 0;
-  if (acts.electrify.enabled) c += acts.electrify.assetCapex * (asset.category === "mobile" ? acts.electrify.unitsToConvert : 1);
+  if (acts.efficiency?.enabled) c += acts.efficiency.capex;
+  c += electrifyCapexFor(asset, acts.electrify);
   if (acts.fuelSwitch.enabled) c += acts.fuelSwitch.retrofitCapex;
   if (asset.category === "mobile" && acts.flexFuel?.enabled) c += acts.flexFuel.vehicleCapex * acts.flexFuel.unitsToConvert;
   return c;
 }
 export function capexForSystem(acts: SystemActions): number {
-  return acts.gasSwitch.enabled && acts.gasSwitch.transitionPct > 0 ? acts.gasSwitch.retrofitCapex : 0;
+  return (acts.gasSwitch.enabled && acts.gasSwitch.transitionPct > 0 ? acts.gasSwitch.retrofitCapex : 0)
+    + (acts.leakFix.enabled ? acts.leakFix.capex ?? 0 : 0);
 }
 
 export const electrifyTip = (isMobile: boolean) =>

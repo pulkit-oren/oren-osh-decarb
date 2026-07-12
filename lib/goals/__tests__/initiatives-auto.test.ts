@@ -37,6 +37,18 @@ describe("auto-initiatives", () => {
     expect(inits.some((i) => i.sourceRef?.startsWith("f1"))).toBe(true);
   });
 
+  it("emissions initiatives carry the OPEX view into the goal (annualOpexDelta + payback)", () => {
+    const inits = autoInitiatives(goalOf("abs_sbti"), inv);
+    // Scope 2 efficiency/solar initiatives are pure savings → negative OPEX Δ and a real payback
+    const eff = inits.find((i) => i.sourceRef === "f1:eff")!;
+    expect(eff.annualOpexDelta).toBeLessThan(0);
+    expect(eff.paybackYears).not.toBeNull();
+    expect(eff.paybackYears!).toBeGreaterThan(0);
+    // the Scope 1 asset initiative carries an OPEX figure too
+    const s1 = inits.find((i) => i.sourceRef === "c1")!;
+    expect(typeof s1.annualOpexDelta).toBe("number");
+  });
+
   it("renewable goal yields percentage-point impacts plus a procurement top-up", () => {
     const inits = autoInitiatives(goalOf("re100"), inv);
     expect(inits.some((i) => i.sourceRef === "procurement")).toBe(true);

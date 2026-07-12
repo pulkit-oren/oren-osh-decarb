@@ -9,9 +9,11 @@ import { combustionGrade, refrigerantGrade, type Grade } from "@/lib/data-qualit
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem, electrifyTip, fuelSwitchTip, flexFuelTip, gasSwitchTip, leakFixTip, type Suggestion, type SuggestedAction } from "@/lib/model/suggestions";
 import { outlivesAsset, retirementYear } from "@/lib/model/validate";
 import { useScenario } from "@/lib/store";
-import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM } from "@/lib/model/factors";
-import { applyAssetActions, defaultActions, defaultFlexFuel, defaultSystemActions, flexFuelCapable } from "@/lib/model/segments";
+import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM, refrigerantPricePerKg } from "@/lib/model/factors";
+import { applyAssetActions, defaultActions, defaultEfficiency, defaultFlexFuel, defaultSystemActions, flexFuelCapable } from "@/lib/model/segments";
+import { Gauge } from "lucide-react";
 import { endUseProfile, endUsesFor, type EndUseId } from "@/lib/model/end-use";
+import { alternativesFor, type EquipmentAlternative } from "@/lib/model/alternatives";
 import { refrigClassProfile } from "@/lib/model/refrigerant-class";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
@@ -80,9 +82,9 @@ function segStats(
   for (const a of assets) {
     const acts = settings.byAsset[a.id];
     if (!acts) continue;
-    if (acts.electrify.enabled || acts.fuelSwitch.enabled || acts.flexFuel?.enabled) active++;
+    if (acts.efficiency?.enabled || acts.electrify.enabled || acts.fuelSwitch.enabled || acts.flexFuel?.enabled) active++;
     const res = applyAssetActions(a, acts, settings.assumptions);
-    abated += res.scope1AbatementT + res.fuelAbatementT;
+    abated += res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
   }
   return { count: assets.length, active, abated };
 }
@@ -106,7 +108,7 @@ function suggestedAbatementFor(seg: Seg, source: CombustionAsset | Refrigeration
   const acts = st.byAsset[a.id];
   if (!acts) return 0;
   const res = applyAssetActions(a, acts, assumptions);
-  return res.scope1AbatementT + res.fuelAbatementT;
+  return res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
 }
 
 /** Small amber/grey pill when the underlying data isn't metered. */
@@ -150,11 +152,12 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
     const eu = endUseProfile(a);
     sub = `${FUELS[a.fuelType].label} · ${a.category}${eu ? ` · ${eu.label}` : ""}`;
     if (acts) {
+      if (acts.efficiency?.enabled) active++;
       if (acts.electrify.enabled) active++;
       if (acts.fuelSwitch.enabled) active++;
       if (acts.flexFuel?.enabled) active++;
       const res = applyAssetActions(a, acts, settings.assumptions);
-      abated = res.scope1AbatementT + res.fuelAbatementT;
+      abated = res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
     }
   }
   const hasPlan = !!(seg === "refrigerant" ? settings.bySystem[(source as RefrigerationSystem).id] : settings.byAsset[(source as CombustionAsset).id]);
@@ -413,9 +416,9 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
 
   const assetMetrics = (a: CombustionAsset) => {
     const acts = settings.byAsset[a.id];
-    const planned = !!acts && (acts.electrify.enabled || acts.fuelSwitch.enabled || !!acts.flexFuel?.enabled);
+    const planned = !!acts && (!!acts.efficiency?.enabled || acts.electrify.enabled || acts.fuelSwitch.enabled || !!acts.flexFuel?.enabled);
     const res = acts ? applyAssetActions(a, acts, settings.assumptions) : null;
-    return { baseline: combustionCO2e(a), abated: res ? res.scope1AbatementT + res.fuelAbatementT : 0, planned };
+    return { baseline: combustionCO2e(a), abated: res ? res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT : 0, planned };
   };
   const visibleAssets = (assets: CombustionAsset[]) =>
     assets
@@ -553,8 +556,51 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
       <SourceImpact kind="asset" id={a.id} />
       <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "asset", id: a.id }} /></div>
       <AssetActionCard asset={a} />
+      <AlternativesPanel asset={a} />
       <AssumptionsCard seg={seg} />
     </div>
+  );
+}
+
+/* ============================================================
+   Decarbonisation alternatives — the equipment-level reference
+   (from the Stationary Energy Decarbonisation Alternatives catalog)
+   ============================================================ */
+
+const MATURITY_CLS: Record<EquipmentAlternative["maturity"], string> = {
+  "Commercial": "bg-brand-50 text-brand-700",
+  "Early commercial": "bg-sky-50 text-sky-700",
+  "Emerging": "bg-amber-50 text-amber-700",
+};
+
+function AlternativesPanel({ asset }: { asset: CombustionAsset }) {
+  const alts = alternativesFor(asset.endUse);
+  if (alts.length === 0) return null;
+  const label = endUseProfile(asset)?.label ?? "this equipment";
+  return (
+    <Collapsible title={`Decarbonisation alternatives for ${label}`} defaultOpen>
+      <div className="flex flex-col divide-y divide-line/60">
+        {alts.map((alt, i) => (
+          <div key={i} className="py-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-bold text-ink">{alt.title}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 bg-surface-muted text-ink-soft">{alt.category}</span>
+              <span className={cn("text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5", MATURITY_CLS[alt.maturity])}>{alt.maturity}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 bg-surface-muted text-ink-soft">Capex: {alt.capex}</span>
+              {alt.lever && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 bg-oren-100 text-oren-700" title={alt.lever === "efficiency" ? "Efficiency isn't a per-asset lever here — capture it by lowering the entered consumption or via the Scope 2 efficiency levers." : "Maps to the lever card above — set it there to model this alternative."}>
+                  {alt.lever === "electrify" ? "→ Electrify lever" : alt.lever === "fuelSwitch" ? "→ Fuel switch lever" : "efficiency measure"}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-ink-soft mt-1"><strong className="text-ink">Scope 1: {alt.reduction}.</strong> {alt.note}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-ink-faint mt-3">
+        Order of preference: cut demand → efficiency → electrify with RE (only where marked commercial) → renewable fuels → emerging fuels. Alternatives tagged with a lever can be modelled directly above; the rest are roadmap guidance.
+      </p>
+    </Collapsible>
   );
 }
 
@@ -591,7 +637,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   }
 
   const res = applyAssetActions(asset, acts, settings.assumptions);
-  const totalAbate = res.scope1AbatementT + res.fuelAbatementT;
+  const totalAbate = res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
   const baseT = combustionCO2e(asset);
   const afterT = Math.max(0, baseT - totalAbate);
   const isMobile = asset.category === "mobile";
@@ -625,6 +671,8 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
           </div>
         </div>
       </div>
+
+      <EfficiencyControls asset={asset} />
 
       {/* electrify + fuel switch, side by side on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-2 border-t border-line/70 mt-1 pt-4">
@@ -667,6 +715,21 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
             <NumField label="Electricity tariff" hint="What you pay for power. Sets the new running cost." value={e.tariffPerKwh} step={0.5} suffix={`${CURRENCY}/kWh`} onChange={(v) => updateAction(asset.id, "electrify", { tariffPerKwh: v })} />
             <NumField label={isMobile ? "CAPEX per vehicle" : "Asset CAPEX"} hint="Up-front cost of the electric kit (per vehicle for fleets)." value={e.assetCapex} step={500_000} suffix={CURRENCY} onChange={(v) => updateAction(asset.id, "electrify", { assetCapex: v })} />
             <NumField label="Start year" hint="The year the conversion begins." value={e.startYear} step={1} min={2021} onChange={(v) => updateAction(asset.id, "electrify", { startYear: Math.max(2021, Math.min(2050, v)) })} />
+            {isMobile && (
+              <>
+                <div>
+                  <span className="text-xs font-semibold text-ink-soft flex items-center gap-1.5 mb-1.5">Purchase timing <InfoTip text="At natural replacement you pay only the EV PREMIUM — you'd buy an ICE anyway. Early retirement pays the full EV price. This often decides the business case." /></span>
+                  <Segmented
+                    value={e.purchaseTiming ?? "replacement"}
+                    options={[{ value: "replacement" as const, label: "At replacement" }, { value: "early" as const, label: "Early retirement" }]}
+                    onChange={(v) => updateAction(asset.id, "electrify", { purchaseTiming: v })}
+                  />
+                </div>
+                {(e.purchaseTiming ?? "replacement") === "replacement" && (
+                  <NumField label="EV premium" hint="EV price premium over the ICE replacement, as % of the EV price — the only capital that's truly incremental." value={e.replacementPremiumPct ?? 40} step={5} suffix="%" onChange={(v) => updateAction(asset.id, "electrify", { replacementPremiumPct: Math.max(0, Math.min(100, v)) })} />
+                )}
+              </>
+            )}
           </div>
         </Collapsible>
         {e.enabled && outlivesAsset(asset, baseYear, e.targetYear) && (
@@ -807,6 +870,48 @@ function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
             : <>Use this only for blends above E20/B20 — it buys flex-fuel vehicles. For low blends, use Fuel switch instead.</>}
         </p>
         <p className="text-[11px] text-ink-faint mt-2">{flexFuelTip()}</p>
+      </ActionRow>
+    </div>
+  );
+}
+
+/* Step 0 — the efficiency package. Applied before every other lever: the
+   savings shrink the base that electrification and fuel switching act on. */
+function EfficiencyControls({ asset }: { asset: CombustionAsset }) {
+  const { settings, updateAction } = useScenario();
+  const acts = settings.byAsset[asset.id];
+  const eff = acts?.efficiency ?? defaultEfficiency(asset);
+  const set = (patch: Partial<typeof eff>) => updateAction(asset.id, "efficiency", { ...eff, ...patch });
+  const isMobile = asset.category === "mobile";
+  const savedT = (eff.enabled ? eff.savingPct / 100 : 0) * combustionCO2e(asset);
+
+  return (
+    <div className="border-t border-line/70 mt-1 pt-4 pb-4">
+      <ActionRow
+        title="Efficiency (step 0)"
+        sub={isMobile ? "Telematics, driver training, route/load optimisation" : "Economiser, O₂ trim, burner tuning, right-sizing"}
+        icon={Gauge}
+        color={FAMILY_COLORS[7]}
+        enabled={eff.enabled}
+        onToggle={() => set({ enabled: !eff.enabled })}
+        info="Demand-side efficiency runs FIRST: it cuts this source's fuel before any switch, so every lever below acts on the reduced remainder — the cheapest tonnes on the curve, typically <2-year payback."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4 items-end">
+          <SliderField
+            label="Fuel saving"
+            value={eff.savingPct} min={0} max={40} suffix="%"
+            accent={FAMILY_COLORS[7]}
+            onChange={(v) => set({ savingPct: v })}
+            hint="Share of this source's fuel removed by the efficiency package. Defaults from the equipment type's typical range."
+          />
+          <NumField label="Package CAPEX" hint="One-off cost of the measures (economiser, telematics kit…)." value={eff.capex} step={100_000} suffix={CURRENCY} onChange={(v) => set({ capex: v })} />
+          <NumField label="Target year" hint="The year the saving is fully in place." value={eff.targetYear} min={2021} onChange={(v) => set({ targetYear: Math.max(2021, Math.min(2050, v)) })} />
+        </div>
+        {eff.enabled && savedT > 0.05 && (
+          <p className="text-[11px] text-ink-soft mt-3 bg-surface-muted rounded-lg px-2.5 py-1.5">
+            Removes <span className="font-semibold text-brand-600">−{fmt(savedT)} tCO₂e/yr</span> and shrinks the base every lever below works on.
+          </p>
+        )}
       </ActionRow>
     </div>
   );
@@ -1028,6 +1133,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
           <Collapsible title="Advanced">
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumField label="Retrofit CAPEX" hint="One-off cost for new compressors / safety upgrades for this system." value={gs.retrofitCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { retrofitCapex: v })} />
+              <NumField label="Alt-gas price" hint="₹/kg of the new gas — the switched share still needs top-ups. Naturals are cheap commodity gases; HFO blends premium." value={gs.altGasPricePerKg ?? refrigerantPricePerKg(gs.altRefrigerant)} step={100} suffix={`${CURRENCY}/kg`} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { altGasPricePerKg: v })} />
               <NumField label="Start year" hint="The year the transition begins." value={gs.startYear} step={1} min={2021} onChange={(v) => updateSystemAction(system.id, "gasSwitch", { startYear: Math.max(2021, Math.min(2050, v)) })} />
             </div>
           </Collapsible>
@@ -1054,6 +1160,7 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
           </p>
           <Collapsible title="Advanced">
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <NumField label="LDAR program CAPEX" hint="Leak detection & repair: sensors, tightness surveys, maintenance contract — small but not free." value={lf.capex ?? 0} step={25_000} suffix={CURRENCY} onChange={(v) => updateSystemAction(system.id, "leakFix", { capex: v })} />
               <NumField label="Start year" hint="The year the leak programme begins." value={lf.startYear} step={1} min={2021} onChange={(v) => updateSystemAction(system.id, "leakFix", { startYear: Math.max(2021, Math.min(2050, v)) })} />
             </div>
           </Collapsible>
@@ -1105,12 +1212,14 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
           <div className="text-[11px] uppercase tracking-wide text-brand-700 font-bold">Suggested for this source</div>
           <div className="mt-0.5 font-bold text-ink">{sug.headline}</div>
           <p className="text-xs text-ink-soft mt-1">{sug.why}</p>
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <button onClick={() => apply(sug.actions)} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Apply suggestion</button>
-            {sug.altHeadline && sug.altActions && (
-              <button onClick={() => apply(sug.altActions!)} className="text-sm font-medium text-brand-700 hover:underline">{sug.altHeadline}</button>
-            )}
-          </div>
+          {sug.actions.length > 0 && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <button onClick={() => apply(sug.actions)} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Apply suggestion</button>
+              {sug.altHeadline && sug.altActions && (
+                <button onClick={() => apply(sug.altActions!)} className="text-sm font-medium text-brand-700 hover:underline">{sug.altHeadline}</button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1124,7 +1233,7 @@ function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
     const a = baseAssets.find((x) => x.id === id); if (!a) return null;
     baseT = combustionCO2e(a);
     const acts = settings.byAsset[a.id];
-    if (acts) { const res = applyAssetActions(a, acts, settings.assumptions); afterT = Math.max(0, baseT - res.scope1AbatementT - res.fuelAbatementT); capex = capexForAsset(a, acts); spillT = res.scope2AddedT; }
+    if (acts) { const res = applyAssetActions(a, acts, settings.assumptions); afterT = Math.max(0, baseT - res.efficiencyAbatementT - res.scope1AbatementT - res.fuelAbatementT); capex = capexForAsset(a, acts); spillT = res.scope2AddedT; }
     else afterT = baseT;
   } else {
     const s = baseSystems.find((x) => x.id === id); if (!s) return null;
@@ -1171,13 +1280,17 @@ function AssumptionsCard({ seg }: { seg: Seg }) {
     <DetailCard title="Global assumptions">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {isRefrigerant ? (
-          <NumField label="Carbon price" hint="Internal carbon price. Because refrigerant GWPs are huge, even a small price makes retrofits look worthwhile." value={a.carbonPricePerTonne} step={250} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ carbonPricePerTonne: v })} />
+          <NumField label="Carbon price" hint="Internal carbon price — shown as a uniform ₹/t sensitivity across ALL levers (never mixed into the cash view)." value={a.carbonPricePerTonne} step={250} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ carbonPricePerTonne: v })} />
         ) : (
           <>
             <NumField label="Renewable sourcing" hint="Share of new electricity that is clean (solar/PPA) — cuts the Scope 2 electrification adds." value={a.renewableSourcingPct} step={5} suffix="%" onChange={(v) => updateAssumptions({ renewableSourcingPct: v })} />
             <NumField label="Grid emission factor" hint="How dirty the local grid is per unit of electricity." value={a.gridEf} step={0.01} suffix="kgCO₂e/kWh" onChange={(v) => updateAssumptions({ gridEf: v })} />
             <NumField label="REC cost" hint="Price of a renewable certificate per tonne, if offsetting leftover grid power." value={a.recCostPerTonne} step={100} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ recCostPerTonne: v })} />
             <NumField label="Infrastructure CAPEX" hint="One-off charging / grid-upgrade cost for electrification." value={a.infraCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateAssumptions({ infraCapex: v })} />
+            <NumField label="Discount rate (WACC)" hint="Annualizes capex over each lever's own lifetime (capital recovery factor) — drives every ₹/t ranking." value={a.discountRatePct ?? 10} step={0.5} suffix="%" onChange={(v) => updateAssumptions({ discountRatePct: v })} />
+            {seg === "mobile" && (
+              <NumField label="EV maintenance vs ICE" hint="EVs still need maintenance — this share of the displaced maintenance is added back to the running cost." value={a.evMaintenanceRatioPct ?? 65} step={5} suffix="%" onChange={(v) => updateAssumptions({ evMaintenanceRatioPct: v })} />
+            )}
           </>
         )}
       </div>

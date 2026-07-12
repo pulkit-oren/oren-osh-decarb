@@ -65,6 +65,27 @@ export function applyDials(assets: CombustionAsset[], systems: RefrigerationSyst
   return { ...base, byAsset, bySystem, assumptions: { ...base.assumptions, renewableSourcingPct: d.renewablePct } };
 }
 
+/** Switch leak fixes on across all cooling systems — near-zero cost, pure gas
+ *  savings, so every suggested mix includes them. Never lowers an existing
+ *  user setting. */
+export function withLeakFixes(settings: LeverSettings, systems: RefrigerationSystem[], improvementPct = 50): LeverSettings {
+  const bySystem = { ...settings.bySystem };
+  for (const s of systems) {
+    if (s.excluded) continue;
+    const cur = bySystem[s.id] ?? defaultSystemActions(s);
+    bySystem[s.id] = {
+      ...cur,
+      leakFix: {
+        ...cur.leakFix,
+        enabled: true,
+        leakImprovementPct: Math.max(cur.leakFix.leakImprovementPct, improvementPct),
+        targetYear: Math.min(cur.leakFix.targetYear, TARGET_YEAR),
+      },
+    };
+  }
+  return { ...settings, bySystem };
+}
+
 /* ---------- Derived dials ----------
    The per-source levers are the single source of truth; the balance dials are
    COMPUTED from them, so fine-tuning a source in the Scope 1 planner moves the
@@ -113,9 +134,10 @@ export function energyMix(assets: CombustionAsset[], settings: LeverSettings): {
   let fossil = 0, elec = 0, bio = 0;
   for (const a of assets) {
     if (a.excluded) continue;
-    const E = combustionBreakdown(a).energyGJ;
     const acts = settings.byAsset[a.id];
     const res = acts ? applyAssetActions(a, acts, settings.assumptions) : null;
+    // Step 0 efficiency removes demand entirely; the shares split the remainder.
+    const E = combustionBreakdown(a).energyGJ * (1 - (res?.effFraction ?? 0));
     const eF = res?.elecFraction ?? 0;
     const fF = res?.fuelFraction ?? 0;
     elec += E * eF;

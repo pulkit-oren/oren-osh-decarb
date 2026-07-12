@@ -1,14 +1,19 @@
 /* ============================================================
    Combined balance engine — one target across Scope 1 + 2.
    Measures the combined (market-based) 2030 reduction for any pair
-   of dial vectors, and suggests a mix CHEAPEST-FIRST: each lever
-   family is priced alone (cost per tonne from the real model), then
-   raised in cost order until the target is met. Pure: no React.
+   of dial vectors, and suggests mixes on three bases: cheapest ₹/t
+   (the balanced default), lowest CAPEX (least upfront capital), and
+   best OPEX saving (savings-first, shortest payback). Each family is
+   priced standalone with the real model, ranked by the chosen
+   objective, then raised greedily until the target is met. Every
+   suggested mix also switches leak fixes on — near-zero cost, pure
+   savings. Pure: no React.
    ============================================================ */
 
 import { compute } from "@/lib/model";
-import { applyDials, deriveDials, type BalanceDials } from "@/lib/model/energy-balance";
+import { applyDials, deriveDials, withLeakFixes, type BalanceDials } from "@/lib/model/energy-balance";
 import { combineTrajectories } from "@/lib/model/combined";
+import { simplePayback } from "@/lib/model/finance";
 import type { CombustionAsset, LeverSettings, RefrigerationSystem } from "@/lib/model/types";
 import { computeScope2 } from "@/lib/scope2/model";
 import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/model/energy-balance";
@@ -25,6 +30,27 @@ export interface CombinedInputs {
   baseYear: number;
 }
 
+export type MixObjective = "costPerTonne" | "capex" | "opexSaving" | "budget";
+
+export interface MixKpis {
+  totalCapex: number;
+  annualOpexDelta: number; // positive = cost, negative = saving
+  costPerTonne: number;
+  paybackYears: number | null;
+}
+
+export interface MixOption {
+  objective: MixObjective;
+  label: string;
+  blurb: string;
+  dials: CombinedDials;
+  achieved: number; // combined market-based reduction at 2030 (fraction)
+  met: boolean;
+  /** True when the CAPEX budget stopped the mix before the target. */
+  budgetLimited?: boolean;
+  kpis: MixKpis;
+}
+
 export function currentCombinedDials(inp: CombinedInputs): CombinedDials {
   return {
     s1: deriveDials(inp.assets, inp.systems, inp.s1Base),
@@ -32,16 +58,45 @@ export function currentCombinedDials(inp: CombinedInputs): CombinedDials {
   };
 }
 
-/** Combined market-based reduction at 2030 (fraction of the base-year total). */
-export function combinedReduction2030(inp: CombinedInputs, d: CombinedDials): number {
-  const r1 = compute(inp.assets, inp.systems, applyDials(inp.assets, inp.systems, inp.s1Base, d.s1), inp.baseYear);
+/* ---------- measurement ---------- */
+
+function results(inp: CombinedInputs, d: CombinedDials, leakFixes: boolean) {
+  let s1Settings = applyDials(inp.assets, inp.systems, inp.s1Base, d.s1);
+  if (leakFixes) s1Settings = withLeakFixes(s1Settings, inp.systems);
+  const r1 = compute(inp.assets, inp.systems, s1Settings, inp.baseYear);
   const r2 = computeScope2(inp.facilities, applyDials2(inp.facilities, inp.s2Base, d.s2), inp.baseYear);
+  return { r1, r2 };
+}
+
+function reductionOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): number {
   const rows = combineTrajectories(r1.trajectory, r2.trajectoryMarket);
   if (rows.length === 0) return 0;
   const base = rows[0].bau;
   const at2030 = rows.find((r) => r.year === 2030) ?? rows[rows.length - 1];
   return base > 0 ? (at2030.bau - at2030.net) / base : 0;
 }
+
+/** Combined market-based reduction at 2030 for a pair of dial vectors (no leak-fix add-on). */
+export function combinedReduction2030(inp: CombinedInputs, d: CombinedDials): number {
+  const { r1, r2 } = results(inp, d, false);
+  return reductionOf(r1, r2);
+}
+
+function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): MixKpis {
+  const active = [...r1.levers, ...r2.levers].filter((l) => l.abatementT > 0);
+  const totalCapex = active.reduce((s, l) => s + l.capex, 0);
+  const annualOpexDelta = active.reduce((s, l) => s + l.annualOpexDelta, 0);
+  const tonnes = active.reduce((s, l) => s + l.abatementT, 0);
+  const annualCost = active.reduce((s, l) => s + l.annualCost, 0);
+  return {
+    totalCapex,
+    annualOpexDelta,
+    costPerTonne: tonnes > 0 ? annualCost / tonnes : 0,
+    paybackYears: simplePayback(totalCapex, -annualOpexDelta),
+  };
+}
+
+/* ---------- families & pricing ---------- */
 
 type FamilyKey =
   | { scope: 1; key: keyof BalanceDials }
@@ -64,52 +119,123 @@ const ZERO: CombinedDials = {
 const withDial = (d: CombinedDials, f: FamilyKey, v: number): CombinedDials =>
   f.scope === 1 ? { ...d, s1: { ...d.s1, [f.key]: v } } : { ...d, s2: { ...d.s2, [f.key]: v } };
 
-/** Price one family alone at 100%: ₹/t from the real model, Infinity if inert. */
-function familyCostPerTonne(inp: CombinedInputs, f: FamilyKey): number {
-  const d = withDial(ZERO, f, 100);
-  if (f.scope === 1) {
-    const r = compute(inp.assets, inp.systems, applyDials(inp.assets, inp.systems, inp.s1Base, d.s1), inp.baseYear);
-    const active = r.levers.filter((l) => l.abatementT > 0);
-    const t = active.reduce((s, l) => s + l.abatementT, 0);
-    return t > 0 ? active.reduce((s, l) => s + l.annualCost, 0) / t : Infinity;
-  }
-  const r = computeScope2(inp.facilities, applyDials2(inp.facilities, inp.s2Base, d.s2), inp.baseYear);
-  const active = r.levers.filter((l) => l.abatementT > 0);
-  const t = active.reduce((s, l) => s + l.abatementT, 0);
-  return t > 0 ? active.reduce((s, l) => s + l.annualCost, 0) / t : Infinity;
+interface FamilyPrice { costPerTonne: number; capexPerTonne: number; opexPerTonne: number; tonnes: number; }
+
+/** Price one family alone at 100% with the real model (leak fixes excluded so
+ *  the family's own economics aren't polluted). */
+function priceFamily(inp: CombinedInputs, f: FamilyKey): FamilyPrice {
+  const { r1, r2 } = results(inp, withDial(ZERO, f, 100), false);
+  const levers = (f.scope === 1 ? r1.levers : r2.levers).filter((l) => l.abatementT > 0);
+  const tonnes = levers.reduce((s, l) => s + l.abatementT, 0);
+  if (tonnes <= 0) return { costPerTonne: Infinity, capexPerTonne: Infinity, opexPerTonne: Infinity, tonnes: 0 };
+  return {
+    costPerTonne: levers.reduce((s, l) => s + l.annualCost, 0) / tonnes,
+    capexPerTonne: levers.reduce((s, l) => s + l.capex, 0) / tonnes,
+    opexPerTonne: levers.reduce((s, l) => s + l.annualOpexDelta, 0) / tonnes,
+    tonnes,
+  };
 }
 
-/**
- * Cheapest-first mix for a combined 2030 target (0..1). Families are ranked by
- * their standalone ₹/t, then raised in 10-point steps in that order until the
- * target is met (electrification's renewable sourcing follows the S2
- * procurement dial so new load is greened consistently). Starts from ZERO
- * dials — the caller decides whether to apply the result.
- */
-export function suggestCombinedMix(inp: CombinedInputs, target: number): { dials: CombinedDials; achieved: number; order: string[] } {
+function rankKey(p: FamilyPrice, objective: MixObjective): [number, number] {
+  switch (objective) {
+    case "capex": return [p.capexPerTonne, p.costPerTonne];
+    case "opexSaving": return [p.opexPerTonne, p.costPerTonne]; // most-saving (most negative) first
+    case "costPerTonne":
+    case "budget": return [p.costPerTonne, p.capexPerTonne]; // budget = cheapest-first within the cap
+  }
+}
+
+/* ---------- suggesters ---------- */
+
+function greedyMix(
+  inp: CombinedInputs, target: number, objective: MixObjective, capexBudget?: number,
+): { dials: CombinedDials; achieved: number; order: string[]; budgetLimited: boolean } {
   const ranked = FAMILIES
-    .map((f) => ({ f, cost: familyCostPerTonne(inp, f) }))
-    .filter((x) => x.cost !== Infinity)
-    .sort((a, b) => a.cost - b.cost);
+    .map((f) => ({ f, p: priceFamily(inp, f) }))
+    .filter((x) => x.p.tonnes > 0)
+    .sort((a, b) => {
+      const ka = rankKey(a.p, objective), kb = rankKey(b.p, objective);
+      return ka[0] - kb[0] || ka[1] - kb[1];
+    });
 
   let dials: CombinedDials = {
     ...ZERO,
     s1: { ...ZERO.s1, renewablePct: inp.s1Base.assumptions.renewableSourcingPct ?? 0 },
   };
-  let achieved = combinedReduction2030(inp, dials);
+  const measure = (d: CombinedDials) => {
+    const { r1, r2 } = results(inp, d, true); // suggested mixes always include leak fixes
+    const active = [...r1.levers, ...r2.levers].filter((l) => l.abatementT > 0);
+    return { reduction: reductionOf(r1, r2), capex: active.reduce((s, l) => s + l.capex, 0) };
+  };
+  let m = measure(dials);
+  let budgetLimited = false;
+
+  const greenElectrify = (d: CombinedDials, f: FamilyKey): CombinedDials =>
+    f.scope === 1 && f.key === "electrifyPct"
+      ? { ...d, s1: { ...d.s1, renewablePct: Math.max(d.s1.renewablePct, d.s2.procurementPct) } }
+      : d;
 
   for (const { f } of ranked) {
-    if (achieved >= target) break;
+    if (m.reduction >= target) break;
     for (let v = 10; v <= 100; v += 10) {
-      dials = withDial(dials, f, v);
+      const prev = dials;
       // Green the electricity that electrification adds, in step with procurement.
-      if (f.scope === 1 && f.key === "electrifyPct") {
-        dials = { ...dials, s1: { ...dials.s1, renewablePct: Math.max(dials.s1.renewablePct, dials.s2.procurementPct) } };
+      dials = greenElectrify(withDial(dials, f, v), f);
+      const next = measure(dials);
+      // Budget mode: a step that busts the CAPEX cap is reverted; cheaper
+      // families further down the ranking may still fit.
+      if (objective === "budget" && capexBudget != null && next.capex > capexBudget) {
+        dials = prev;
+        budgetLimited = true;
+        break;
       }
-      achieved = combinedReduction2030(inp, dials);
-      if (achieved >= target) break;
+      m = next;
+      if (m.reduction >= target) break;
     }
   }
 
-  return { dials, achieved, order: ranked.map((x) => `${x.f.scope === 1 ? "S1" : "S2"}:${x.f.key}` ) };
+  // "Best OPEX saving" means MAXIMIZE savings subject to the target, not just
+  // reach it: raise every self-funding lever (negative OPEX per tonne) fully —
+  // more reduction, more savings; the payback column shows the capital price.
+  if (objective === "opexSaving") {
+    let changed = false;
+    for (const { f, p } of ranked) {
+      if (p.opexPerTonne < 0) { dials = greenElectrify(withDial(dials, f, 100), f); changed = true; }
+    }
+    if (changed) m = measure(dials);
+  }
+
+  return { dials, achieved: m.reduction, order: ranked.map((x) => `${x.f.scope === 1 ? "S1" : "S2"}:${x.f.key}`), budgetLimited };
+}
+
+/** Single-objective suggest (cheapest ₹/t by default). */
+export function suggestCombinedMix(inp: CombinedInputs, target: number, objective: MixObjective = "costPerTonne") {
+  return greedyMix(inp, target, objective);
+}
+
+const OPTION_META: Record<MixObjective, { label: string; blurb: string }> = {
+  costPerTonne: { label: "Cheapest overall", blurb: "Lowest ₹ per tonne — the balanced default." },
+  capex: { label: "Lowest CAPEX", blurb: "Least upfront capital — leans procurement and blends before new kit." },
+  opexSaving: { label: "Best OPEX saving", blurb: "Savings-maximizing — every self-funding lever at full, plus leak fixes; the payback column shows the capital price." },
+  budget: { label: "Within CAPEX budget", blurb: "Cheapest tonnes first, never exceeding your capital envelope — the question boards actually ask." },
+};
+
+/** The three bases (plus a budget-capped fourth when a CAPEX budget is given),
+ *  each scored with the real model. */
+export function suggestMixOptions(inp: CombinedInputs, target: number, opts?: { capexBudget?: number }): MixOption[] {
+  const objectives: MixObjective[] = ["costPerTonne", "capex", "opexSaving"];
+  if (opts?.capexBudget != null && opts.capexBudget > 0) objectives.push("budget");
+  return objectives.map((objective) => {
+    const { dials, achieved, budgetLimited } = greedyMix(inp, target, objective, opts?.capexBudget);
+    const { r1, r2 } = results(inp, dials, true);
+    return {
+      objective,
+      ...OPTION_META[objective],
+      dials,
+      achieved,
+      met: achieved >= target - 1e-9,
+      budgetLimited: objective === "budget" ? budgetLimited : undefined,
+      kpis: kpisOf(r1, r2),
+    };
+  });
 }

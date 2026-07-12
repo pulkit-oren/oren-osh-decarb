@@ -65,4 +65,21 @@ describe("BuilderHub — Balance to target lands first", () => {
     expect(screen.getAllByText("Mobile").length).toBeGreaterThan(0);
     expect(screen.getByText("Live projection")).toBeTruthy();
   });
+
+  it("suggest compares three bases and applying one moves the dials", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("button", { name: /compare 3 bases/i }));
+    // the three option rows with their trade-off stats
+    expect(screen.getByText("Cheapest overall")).toBeTruthy();
+    expect(screen.getByText("Lowest CAPEX")).toBeTruthy();
+    expect(screen.getByText("Best OPEX saving")).toBeTruthy();
+    // preview does NOT change the plan yet
+    expect((screen.getByLabelText("Efficiency dial") as HTMLInputElement).value).toBe("0");
+    // apply the OPEX-saving basis → dials move
+    fireEvent.click(screen.getByRole("button", { name: /Apply Best OPEX saving/i }));
+    expect(screen.getByText("Applied ✓")).toBeTruthy();
+    const dials = ["Efficiency dial", "Solar onsite dial", "Electrify fuel dial", "Bio-blend fuel dial", "Low-GWP refrigerant dial", "Procurement (market) dial"]
+      .map((l) => Number((screen.getByLabelText(l) as HTMLInputElement).value));
+    expect(Math.max(...dials)).toBeGreaterThan(0);
+  });
 });

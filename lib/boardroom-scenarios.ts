@@ -9,6 +9,7 @@ function clone(s: LeverSettings): LeverSettings {
 export function boardroomVariants(settings: LeverSettings): BoardroomVariant[] {
   const bau = clone(settings);
   for (const a of Object.values(bau.byAsset)) {
+    if (a.efficiency) a.efficiency.enabled = false;
     a.electrify.enabled = false;
     a.fuelSwitch.enabled = false;
     if (a.flexFuel) a.flexFuel.enabled = false;
@@ -20,6 +21,9 @@ export function boardroomVariants(settings: LeverSettings): BoardroomVariant[] {
 
   const acc = clone(settings);
   for (const a of Object.values(acc.byAsset)) {
+    if (a.efficiency?.enabled) {
+      a.efficiency.targetYear = Math.min(a.efficiency.targetYear, 2030);
+    }
     if (a.electrify.enabled) {
       a.electrify.capacityPct = 100;
       a.electrify.targetYear = Math.min(a.electrify.targetYear, 2030);

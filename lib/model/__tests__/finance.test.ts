@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { weightedCostPerTonne, yearsToTarget, annualizedCapex, simplePayback } from "../finance";
+import { weightedCostPerTonne, yearsToTarget, annualizedCapex, simplePayback, crf, annuity } from "../finance";
 import type { TrajectoryRow } from "../types";
 
 const row = (year: number, net: number, target: number): TrajectoryRow => ({
@@ -47,5 +47,15 @@ describe("finance", () => {
 
   it("simplePayback is null for zero capex when running costs increase", () => {
     expect(simplePayback(0, -100)).toBeNull();
+  });
+});
+
+describe("capital recovery factor", () => {
+  it("CRF at 10% over 10 years ≈ 0.1627, straight-line at 0%", () => {
+    expect(crf(10, 10)).toBeCloseTo(0.16275, 4);
+    expect(crf(0, 10)).toBeCloseTo(0.1, 9);
+  });
+  it("shorter-lived assets carry a higher annual capital charge", () => {
+    expect(annuity(1_000_000, 8, 10)).toBeGreaterThan(annuity(1_000_000, 20, 10));
   });
 });

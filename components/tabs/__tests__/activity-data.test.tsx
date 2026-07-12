@@ -484,7 +484,8 @@ describe("ActivityDataTab — end-use selector", () => {
     const sel = screen.getByLabelText(/Equipment \/ end-use/i) as HTMLSelectElement;
     expect(sel).toBeTruthy();
     const opts = Array.from(sel.querySelectorAll("option")).map((o) => o.textContent);
-    expect(opts.join("|")).toMatch(/Boiler/);     // stationary option present
+    expect(opts.join("|")).toMatch(/boiler/i);    // stationary option present
+    expect(opts.join("|")).toMatch(/fire pump/i); // reference-catalog equipment present
     expect(opts.join("|")).not.toMatch(/Truck/);  // mobile-only option absent for stationary
   });
 });

@@ -6,7 +6,7 @@
    market-based Scope 2. Pure: same inputs → same output.
    ============================================================ */
 
-import { annualizedCapex, simplePayback, weightedCostPerTonne } from "@/lib/model/finance";
+import { annuity, simplePayback, weightedCostPerTonne } from "@/lib/model/finance";
 import { buildTrajectory, targetLine } from "@/lib/model/trajectory";
 import type { TrajectoryRow, Wedge } from "@/lib/model/types";
 import { defaultFacilityActions } from "../defaults";
@@ -20,7 +20,12 @@ import { validateScope2 } from "./validate";
 
 export const END_YEAR = 2050;
 export const BAU_GROWTH = 0.01;
-export const CAPEX_LIFETIME = 10; // years over which CAPEX is annualized for cost/tonne
+export const CAPEX_LIFETIME = 10; // legacy default; per-lever lifetimes below drive the annuity
+const DISCOUNT_RATE_PCT = 10;
+/** Asset life per lever family — solar panels outlive LED retrofits. */
+const S2_LIFETIME_YEARS: Record<"efficiency" | "generation" | "procurement", number> = {
+  efficiency: 8, generation: 25, procurement: 10,
+};
 
 export interface OpexPart {
   label: string;
@@ -40,6 +45,9 @@ export interface Scope2LeverSummary {
   costPerTonne: number;
   opexParts: OpexPart[];
   paybackYears: number | null;
+  /** Deployment ramp — drives the trajectory wedge AND the cashflow phasing. */
+  startYear: number;
+  rampYears: number;
 }
 
 export interface Scope2ComputeResult {
@@ -159,7 +167,7 @@ export function computeScope2(
     capex: number, opexDelta: number, ramp: { startYear: number; rampYears: number },
     opexParts: OpexPart[],
   ): Scope2LeverSummary & { startYear: number; rampYears: number } => {
-    const annualCost = annualizedCapex(capex, CAPEX_LIFETIME) + opexDelta;
+    const annualCost = annuity(capex, S2_LIFETIME_YEARS[id], DISCOUNT_RATE_PCT) + opexDelta;
     return {
       id, label, colorIdx, scope: 2, enabled: abatementT > 0,
       abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta, annualCost,
@@ -216,7 +224,7 @@ export function computeScope2(
     procurement: proc,
     locationNowT,
     marketNowT,
-    levers: leverRows.map(({ startYear, rampYears, ...rest }) => { void startYear; void rampYears; return rest; }),
+    levers: leverRows,
     wedgesLocation,
     wedgesMarket,
     trajectoryLocation,

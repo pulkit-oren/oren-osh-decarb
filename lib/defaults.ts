@@ -76,6 +76,7 @@ export const DEFAULT_SETTINGS: LeverSettings = {
   assumptions: {
     gridEf: GRID_EF_DEFAULT, renewableSourcingPct: 50, recCostPerTonne: 800,
     carbonPricePerTonne: 2000, infraCapex: 15_000_000,
+    discountRatePct: 10, maintenanceShareOfSpendPct: 20, evMaintenanceRatioPct: 65,
   },
   bySystem: {
     cold: {

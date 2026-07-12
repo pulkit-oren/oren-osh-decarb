@@ -12,10 +12,10 @@ import { Target, Zap, Fuel, Snowflake, Sun, Lightbulb, Landmark, Wind, ChevronRi
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import { useGoals } from "@/lib/goals/store";
-import { applyDials, deriveDials, type BalanceDials } from "@/lib/model/energy-balance";
+import { applyDials, deriveDials, withLeakFixes, type BalanceDials } from "@/lib/model/energy-balance";
 import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/model/energy-balance";
 import { combineTrajectories } from "@/lib/model/combined";
-import { suggestCombinedMix, type CombinedInputs } from "@/lib/combined-balance";
+import { suggestMixOptions, type CombinedInputs, type MixObjective, type MixOption } from "@/lib/combined-balance";
 import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/select";
 import { CURRENCY } from "@/lib/defaults";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
@@ -76,11 +76,19 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
   const lever1 = (id: string) => s1.result.levers.find((l) => l.id === id);
   const lever2 = (id: string) => s2.result.levers.find((l) => l.id === id);
 
-  const suggest = () => {
+  /* ---- suggested mixes: preview first, apply per row ---- */
+  const [options, setOptions] = useState<MixOption[] | null>(null);
+  const [appliedObj, setAppliedObj] = useState<MixObjective | null>(null);
+  const [capexBudget, setCapexBudget] = useState(0); // 0 = no cap
+  const computeOptions = () => {
     const inp: CombinedInputs = { assets, systems, s1Base: s1.settings, facilities, s2Base: s2.levers, baseYear: s1.baseYear };
-    const { dials } = suggestCombinedMix(inp, target / 100);
-    s1.setSettings((p) => applyDials(assets, systems, p, dials.s1));
-    s2.setLevers((p) => applyDials2(facilities, p, dials.s2));
+    setOptions(suggestMixOptions(inp, target / 100, capexBudget > 0 ? { capexBudget } : undefined));
+    setAppliedObj(null);
+  };
+  const applyOption = (o: MixOption) => {
+    s1.setSettings((p) => withLeakFixes(applyDials(assets, systems, p, o.dials.s1), systems));
+    s2.setLevers((p) => applyDials2(facilities, p, o.dials.s2));
+    setAppliedObj(o.objective);
   };
 
   const LEVER_ROWS: {
@@ -146,7 +154,7 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
             <input
               type="number" value={target} min={0} max={100}
               aria-label="Combined reduction target"
-              onChange={(e) => { setTouched(true); setTarget(Math.max(0, Math.min(100, Number(e.target.value)))); }}
+              onChange={(e) => { setTouched(true); setOptions(null); setTarget(Math.max(0, Math.min(100, Number(e.target.value)))); }}
               className="w-20 text-right tabular-nums rounded-lg border border-line px-2 py-1.5"
             />
             <span className="text-ink-faint text-sm">% by 2030</span>
@@ -217,11 +225,67 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
           )}
         </div>
         <div className="mt-4 flex items-center gap-3 flex-wrap">
-          <button onClick={suggest} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">
-            Suggest a mix for {target}% — cheapest first
+          <button onClick={computeOptions} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">
+            Suggest a mix for {target}% — compare {capexBudget > 0 ? 4 : 3} bases
           </button>
-          <span className="text-[11px] text-ink-faint">Prices each lever with the real model ({CURRENCY}/t), then raises them cheapest-first until the target is met. Replaces the current dial settings.</span>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-ink-soft font-medium">CAPEX budget</span>
+            <input
+              type="number" min={0} step={1_000_000}
+              value={capexBudget === 0 ? "" : capexBudget}
+              placeholder="no cap"
+              aria-label="CAPEX budget"
+              onChange={(e) => { setOptions(null); setCapexBudget(Math.max(0, Number(e.target.value) || 0)); }}
+              className="w-36 text-right tabular-nums rounded-lg border border-line px-2 py-1.5"
+            />
+            <span className="text-ink-faint text-xs">{CURRENCY} (optional — adds a budget-capped option)</span>
+          </label>
+          <span className="text-[11px] text-ink-faint">Prices each lever with the real model ({CURRENCY}/t, CAPEX/t, OPEX/t), builds a mix per basis, and shows the trade-off before anything changes.</span>
         </div>
+
+        {options && (
+          <div className="mt-4 rounded-xl2 border border-brand-200 bg-brand-50/40 p-4">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap mb-1">
+              <p className="text-sm font-bold text-ink">Three ways to hit {target}% — pick one to apply</p>
+              <span className="text-[11px] text-ink-faint">Leak fixes included in every mix (near-zero cost, pure savings). Applying replaces the current dials.</span>
+            </div>
+            <div className="flex flex-col divide-y divide-brand-200/60">
+              {options.map((o) => (
+                <div key={o.objective} className="py-3 flex items-center gap-4 flex-wrap">
+                  <div className="min-w-[180px] flex-1">
+                    <div className="text-sm font-bold text-ink flex items-center gap-2">
+                      {o.label}
+                      {o.met ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-brand-100 text-brand-700">meets target</span>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-amber-100 text-amber-700">
+                          {o.budgetLimited ? `budget-capped at ${Math.round(o.achieved * 100)}%` : `best reachable ${Math.round(o.achieved * 100)}%`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-ink-soft mt-0.5">{o.blurb}</p>
+                  </div>
+                  <div className="flex items-center gap-5 text-right">
+                    <div className="w-24"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(o.kpis.totalCapex)}</div></div>
+                    <div className="w-28"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">OPEX Δ / yr</div><div className={cn("text-sm font-extrabold tabular-nums", o.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700")}>{fmtMoney(o.kpis.annualOpexDelta)}</div></div>
+                    <div className="w-20"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost / t</div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmt(o.kpis.costPerTonne)}</div></div>
+                    <div className="w-16"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Payback</div><div className="text-sm font-extrabold tabular-nums text-ink">{o.kpis.paybackYears != null ? `${o.kpis.paybackYears.toFixed(1)} yr` : "—"}</div></div>
+                  </div>
+                  {appliedObj === o.objective ? (
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-100 text-brand-700 px-3 py-1.5 shrink-0">Applied ✓</span>
+                  ) : (
+                    <button
+                      onClick={() => applyOption(o)}
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-brand-300 bg-white text-brand-700 px-3 py-1.5 hover:bg-brand-50 transition-colors shrink-0"
+                    >
+                      Apply {o.label}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </DetailCard>
 
       <Collapsible title="How this is calculated">
@@ -229,7 +293,8 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
           <p><strong className="text-ink">Required cut</strong> = combined base-year total × target = {fmt(base)} t × {target}% = <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> by 2030.</p>
           <p><strong className="text-ink">Allocated</strong> = combined BAU 2030 − net 2030 = {fmt(at2030?.bau ?? 0)} − {fmt(at2030?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. Each lever row shows its own share of that number — its wedge at 2030, from the same model that drives the Action plan and Compare tabs.</p>
           <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
-          <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Leak fixes, flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
+          <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
+          <p><strong className="text-ink">Suggested mixes</strong> price each lever family alone with the real model, rank them by the chosen basis, then raise dials in that order until the target is met: <strong className="text-ink">Cheapest overall</strong> ranks by ₹ per tonne (annualized CAPEX + OPEX), <strong className="text-ink">Lowest CAPEX</strong> by upfront ₹ per tonne, <strong className="text-ink">Best OPEX saving</strong> by running-cost saving per tonne. Every mix also enables leak fixes — they cost almost nothing and save gas money every year.</p>
         </div>
       </Collapsible>
     </div>

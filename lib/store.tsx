@@ -14,7 +14,7 @@ import {
 import { compute, type ComputeResult } from "./model";
 import { baselineScope1, type BaselineResult } from "./model/baseline";
 import type {
-  AssetActions, CombustionAsset, CombustionByYear, ElectrifyAction, FlexFuelAction, FuelSwitchAction,
+  AssetActions, CombustionAsset, CombustionByYear, EfficiencyAction, ElectrifyAction, FlexFuelAction, FuelSwitchAction,
   GasSwitchAction, GlobalAssumptions, LeakFixAction, LeverSettings, RefrigerationByYear,
   RefrigerationSystem, Scenario, SystemActions,
 } from "./model/types";
@@ -50,7 +50,7 @@ interface StoreShape {
   copyRefrigeration: (fromYear: number, toYear: number) => void;
 
   setSettings: (updater: (prev: LeverSettings) => LeverSettings) => void;
-  updateAction: (assetId: string, lever: "electrify" | "fuelSwitch" | "flexFuel", patch: Partial<ElectrifyAction> & Partial<FuelSwitchAction> & Partial<FlexFuelAction>) => void;
+  updateAction: (assetId: string, lever: "efficiency" | "electrify" | "fuelSwitch" | "flexFuel", patch: Partial<EfficiencyAction> & Partial<ElectrifyAction> & Partial<FuelSwitchAction> & Partial<FlexFuelAction>) => void;
   updateSystemAction: (systemId: string, lever: "gasSwitch" | "leakFix", patch: Partial<GasSwitchAction> & Partial<LeakFixAction>) => void;
   updateAssumptions: (patch: Partial<GlobalAssumptions>) => void;
   resetSettings: () => void;
@@ -220,8 +220,8 @@ export function ScenarioProvider({
   /* ---- scenario settings ---- */
   const setSettings = (updater: (prev: LeverSettings) => LeverSettings) => setSettingsState(updater);
   const updateAction = (
-    assetId: string, lever: "electrify" | "fuelSwitch" | "flexFuel",
-    patch: Partial<ElectrifyAction> & Partial<FuelSwitchAction> & Partial<FlexFuelAction>,
+    assetId: string, lever: "efficiency" | "electrify" | "fuelSwitch" | "flexFuel",
+    patch: Partial<EfficiencyAction> & Partial<ElectrifyAction> & Partial<FuelSwitchAction> & Partial<FlexFuelAction>,
   ) =>
     setSettingsState((p) => {
       const cur = p.byAsset[assetId];

@@ -214,7 +214,7 @@ describe("BuilderTab — electrify feasibility warning visible when lever is OFF
     // Step 2: The segment now shows source boxes — click the "Kiln Furnace" box to open its scenario screen
     fireEvent.click(screen.getByText("Kiln Furnace"));
     // Step 3: The warning badge must be visible regardless of the toggle state
-    expect(screen.getByText(/electrification is limited/i)).toBeTruthy();
+    expect(screen.getByText(/pick the finer Furnace or Kiln/i)).toBeTruthy();
   });
 
   it("source box for furnaceKiln shows the end-use label in its sublabel", () => {

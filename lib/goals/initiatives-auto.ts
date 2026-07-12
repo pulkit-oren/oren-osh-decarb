@@ -8,14 +8,16 @@
    ============================================================ */
 
 import { combustionCO2e, combustionEnergyKJ } from "@/lib/model/baseline";
-import { applyAssetActions, defaultActions, defaultSystemActions } from "@/lib/model/segments";
+import { applyAssetActions, defaultActions, defaultSystemActions, type AssetActionResult } from "@/lib/model/segments";
 import { applyRefrigerant } from "@/lib/model/levers";
+import { getRefrigerant, refrigerantPricePerKg } from "@/lib/model/factors";
+import { simplePayback } from "@/lib/model/finance";
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem } from "@/lib/model/suggestions";
 import { M2_PER_KW } from "@/lib/scope2/model/constants";
 import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import { resolveCombustion, resolveRefrigeration } from "@/lib/yearly";
 import { resolveFacilities } from "@/lib/scope2/store-helpers";
-import type { AssetActions, ElectrifyAction, FuelSwitchAction, FlexFuelAction, SystemActions, GasSwitchAction, LeakFixAction } from "@/lib/model/types";
+import type { AssetActions, EfficiencyAction, ElectrifyAction, FuelSwitchAction, FlexFuelAction, SystemActions, GasSwitchAction, LeakFixAction } from "@/lib/model/types";
 import type { Goal, Initiative } from "./types";
 import type { Inventories } from "./select";
 
@@ -28,7 +30,8 @@ const ASSUMPTIONS = DEFAULT_SETTINGS.assumptions;
 function mergeAssetSuggestion(asset: Parameters<typeof suggestForAsset>[0]): AssetActions {
   const acts = defaultActions(asset);
   for (const a of suggestForAsset(asset).actions) {
-    if (a.lever === "electrify") acts.electrify = { ...acts.electrify, ...(a.patch as Partial<ElectrifyAction>), enabled: true };
+    if (a.lever === "efficiency" && acts.efficiency) acts.efficiency = { ...acts.efficiency, ...(a.patch as Partial<EfficiencyAction>), enabled: true };
+    else if (a.lever === "electrify") acts.electrify = { ...acts.electrify, ...(a.patch as Partial<ElectrifyAction>), enabled: true };
     else if (a.lever === "fuelSwitch") acts.fuelSwitch = { ...acts.fuelSwitch, ...(a.patch as Partial<FuelSwitchAction>), enabled: true };
     else if (a.lever === "flexFuel" && acts.flexFuel) acts.flexFuel = { ...acts.flexFuel, ...(a.patch as Partial<FlexFuelAction>), enabled: true };
   }
@@ -47,10 +50,43 @@ function mergeSystemSuggestion(sys: Parameters<typeof suggestForSystem>[0]): Sys
 const scopeIncludesS1 = (g: Goal) => g.scope === "s1" || g.scope === "s1s2";
 const scopeIncludesS2 = (g: Goal) => g.scope === "s2" || g.scope === "s1s2";
 
+/** Per-asset running-cost delta for a suggested plan — mirrors the compute()
+ *  opex logic so the goal's P&L view matches the modeller. */
+function assetOpexDelta(asset: Parameters<typeof suggestForAsset>[0], acts: AssetActions, r: AssetActionResult): number {
+  let d = 0;
+  if (acts.efficiency?.enabled) d -= asset.opex * r.effFraction;
+  if (acts.electrify.enabled && r.elecFraction > 0) {
+    d += r.kWh * acts.electrify.tariffPerKwh;
+    d -= asset.opex * (1 - r.effFraction) * r.elecFraction;
+    if (asset.category === "mobile") d += asset.opex * (1 - r.effFraction) * r.elecFraction * 0.2 * 0.65; // EV maintenance retained
+  }
+  if ((acts.fuelSwitch.enabled || acts.flexFuel?.enabled) && r.fuelFraction > 0) {
+    const unitPrice = asset.annualVolume > 0 ? asset.opex / asset.annualVolume : 0;
+    const vol = asset.annualVolume * (1 - r.effFraction) * r.fuelFraction;
+    d += vol * acts.fuelSwitch.altFuelPricePerUnit - vol * unitPrice;
+  }
+  return d;
+}
+
+/** Per-system running-cost delta: leak savings, alt-gas top-ups, displaced base gas. */
+function systemOpexDelta(sys: Parameters<typeof suggestForSystem>[0], acts: SystemActions): number {
+  let d = 0;
+  const leakPct = acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0;
+  d -= sys.toppedUpKg * (leakPct / 100) * sys.gasCostPerKg;
+  if (acts.gasSwitch.enabled && acts.gasSwitch.transitionPct > 0) {
+    const gShare = acts.gasSwitch.transitionPct / 100;
+    const topUp = sys.toppedUpKg * (1 - leakPct / 100);
+    const alt = getRefrigerant(acts.gasSwitch.altRefrigerant);
+    const altPrice = acts.gasSwitch.altGasPricePerKg ?? refrigerantPricePerKg(acts.gasSwitch.altRefrigerant);
+    d += gShare * topUp * alt.volAdj * altPrice - gShare * topUp * sys.gasCostPerKg;
+  }
+  return d;
+}
+
 /** Suggested initiatives for a goal, from base-year data, in the goal's metric. */
 export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
   const out: Initiative[] = [];
-  const push = (ref: string, name: string, metricImpact: number, budget: number) => {
+  const push = (ref: string, name: string, metricImpact: number, budget: number, annualOpexDelta?: number) => {
     if (metricImpact <= 0) return;
     out.push({
       id: `a:${goal.id}:${ref}`,
@@ -62,6 +98,8 @@ export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
       targetYear: goal.targetYear,
       metricImpact,
       budget: Math.round(budget),
+      annualOpexDelta: annualOpexDelta != null ? Math.round(annualOpexDelta) : undefined,
+      paybackYears: annualOpexDelta != null ? simplePayback(Math.round(budget), -annualOpexDelta) : undefined,
       progressPct: 0,
       auto: true,
       sourceRef: ref,
@@ -79,8 +117,8 @@ export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
       for (const asset of assets) {
         const acts = mergeAssetSuggestion(asset);
         const r = applyAssetActions(asset, acts, ASSUMPTIONS);
-        const tonnes = r.scope1AbatementT + r.fuelAbatementT;
-        push(asset.id, suggestForAsset(asset).headline, tonnes, capexForAsset(asset, acts));
+        const tonnes = r.efficiencyAbatementT + r.scope1AbatementT + r.fuelAbatementT;
+        push(asset.id, suggestForAsset(asset).headline, tonnes, capexForAsset(asset, acts), assetOpexDelta(asset, acts, r));
       }
       for (const sys of systems) {
         const acts = mergeSystemSuggestion(sys);
@@ -89,15 +127,15 @@ export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
           altRefrigerant: acts.gasSwitch.altRefrigerant,
           leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
         });
-        push(sys.id, suggestForSystem(sys).headline, r.abatementT, capexForSystem(acts));
+        push(sys.id, suggestForSystem(sys).headline, r.abatementT, capexForSystem(acts), systemOpexDelta(sys, acts));
       }
     }
     if (scopeIncludesS2(goal)) {
       for (const f of facilities) {
         const solar = sizeSolar(f);
-        push(`${f.id}:solar`, `Install ${Math.round(solar.kWp)} kWp solar at ${f.name}`, solar.selfConsumed * f.gridEf / 1000, solar.budget);
+        push(`${f.id}:solar`, `Install ${Math.round(solar.kWp)} kWp solar at ${f.name}`, solar.selfConsumed * f.gridEf / 1000, solar.budget, -solar.selfConsumed * f.tariffPerKwh);
         const savedKwh = EFFICIENCY_SAVING_SHARE * f.annualLoadKwh;
-        push(`${f.id}:eff`, `Energy-efficiency retrofit at ${f.name}`, savedKwh * f.gridEf / 1000, savedKwh * EFFICIENCY_CAPEX_PER_KWH);
+        push(`${f.id}:eff`, `Energy-efficiency retrofit at ${f.name}`, savedKwh * f.gridEf / 1000, savedKwh * EFFICIENCY_CAPEX_PER_KWH, -savedKwh * f.tariffPerKwh);
       }
     }
     return out;

@@ -437,6 +437,24 @@ export const REFRIGERANTS: Record<RefrigerantId, RefrigerantFactor> = {
 /** Refrigerants offered as upgrade targets in the lever (low-GWP, deployable). */
 export const ALT_REFRIGERANT_IDS: RefrigerantId[] = ["R290", "R744", "R717", "R454B", "R32", "R1234yf", "R600a"];
 
+/** Indicative gas prices (₹/kg) for post-switch top-up economics. Explicit
+ *  entries first; otherwise naturals are cheap commodity gases, HFO-era blends
+ *  premium, legacy/current HFCs in between (legacy also faces Kigali
+ *  phase-down escalation — "do nothing" is not free). */
+const GAS_PRICE_PER_KG: Partial<Record<RefrigerantId, number>> = {
+  R290: 350, R717: 300, R744: 250, R600a: 400,
+};
+
+export function refrigerantPricePerKg(id: RefrigerantId): number {
+  const explicit = GAS_PRICE_PER_KG[id];
+  if (explicit != null) return explicit;
+  const f = REFRIGERANTS[id];
+  if (f.natural) return 400;
+  if (f.era === "future") return 2_800; // HFO blends
+  if (f.era === "legacy") return 900;
+  return 1_200; // current-era HFCs
+}
+
 /** Sensible low-GWP swap per system type, surfaced as a one-click suggestion. */
 export const RECOMMENDED_ALT_BY_SYSTEM: Record<RefrigerationSystem["systemType"], RefrigerantId> = {
   industrialColdStorage: "R717", // ammonia — zero GWP, best efficiency; industrial, trained staff

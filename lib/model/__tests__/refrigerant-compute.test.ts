@@ -67,13 +67,25 @@ describe("compute — per-system refrigerant", () => {
     expect(wedge.rampYears).toBe(6); // 2026..2031
   });
 
-  it("carbon price flows into the opex parts", () => {
+  it("switching to a cheap natural turns top-ups into a running SAVING", () => {
+    const r = compute([], [system], mkSettings({
+      gasSwitch: { enabled: true, transitionPct: 100, altRefrigerant: "R717", retrofitCapex: 0, startYear: 2027, targetYear: 2031 },
+      leakFix: leakOff,
+    }), 2025);
+    const lever = r.levers.find((l) => l.id === "refrigerant")!;
+    // alt top-ups: 100 kg × volAdj 0.5 × ₹300 = ₹15k; displaced base gas: 100 kg × ₹1000 = ₹100k
+    expect(lever.annualOpexDelta).toBeCloseTo(15_000 - 100_000, 0);
+    expect(lever.opexParts.find((p) => p.label.includes("Alt-gas top-ups"))?.amount).toBeCloseTo(15_000, 0);
+    expect(lever.opexParts.find((p) => p.label.includes("Displaced base-gas"))?.amount).toBeCloseTo(-100_000, 0);
+    // carbon price no longer contaminates the cash view (it's a sensitivity, not revenue)
+    expect(lever.opexParts.some((p) => p.label.includes("Carbon"))).toBe(false);
+  });
+
+  it("leak-fix LDAR capex is counted when set", () => {
     const r = compute([], [system], mkSettings({
       gasSwitch: off,
-      leakFix: { enabled: true, leakImprovementPct: 50, startYear: 2026, targetYear: 2028 },
-    }, 2000), 2025);
-    const lever = r.levers.find((l) => l.id === "refrigerant")!;
-    const carbon = lever.opexParts.find((p) => p.label === "Carbon-price value of abatement")!;
-    expect(carbon.amount).toBeCloseTo(-197.15 * 2000, 0);
+      leakFix: { enabled: true, leakImprovementPct: 50, capex: 250_000, startYear: 2026, targetYear: 2028 },
+    }), 2025);
+    expect(r.levers.find((l) => l.id === "refrigerant")!.capex).toBe(250_000);
   });
 });

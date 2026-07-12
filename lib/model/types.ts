@@ -181,6 +181,11 @@ export interface ElectrifyAction {
   cop: number; // 1 = electric boiler, ~3 = heat pump / EV efficiency
   tariffPerKwh: number;
   assetCapex: number; // per-asset purchase cost (× units for mobile)
+  /** MOBILE: convert at natural replacement (pay only the EV premium — you'd
+   *  buy an ICE anyway) or retire early (full EV price). Defaults "replacement". */
+  purchaseTiming?: "replacement" | "early";
+  /** EV premium over the ICE it replaces, % of the EV price. Defaults 40. */
+  replacementPremiumPct?: number;
   startYear: number;
   targetYear: number;
 }
@@ -209,7 +214,20 @@ export interface FlexFuelAction {
   targetYear: number;
 }
 
+/** Step 0 of the stacking pipeline — demand-side efficiency (economiser
+ *  packages, burner tuning, DG right-sizing, telematics…). Applied FIRST:
+ *  every downstream lever acts on the reduced remainder. */
+export interface EfficiencyAction {
+  enabled: boolean;
+  savingPct: number; // 0..40, share of fuel saved
+  capex: number;
+  startYear: number;
+  targetYear: number;
+}
+
 export interface AssetActions {
+  /** Optional — older saved plans won't have it; treated as disabled when absent. */
+  efficiency?: EfficiencyAction;
   electrify: ElectrifyAction;
   fuelSwitch: FuelSwitchAction;
   /** Optional — older saved plans won't have it; treated as disabled when absent. */
@@ -223,6 +241,9 @@ export interface GasSwitchAction {
   transitionPct: number; // 0..100, share of this system's charge moved
   altRefrigerant: RefrigerantId;
   retrofitCapex: number;
+  /** ₹/kg of the alternative gas — the switched share still leaks and still
+   *  needs top-ups. Defaults from the refrigerant price table when absent. */
+  altGasPricePerKg?: number;
   startYear: number;
   targetYear: number;
 }
@@ -230,6 +251,9 @@ export interface GasSwitchAction {
 export interface LeakFixAction {
   enabled: boolean;
   leakImprovementPct: number; // 0..80, reduction in leak rate
+  /** LDAR program cost (sensors, tightness surveys, maintenance contract) —
+   *  small but not free; keeps the MACC honest. Optional for old plans. */
+  capex?: number;
   startYear: number;
   targetYear: number;
 }
@@ -246,6 +270,12 @@ export interface GlobalAssumptions {
   recCostPerTonne: number;
   carbonPricePerTonne: number;
   infraCapex: number; // one-off charging / grid-upgrade cost
+  /** WACC used to annualize capex (capital recovery factor). Optional for old saves; defaults 10. */
+  discountRatePct?: number;
+  /** Maintenance share of an asset's annual spend (fuel is the rest). Defaults 20. */
+  maintenanceShareOfSpendPct?: number;
+  /** EV maintenance as a share of the ICE maintenance it replaces. Defaults 65. */
+  evMaintenanceRatioPct?: number;
 }
 
 export interface LeverSettings {

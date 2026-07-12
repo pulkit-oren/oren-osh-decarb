@@ -2,8 +2,8 @@
    measurement, derived current dials, and the cheapest-first suggester. */
 
 import { describe, expect, it } from "vitest";
-import { combinedReduction2030, currentCombinedDials, suggestCombinedMix, type CombinedInputs } from "../combined-balance";
-import { applyDials } from "@/lib/model/energy-balance";
+import { combinedReduction2030, currentCombinedDials, suggestCombinedMix, suggestMixOptions, type CombinedInputs } from "../combined-balance";
+import { applyDials, withLeakFixes } from "@/lib/model/energy-balance";
 import { applyDials2 } from "@/lib/scope2/model/energy-balance";
 import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import type { CombustionAsset, LeverSettings, RefrigerationSystem } from "@/lib/model/types";
@@ -68,5 +68,45 @@ describe("suggestCombinedMix", () => {
     const { achieved } = suggestCombinedMix(inp, 0.99);
     expect(achieved).toBeGreaterThan(0);
     expect(achieved).toBeLessThan(0.99);
+  });
+});
+
+describe("suggestMixOptions — three bases, ordered trade-offs", () => {
+  const options = suggestMixOptions(inp, 0.12);
+  const byId = Object.fromEntries(options.map((o) => [o.objective, o]));
+
+  it("returns all three bases and every one meets a modest target", () => {
+    expect(options.map((o) => o.objective)).toEqual(["costPerTonne", "capex", "opexSaving"]);
+    for (const o of options) {
+      expect(o.met).toBe(true);
+      expect(o.achieved).toBeGreaterThanOrEqual(0.12);
+    }
+  });
+
+  it("lowest-CAPEX basis needs the least upfront capital", () => {
+    expect(byId.capex.kpis.totalCapex).toBeLessThanOrEqual(byId.costPerTonne.kpis.totalCapex + 1e-6);
+    expect(byId.capex.kpis.totalCapex).toBeLessThanOrEqual(byId.opexSaving.kpis.totalCapex + 1e-6);
+  });
+
+  it("best-OPEX basis has the best running-cost position", () => {
+    expect(byId.opexSaving.kpis.annualOpexDelta).toBeLessThanOrEqual(byId.capex.kpis.annualOpexDelta + 1e-6);
+    expect(byId.opexSaving.kpis.annualOpexDelta).toBeLessThanOrEqual(byId.costPerTonne.kpis.annualOpexDelta + 1e-6);
+  });
+
+  it("a CAPEX budget adds a fourth, honestly-capped option", () => {
+    const withBudget = suggestMixOptions(inp, 0.5, { capexBudget: 500_000 });
+    expect(withBudget).toHaveLength(4);
+    const b = withBudget.find((o) => o.objective === "budget")!;
+    expect(b.kpis.totalCapex).toBeLessThanOrEqual(500_000 + 1e-6);
+    // an aggressive target under a tight cap reports itself as budget-capped
+    if (!b.met) expect(b.budgetLimited).toBe(true);
+    // without a budget the fourth option doesn't appear
+    expect(suggestMixOptions(inp, 0.12)).toHaveLength(3);
+  });
+
+  it("leak fixes ride along with every applied mix", () => {
+    const applied = withLeakFixes(applyDials(assets, systems, s1Base, byId.capex.dials.s1), systems);
+    expect(applied.bySystem["s1"].leakFix.enabled).toBe(true);
+    expect(applied.bySystem["s1"].leakFix.leakImprovementPct).toBeGreaterThanOrEqual(50);
   });
 });

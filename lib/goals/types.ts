@@ -71,6 +71,10 @@ export interface Initiative {
   metricImpact: number;
   /** One-off capital cost (₹). */
   budget: number;
+  /** Annual running-cost change (₹/yr, negative = saving) — the OPEX view surviving into the goal. */
+  annualOpexDelta?: number;
+  /** Simple payback (budget ÷ annual saving), null/undefined when it never pays back. */
+  paybackYears?: number | null;
   /** Manual rollout completeness (0..100) — shown in the rollup, not the forecast. */
   progressPct?: number;
   note?: string;
