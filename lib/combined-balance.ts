@@ -28,6 +28,8 @@ export interface CombinedInputs {
   facilities: Facility[];           // pre-filtered
   s2Base: Scope2Levers;
   baseYear: number;
+  /** Year the reduction is measured at (defaults to 2030). */
+  targetYear?: number;
 }
 
 export type MixObjective = "costPerTonne" | "capex" | "opexSaving" | "budget";
@@ -68,18 +70,18 @@ function results(inp: CombinedInputs, d: CombinedDials, leakFixes: boolean) {
   return { r1, r2 };
 }
 
-function reductionOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): number {
+function reductionOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>, targetYear = 2030): number {
   const rows = combineTrajectories(r1.trajectory, r2.trajectoryMarket);
   if (rows.length === 0) return 0;
   const base = rows[0].bau;
-  const at2030 = rows.find((r) => r.year === 2030) ?? rows[rows.length - 1];
-  return base > 0 ? (at2030.bau - at2030.net) / base : 0;
+  const atTarget = rows.find((r) => r.year === targetYear) ?? rows[rows.length - 1];
+  return base > 0 ? (atTarget.bau - atTarget.net) / base : 0;
 }
 
-/** Combined market-based reduction at 2030 for a pair of dial vectors (no leak-fix add-on). */
+/** Combined market-based reduction at the target year for a pair of dial vectors (no leak-fix add-on). */
 export function combinedReduction2030(inp: CombinedInputs, d: CombinedDials): number {
   const { r1, r2 } = results(inp, d, false);
-  return reductionOf(r1, r2);
+  return reductionOf(r1, r2, inp.targetYear);
 }
 
 function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): MixKpis {
@@ -165,7 +167,7 @@ function greedyMix(
   const measure = (d: CombinedDials) => {
     const { r1, r2 } = results(inp, d, true); // suggested mixes always include leak fixes
     const active = [...r1.levers, ...r2.levers].filter((l) => l.abatementT > 0);
-    return { reduction: reductionOf(r1, r2), capex: active.reduce((s, l) => s + l.capex, 0) };
+    return { reduction: reductionOf(r1, r2, inp.targetYear), capex: active.reduce((s, l) => s + l.capex, 0) };
   };
   let m = measure(dials);
   let budgetLimited = false;

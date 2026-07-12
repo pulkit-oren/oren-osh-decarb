@@ -32,9 +32,12 @@ describe("BuilderHub — Balance to target lands first", () => {
     expect(screen.getAllByText("Balance to target").length).toBeGreaterThan(0);
     expect(screen.getByText(/Scope 1 · fuels & refrigerants/)).toBeTruthy();
     expect(screen.getByText(/Scope 2 · electricity/)).toBeTruthy();
-    // target-first landing content
+    // target-first landing content — the 3-step flow
     expect(screen.getByText("Required cut")).toBeTruthy();
-    expect(screen.getByText("How it divides across levers")).toBeTruthy();
+    expect(screen.getByText("Set your target")).toBeTruthy();
+    expect(screen.getByLabelText("Target year")).toBeTruthy();
+    expect(screen.getByText("Compare ways to get there")).toBeTruthy();
+    expect(screen.getByText("Fine-tune the levers")).toBeTruthy();
     expect(screen.getByLabelText("Efficiency dial")).toBeTruthy();
     expect(screen.getByLabelText("Electrify fuel dial")).toBeTruthy();
   });
@@ -68,18 +71,28 @@ describe("BuilderHub — Balance to target lands first", () => {
 
   it("suggest compares three bases and applying one moves the dials", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
-    fireEvent.click(screen.getByRole("button", { name: /compare 3 bases/i }));
-    // the three option rows with their trade-off stats
+    fireEvent.click(screen.getByRole("button", { name: /suggest mixes/i }));
+    // the three option cards with their trade-off stats
     expect(screen.getByText("Cheapest overall")).toBeTruthy();
     expect(screen.getByText("Lowest CAPEX")).toBeTruthy();
     expect(screen.getByText("Best OPEX saving")).toBeTruthy();
     // preview does NOT change the plan yet
     expect((screen.getByLabelText("Efficiency dial") as HTMLInputElement).value).toBe("0");
-    // apply the OPEX-saving basis → dials move
-    fireEvent.click(screen.getByRole("button", { name: /Apply Best OPEX saving/i }));
-    expect(screen.getByText("Applied ✓")).toBeTruthy();
+    // the (i) icon flips a card to its calculation logic
+    fireEvent.click(screen.getByRole("button", { name: /how best opex saving is calculated/i }));
+    expect(screen.getByText(/biggest running-cost saving first/i)).toBeTruthy();
+    // apply the OPEX-saving basis (last card) → dials move
+    const applyButtons = screen.getAllByRole("button", { name: /apply this mix/i });
+    fireEvent.click(applyButtons[applyButtons.length - 1]);
+    expect(screen.getByText("Applied")).toBeTruthy();
     const dials = ["Efficiency dial", "Solar onsite dial", "Electrify fuel dial", "Bio-blend fuel dial", "Low-GWP refrigerant dial", "Procurement (market) dial"]
       .map((l) => Number((screen.getByLabelText(l) as HTMLInputElement).value));
     expect(Math.max(...dials)).toBeGreaterThan(0);
+  });
+
+  it("target year is adjustable and relabels the lever impact column", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.change(screen.getByLabelText("Target year"), { target: { value: "2040" } });
+    expect(screen.getAllByText("By 2040").length).toBeGreaterThan(0);
   });
 });

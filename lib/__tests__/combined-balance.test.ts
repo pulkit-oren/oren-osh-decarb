@@ -43,6 +43,15 @@ describe("combinedReduction2030", () => {
     const withEff = { ...ZERO, s2: { ...ZERO.s2, efficiencyPct: 100 } };
     expect(combinedReduction2030(inp, withEff)).toBeGreaterThan(0.02);
   });
+
+  it("measures at the given targetYear — a later year sees at least the 2030 reduction", () => {
+    const withEff = { ...ZERO, s2: { ...ZERO.s2, efficiencyPct: 100 } };
+    const at2030 = combinedReduction2030(inp, withEff);
+    const at2040 = combinedReduction2030({ ...inp, targetYear: 2040 }, withEff);
+    expect(at2040).toBeGreaterThanOrEqual(at2030 - 1e-9);
+    // an explicit 2030 matches the default
+    expect(combinedReduction2030({ ...inp, targetYear: 2030 }, withEff)).toBeCloseTo(at2030, 9);
+  });
 });
 
 describe("currentCombinedDials", () => {
