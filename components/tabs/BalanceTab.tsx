@@ -24,7 +24,7 @@ import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/selec
 import { CURRENCY } from "@/lib/defaults";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { TargetGauge } from "@/components/ui/TargetGauge";
+import { ProgressRing } from "@/components/ui/ProgressRing";
 import { cn, fmt, fmtMoney } from "@/lib/utils";
 
 /* How each basis builds its mix — shown when the card's (i) is clicked. */
@@ -217,12 +217,16 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
           <div className="flex flex-col gap-4">
             <label className="flex items-center justify-between gap-3 text-sm">
               <span className="text-ink-soft font-medium">Target year</span>
-              <input
-                type="number" value={year} min={minYear} max={END_YEAR}
+              <select
+                value={year}
                 aria-label="Target year"
-                onChange={(e) => { setTouched(true); invalidate(); setYear(Math.max(minYear, Math.min(END_YEAR, Math.round(Number(e.target.value) || minYear)))); }}
-                className="w-24 text-right tabular-nums rounded-lg border border-line px-2 py-1.5 font-bold"
-              />
+                onChange={(e) => { setTouched(true); invalidate(); setYear(Number(e.target.value)); }}
+                className="w-28 tabular-nums rounded-lg border border-line bg-surface px-3 py-1.5 font-bold text-ink cursor-pointer"
+              >
+                {Array.from({ length: END_YEAR - minYear + 1 }, (_, i) => minYear + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
             </label>
             <label className="flex items-center justify-between gap-3 text-sm">
               <span className="text-ink-soft font-medium">Cut Scope 1+2 by</span>
@@ -241,8 +245,8 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
             </p>
           </div>
 
-          {/* gauge */}
-          <TargetGauge pct={allocPct} caption="of the required cut is allocated" />
+          {/* progress ring */}
+          <ProgressRing pct={allocPct} caption="of the required cut is allocated" tone={onTrack ? "good" : "warn"} />
 
           {/* stat tiles */}
           <div className="grid grid-cols-3 gap-3">
@@ -427,7 +431,7 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
       <Collapsible title="How this is calculated">
         <div className="text-xs text-ink-soft space-y-2 leading-relaxed">
           <p><strong className="text-ink">Required cut</strong> = combined base-year total × target = {fmt(base)} t × {target}% = <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> by {year}.</p>
-          <p><strong className="text-ink">Allocated</strong> = combined BAU {year} − net {year} = {fmt(atYear?.bau ?? 0)} − {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. The gauge shows allocated ÷ required. Each lever row shows its own share — its wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
+          <p><strong className="text-ink">Allocated</strong> = combined BAU {year} − net {year} = {fmt(atYear?.bau ?? 0)} − {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. The ring shows allocated ÷ required. Each lever row shows its own share — its wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
           <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
           <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
           <p><strong className="text-ink">Suggested mixes</strong>: each basis card in step 2 carries its own <Info size={11} className="inline -mt-0.5" /> with the exact ranking and stopping rule it uses.</p>
