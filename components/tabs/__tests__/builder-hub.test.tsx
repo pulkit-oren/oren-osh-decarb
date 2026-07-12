@@ -34,7 +34,7 @@ describe("BuilderHub — Balance to target lands first", () => {
     expect(screen.getByText(/Scope 2 · electricity/)).toBeTruthy();
     // target-first landing content — the 3-step flow
     expect(screen.getByText("Required cut")).toBeTruthy();
-    expect(screen.getByText("Set your target")).toBeTruthy();
+    expect(screen.getByText("Target Setting")).toBeTruthy();
     expect(screen.getByLabelText("Target year")).toBeTruthy();
     expect(screen.getByText("Compare ways to get there")).toBeTruthy();
     expect(screen.getByText("Fine-tune the levers")).toBeTruthy();
@@ -94,5 +94,18 @@ describe("BuilderHub — Balance to target lands first", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     fireEvent.change(screen.getByLabelText("Target year"), { target: { value: "2040" } });
     expect(screen.getAllByText("By 2040").length).toBeGreaterThan(0);
+  });
+
+  it("clicking a lever deep-links to that lever's exact screen", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    // refrigerant lever → Scope 1 refrigerant segment screen directly
+    fireEvent.click(screen.getByRole("button", { name: /Low-GWP refrigerant/ }));
+    expect(screen.getByText("All segments")).toBeTruthy();
+    expect(screen.getByText("Cooling — per-system plans", { exact: false })).toBeTruthy();
+    // back to the balance screen, then procurement lever → Scope 2 procurement screen
+    fireEvent.click(screen.getAllByText("Balance to target")[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Procurement \(market\)/ }));
+    expect(screen.getAllByText(/procurement/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Fine-tune the levers")).toBeNull();
   });
 });

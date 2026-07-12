@@ -11,7 +11,7 @@
    views can never drift. */
 
 import { useEffect, useMemo, useState } from "react";
-import { Target, Zap, Fuel, Snowflake, Sun, Lightbulb, Landmark, Wind, ChevronRight, Info, Check, Sparkles } from "lucide-react";
+import { Zap, Fuel, Snowflake, Sun, Lightbulb, Landmark, Wind, ChevronRight, Info, Check, Sparkles } from "lucide-react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import { useGoals } from "@/lib/goals/store";
@@ -53,15 +53,28 @@ const MIX_LOGIC: Record<MixObjective, string[]> = {
 const LOGIC_FOOTER =
   "Every mix also switches leak fixes on (near-zero cost, pure savings), and when electrification rises, renewable sourcing for the new load follows the procurement level so the added electricity arrives green.";
 
-function StepBadge({ n }: { n: number }) {
+/* Where each mix KPI comes from — hover tips on the option cards. */
+const KPI_TIPS = {
+  capex: "Upfront capital, summed across every lever active in this mix — equipment conversions, EV purchase premiums, solar install, refrigerant retrofits, LDAR programs. Priced per source by the same model as the CFO tab.",
+  opex: "Change in yearly running cost vs business-as-usual once the mix is fully ramped: fuel and electricity spend, tariff / REC premiums, maintenance changes, refrigerant gas top-ups. Negative (green) = the mix saves money every year.",
+  costPerT: "Annualized cost per tonne: CAPEX spread over each lever's lifetime at your discount rate, plus the yearly OPEX change, divided by tonnes abated. The like-for-like number for comparing levers.",
+  payback: "Years for the yearly OPEX savings to repay the upfront CAPEX. Shows — when the mix doesn't save money on net.",
+} as const;
+
+/** Deep-link target for a lever family — the exact screen where it's edited. */
+export type LeverFocus =
+  | { scope: "s1"; seg: "mobile" | "stationary" | "refrigerant" }
+  | { scope: "s2"; mode: "facilities" | "procurement"; facilityId?: string };
+
+function StepBadge({ n, onDark }: { n: number; onDark?: boolean }) {
   return (
-    <span className="w-7 h-7 rounded-full bg-brand-600 text-white grid place-items-center text-sm font-extrabold shrink-0">
+    <span className={cn("w-7 h-7 rounded-full grid place-items-center text-sm font-extrabold shrink-0", onDark ? "bg-white text-brand-700" : "bg-brand-600 text-white")}>
       {n}
     </span>
   );
 }
 
-export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2") => void }) {
+export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) => void }) {
   const s1 = useScenario();
   const s2 = useScope2();
   const { goals } = useGoals();
@@ -143,129 +156,151 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
     setAppliedObj(o.objective);
   };
 
+  /* Deep-link targets: fuel levers land on the bigger combustion segment;
+     facility levers open the lone facility directly when there is only one. */
+  const volOf = (cat: "mobile" | "stationary") => assets.filter((a) => a.category === cat).reduce((s, a) => s + a.annualVolume * (a.unitCount ?? 1), 0);
+  const fuelSeg: "mobile" | "stationary" = volOf("mobile") > volOf("stationary") ? "mobile" : "stationary";
+  const soloFacility = facilities.length === 1 ? facilities[0].id : undefined;
+  const FACILITIES_FOCUS: LeverFocus = { scope: "s2", mode: "facilities", facilityId: soloFacility };
+
   const LEVER_ROWS: {
     key: string; scope: "s1" | "s2"; label: string; icon: React.ElementType; hint: string;
-    value: number; onChange: (v: number) => void; tonnes: number; costNote: string;
+    value: number; onChange: (v: number) => void; tonnes: number; costNote: string; focus: LeverFocus; place: string;
   }[] = [
     {
       key: "efficiency", scope: "s2", label: "Efficiency", icon: Lightbulb,
       hint: "LED, motors/VFD, BMS across grid facilities — usually the cheapest tonnes.",
       value: d2.efficiencyPct, onChange: (v) => setDial2({ efficiencyPct: v }),
       tonnes: w2["efficiency"] ?? 0, costNote: fmtMoney(lever2("efficiency")?.capex ?? 0),
+      focus: FACILITIES_FOCUS, place: "Scope 2 → facilities",
     },
     {
       key: "solar", scope: "s2", label: "Solar onsite", icon: Sun,
       hint: "Rooftop PV as a share of each facility's roof headroom.",
       value: d2.solarPct, onChange: (v) => setDial2({ solarPct: v }),
       tonnes: w2["generation"] ?? 0, costNote: fmtMoney(lever2("generation")?.capex ?? 0),
+      focus: FACILITIES_FOCUS, place: "Scope 2 → facilities",
     },
     {
       key: "procurement", scope: "s2", label: "Procurement (market)", icon: Landmark,
       hint: "PPAs / green tariff / RECs on the remaining grid draw — moves the market-based number only.",
       value: d2.procurementPct, onChange: (v) => setDial2({ procurementPct: v }),
       tonnes: w2["procurement"] ?? 0, costNote: `${fmtMoney(lever2("procurement")?.annualOpexDelta ?? 0)}/yr`,
+      focus: { scope: "s2", mode: "procurement" }, place: "Scope 2 → Procurement",
     },
     {
       key: "bio", scope: "s1", label: "Bio-blend fuel", icon: Fuel,
       hint: "Drop-in bio blends on sources still burning fuel, capped per asset.",
       value: d1.bioBlendPct, onChange: (v) => setDial1({ bioBlendPct: v }),
       tonnes: w1["fuelSwitch"] ?? 0, costNote: fmtMoney(lever1("fuelSwitch")?.capex ?? 0),
+      focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
     {
       key: "refrig", scope: "s1", label: "Low-GWP refrigerant", icon: Snowflake,
       hint: "Gas transition share across cooling systems (leak fixes are set per system).",
       value: d1.refrigPct, onChange: (v) => setDial1({ refrigPct: v }),
       tonnes: w1["refrigerant"] ?? 0, costNote: fmtMoney(lever1("refrigerant")?.capex ?? 0),
+      focus: { scope: "s1", seg: "refrigerant" }, place: "Scope 1 → refrigerant",
     },
     {
       key: "electrify", scope: "s1", label: "Electrify fuel", icon: Zap,
       hint: "Move feasible fuel use to electricity — the biggest lever, with Scope 2 spill.",
       value: d1.electrifyPct, onChange: (v) => setDial1({ electrifyPct: v }),
       tonnes: w1["electrification"] ?? 0, costNote: fmtMoney(lever1("electrification")?.capex ?? 0),
+      focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
     {
       key: "renewable", scope: "s1", label: "Renewable sourcing for new load", icon: Wind,
       hint: "Clean share of the electricity electrification adds — shrinks the Scope 2 spill.",
       value: d1.renewablePct, onChange: (v) => setDial1({ renewablePct: v }),
       tonnes: 0, costNote: spillYear > 0.05 ? `spill +${fmt(spillYear)} t` : "—",
+      focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
   ];
 
   return (
     <div className="screen-in flex flex-col gap-5">
-      {/* header */}
-      <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60">
-        <h1 className="text-2xl font-extrabold text-ink leading-tight flex items-center gap-2"><Target size={22} className="text-brand-600" /> Balance to target</h1>
-        <p className="text-sm text-ink-soft mt-0.5">Three steps: set your target, compare ways to get there, then fine-tune the levers. Edits inside Scope 1 / Scope 2 move the dials here too.</p>
-      </div>
-
-      {/* ---- Step 1: set your target ---- */}
-      <section className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6" aria-label="Step 1 — set your target">
-        <div className="flex items-center gap-3 mb-5">
-          <StepBadge n={1} />
+      {/* ---- Step 1: target setting ---- */}
+      <section className="rounded-xl3 bg-gradient-to-br from-brand-600 via-brand-700 to-brand-800 text-white shadow-card p-6" aria-label="Step 1 — target setting">
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <StepBadge n={1} onDark />
           <div>
-            <h2 className="text-base font-extrabold text-ink leading-tight">Set your target</h2>
-            <p className="text-xs text-ink-soft">Pick the year and the Scope 1+2 cut — 100% is net zero.</p>
+            <h2 className="text-lg font-extrabold leading-tight">Target Setting</h2>
+            <p className="text-xs text-white/70">Pick the year and how much of the Scope 1+2 footprint to cut — 100% is net zero.</p>
           </div>
           {goal && goalTargetPct === target && !touched && (
-            <span className="ml-auto text-[11px] font-semibold text-brand-700 bg-brand-50 rounded-full px-2.5 py-1" title={goal.name}>from your goal: {goal.name}</span>
+            <span className="ml-auto text-[11px] font-semibold text-white bg-white/15 rounded-full px-2.5 py-1" title={goal.name}>from your goal: {goal.name}</span>
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(220px,1fr)_auto_minmax(300px,1.2fr)] items-center">
+        <div className="grid gap-6 lg:grid-cols-[minmax(260px,1.1fr)_auto_minmax(300px,1.2fr)] items-center">
           {/* inputs */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             <label className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-ink-soft font-medium">Target year</span>
+              <span className="text-white/85 font-semibold">Target year</span>
               <select
                 value={year}
                 aria-label="Target year"
                 onChange={(e) => { setTouched(true); invalidate(); setYear(Number(e.target.value)); }}
-                className="w-28 tabular-nums rounded-lg border border-line bg-surface px-3 py-1.5 font-bold text-ink cursor-pointer"
+                className="w-28 tabular-nums rounded-lg border border-white/30 bg-white/10 px-3 py-2 font-bold text-white cursor-pointer hover:bg-white/20 transition-colors [&>option]:text-ink"
               >
                 {Array.from({ length: END_YEAR - minYear + 1 }, (_, i) => minYear + i).map((y) => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
             </label>
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-ink-soft font-medium">Cut Scope 1+2 by</span>
-              <span className="flex items-center gap-1.5">
-                <input
-                  type="number" value={target} min={0} max={100}
-                  aria-label="Combined reduction target"
-                  onChange={(e) => { setTouched(true); invalidate(); setTarget(Math.max(0, Math.min(100, Number(e.target.value)))); }}
-                  className="w-20 text-right tabular-nums rounded-lg border border-line px-2 py-1.5 font-bold"
-                />
-                <span className="text-ink-faint">%</span>
-              </span>
-            </label>
-            <p className="text-[11px] text-ink-faint leading-relaxed">
-              {target >= 100 ? <>That&rsquo;s <strong className="text-brand-700">net zero by {year}</strong>.</> : <>Cut {target}% of the {s1.baseYear} base by {year}{target >= 90 ? " — near net zero" : ""}.</>}
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <span className="text-sm text-white/85 font-semibold">Cut Scope 1+2 by</span>
+                <span className="flex items-baseline gap-0.5">
+                  <input
+                    type="number" value={target} min={0} max={100}
+                    aria-label="Combined reduction target"
+                    onChange={(e) => { setTouched(true); invalidate(); setTarget(Math.max(0, Math.min(100, Number(e.target.value)))); }}
+                    className="w-16 bg-transparent text-right tabular-nums text-2xl font-extrabold text-white focus:outline-none focus:bg-white/10 rounded-md"
+                  />
+                  <span className="text-sm font-bold text-white/70">%</span>
+                </span>
+              </div>
+              <input
+                type="range" min={0} max={100} step={1} value={target}
+                aria-label="Combined reduction target slider"
+                onChange={(e) => { setTouched(true); invalidate(); setTarget(Number(e.target.value)); }}
+                style={{ accentColor: "#fff" }}
+                className="w-full cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] font-bold text-white/50 mt-1">
+                <span>0%</span><span>50%</span><span>Net zero</span>
+              </div>
+            </div>
+            <p className="text-xs text-white/80 leading-relaxed">
+              {target >= 100 ? <>That&rsquo;s <strong className="text-white">net zero by {year}</strong> ✨</> : <>Cut {target}% of the {s1.baseYear} base by {year}{target >= 90 ? " — near net zero" : ""}.</>}
             </p>
           </div>
 
           {/* progress ring */}
-          <ProgressRing pct={allocPct} caption="of the required cut is allocated" tone={onTrack ? "good" : "warn"} />
+          <div className="rounded-xl2 bg-surface p-4 justify-self-center">
+            <ProgressRing pct={allocPct} caption="of the required cut is allocated" tone={onTrack ? "good" : "warn"} />
+          </div>
 
           {/* stat tiles */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl2 bg-brand-700 text-white p-3.5">
-              <div className="text-[10px] uppercase tracking-wide font-bold text-white/70">Required cut</div>
+            <div className="rounded-xl2 border border-white/20 bg-white/10 p-3.5">
+              <div className="text-[10px] uppercase tracking-wide font-bold text-white/60">Required cut</div>
               <div className="text-xl font-extrabold tabular-nums mt-1">{fmt(requiredT)} t</div>
-              <div className="text-[10px] text-white/70 mt-0.5">by {year}</div>
+              <div className="text-[10px] text-white/60 mt-0.5">by {year}</div>
             </div>
-            <div className="rounded-xl2 border border-line/70 bg-surface p-3.5">
-              <div className="text-[10px] uppercase tracking-wide font-bold text-ink-faint">Allocated</div>
-              <div className={cn("text-xl font-extrabold tabular-nums mt-1", onTrack ? "text-brand-600" : "text-ink")}>{fmt(allocatedT)} t</div>
-              <div className="text-[10px] text-ink-faint mt-0.5">from the levers</div>
+            <div className="rounded-xl2 border border-white/20 bg-white/10 p-3.5">
+              <div className="text-[10px] uppercase tracking-wide font-bold text-white/60">Allocated</div>
+              <div className="text-xl font-extrabold tabular-nums mt-1">{fmt(allocatedT)} t</div>
+              <div className="text-[10px] text-white/60 mt-0.5">from the levers</div>
             </div>
-            <div className={cn("rounded-xl2 border p-3.5", onTrack ? "border-brand-200 bg-brand-50" : "border-amber-200 bg-amber-50")}>
-              <div className={cn("text-[10px] uppercase tracking-wide font-bold flex items-center gap-1", onTrack ? "text-brand-700/70" : "text-amber-700/70")}>
+            <div className={cn("rounded-xl2 p-3.5", onTrack ? "bg-white text-brand-700" : "bg-amber-300 text-amber-950")}>
+              <div className={cn("text-[10px] uppercase tracking-wide font-bold flex items-center gap-1", onTrack ? "text-brand-700/70" : "text-amber-900/70")}>
                 Gap <InfoTip text="Required cut minus what your current levers deliver by the target year (Scope 2 market-based, including your entered VPPA/I-REC coverage)." />
               </div>
-              <div className={cn("text-xl font-extrabold tabular-nums mt-1", onTrack ? "text-brand-700" : "text-amber-700")}>{onTrack ? "Met" : `${fmt(gapT)} t`}</div>
-              <div className={cn("text-[10px] mt-0.5", onTrack ? "text-brand-700/70" : "text-amber-700/70")}>{onTrack ? "target reached" : "still to close"}</div>
+              <div className="text-xl font-extrabold tabular-nums mt-1">{onTrack ? "Met" : `${fmt(gapT)} t`}</div>
+              <div className={cn("text-[10px] mt-0.5", onTrack ? "text-brand-700/70" : "text-amber-900/70")}>{onTrack ? "target reached" : "still to close"}</div>
             </div>
           </div>
         </div>
@@ -343,10 +378,10 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
                       <div className="px-4 pb-3 flex-1">
                         <p className="text-[11px] text-ink-soft leading-snug min-h-8">{o.blurb}</p>
                         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(o.kpis.totalCapex)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">OPEX Δ / yr</div><div className={cn("text-sm font-extrabold tabular-nums", o.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700")}>{fmtMoney(o.kpis.annualOpexDelta)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost / t</div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmt(o.kpis.costPerTonne)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Payback</div><div className="text-sm font-extrabold tabular-nums text-ink">{o.kpis.paybackYears != null ? `${o.kpis.paybackYears.toFixed(1)} yr` : "—"}</div></div>
+                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">CAPEX <InfoTip text={KPI_TIPS.capex} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(o.kpis.totalCapex)}</div></div>
+                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">OPEX Δ / yr <InfoTip text={KPI_TIPS.opex} /></div><div className={cn("text-sm font-extrabold tabular-nums", o.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700")}>{fmtMoney(o.kpis.annualOpexDelta)}</div></div>
+                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Cost / t <InfoTip text={KPI_TIPS.costPerT} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmt(o.kpis.costPerTonne)}</div></div>
+                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Payback <InfoTip text={KPI_TIPS.payback} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{o.kpis.paybackYears != null ? `${o.kpis.paybackYears.toFixed(1)} yr` : "—"}</div></div>
                         </div>
                       </div>
                     )}
@@ -378,7 +413,7 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
           <StepBadge n={3} />
           <div>
             <h2 className="text-base font-extrabold text-ink leading-tight">Fine-tune the levers</h2>
-            <p className="text-xs text-ink-soft">Drag a dial to move every matching source, or click a lever to fine-tune it inside its scope.</p>
+            <p className="text-xs text-ink-soft">Drag a dial to move every matching source, or click a lever to jump straight to where it&rsquo;s planned.</p>
           </div>
         </div>
         <div className="flex flex-col divide-y divide-line/60">
@@ -387,9 +422,9 @@ export function BalanceTab({ onOpenScope }: { onOpenScope?: (scope: "s1" | "s2")
             return (
               <div key={r.key} className="py-3 grid grid-cols-1 md:grid-cols-[minmax(230px,1.2fr)_2fr_auto] gap-x-6 gap-y-2 items-center">
                 <button
-                  onClick={() => onOpenScope?.(r.scope)}
+                  onClick={() => onOpenLever?.(r.focus)}
                   className="group flex items-center gap-2.5 text-left"
-                  title={`Fine-tune in ${r.scope === "s1" ? "Scope 1" : "Scope 2"}`}
+                  title={`Open ${r.place}`}
                 >
                   <span className="w-8 h-8 rounded-lg bg-brand-50 grid place-items-center shrink-0"><Icon size={15} className="text-brand-700" /></span>
                   <span className="min-w-0">

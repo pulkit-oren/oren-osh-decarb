@@ -41,10 +41,10 @@ type S2Mode = "facilities" | "procurement";
 
 /* Per-facility Scope 2 planning + portfolio procurement. The cross-scope
    "Balance to target" dials live one level up in the BuilderHub. */
-export function Scope2BuilderTab() {
+export function Scope2BuilderTab({ initialMode, initialFacilityId }: { initialMode?: S2Mode; initialFacilityId?: string } = {}) {
   const { baseFacilities } = useScope2();
-  const [mode, setMode] = useState<S2Mode>("facilities");
-  const [view, setView] = useState<"home" | { facilityId: string }>("home");
+  const [mode, setMode] = useState<S2Mode>(initialMode ?? "facilities");
+  const [view, setView] = useState<"home" | { facilityId: string }>(initialFacilityId ? { facilityId: initialFacilityId } : "home");
   const [name, setName] = useState("");
 
   if (!baseFacilities.length) {

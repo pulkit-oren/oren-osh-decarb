@@ -205,8 +205,8 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
 
 /* Per-source Scope 1 planning. The cross-scope "Balance to target" dials live
    one level up in the BuilderHub. */
-export function BuilderTab() {
-  const [view, setView] = useState<"home" | Seg | { seg: Seg; sourceId: string }>("home");
+export function BuilderTab({ initialSeg }: { initialSeg?: Seg } = {}) {
+  const [view, setView] = useState<"home" | Seg | { seg: Seg; sourceId: string }>(initialSeg ?? "home");
   const [name, setName] = useState("");
 
   return (
