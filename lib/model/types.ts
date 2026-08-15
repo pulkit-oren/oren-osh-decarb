@@ -156,6 +156,12 @@ export interface CombustionAsset {
   allocationMode?: "entry" | "byAsset";
   /** byAsset: per-asset share of annualVolume, keyed by asset id. */
   assetAllocations?: Record<string, { volume: number }>;
+  /** How assetAllocations should be (re)computed. Absent ⇒ manual entry.
+   *  Inline-imported (not a top-of-file import) so this widely-imported file
+   *  gains no load-order dependency on lib/assets/. */
+  allocationBasis?: import("@/lib/assets/types").AllocationBasis;
+  /** The per-asset attribute "weighted" allocation distributes by. */
+  weightAttribute?: import("@/lib/assets/types").WeightAttribute;
   /** Set on rows emitted by resolveAssets() — the id of the entry a resolved row descends from. */
   sourceEntryId?: string;
 }

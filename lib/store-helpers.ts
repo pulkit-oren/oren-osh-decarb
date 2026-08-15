@@ -6,7 +6,10 @@
 
 import { DEFAULT_SETTINGS } from "./defaults";
 import { defaultSystemActions } from "./model/segments";
-import type { LeverSettings, RefrigerantId, RefrigerationByYear, RefrigerationSystem, SystemActions } from "./model/types";
+import type {
+  CombustionAsset, CombustionByYear, LeverSettings, RefrigerantId, RefrigerationByYear, RefrigerationSystem, SystemActions,
+} from "./model/types";
+import type { Asset, AssetRegistry } from "./assets/types";
 
 /** Upgrade persisted refrigeration data to the mass-balance shape: older
  *  systems stored chargeKg + leakRatePct; the topped-up (leaked) mass is
@@ -90,4 +93,49 @@ export function migrateSettings(raw: unknown, systems: RefrigerationSystem[]): L
     };
   });
   return { ...base, bySystem };
+}
+
+/** Mint one Asset per fuel entry, reusing the entry's id as the asset's id —
+ *  that reuse is the entire reason no lever migration is needed, since
+ *  LeverSettings is keyed by entry id and an asset sharing that id keeps every
+ *  saved scenario resolving. Never mints a fresh id: an entry with no usable
+ *  string id is skipped, since inventing one would silently break that
+ *  guarantee. Idempotent (keyed on id presence, first occurrence across years
+ *  wins) so it can run on every hydration without disturbing a user's later
+ *  edits to an already-migrated asset. Reads the entries only — never mutates
+ *  them — and never throws, because it runs against unvalidated localStorage
+ *  inside a hydration effect. */
+export function migrateAssets(combustion: CombustionByYear, existing: AssetRegistry): AssetRegistry {
+  const existingAssets: Asset[] = Array.isArray((existing as { assets?: unknown } | null | undefined)?.assets)
+    ? (existing as AssetRegistry).assets
+    : [];
+  const seen = new Set(existingAssets.map((a) => a.id));
+  const minted: Asset[] = [];
+
+  const byYear = combustion && typeof combustion === "object" ? (combustion as Record<number, unknown>) : {};
+  for (const list of Object.values(byYear)) {
+    if (!Array.isArray(list)) continue; // a year's value that isn't an array — tolerate, skip
+    for (const raw of list) {
+      if (!raw || typeof raw !== "object") continue; // null / non-object entry
+      const e = raw as Partial<CombustionAsset>;
+
+      if (typeof e.id !== "string" || e.id.length === 0) continue; // no usable string id: SKIP, never mint one
+      if (seen.has(e.id)) continue; // already an asset (idempotent run, or a later-year duplicate) — first occurrence wins
+
+      if (typeof e.name !== "string" || typeof e.category !== "string") continue; // required on Asset
+
+      seen.add(e.id);
+      minted.push({
+        id: e.id,
+        name: e.name,
+        category: e.category,
+        unitCount: e.unitCount ?? 0,
+        remainingLife: e.remainingLife ?? 0,
+        opex: e.opex ?? 0,
+        buId: e.bu ?? "",
+      });
+    }
+  }
+
+  return { assets: [...existingAssets, ...minted] };
 }
