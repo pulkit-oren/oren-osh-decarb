@@ -133,3 +133,81 @@ describe("useAssetsOptional", () => {
     expect(captured[0]).toBe(captured[1]);
   });
 });
+
+/** Probe exposing addUnit/updateUnit directly — distinct from RemoveProbe,
+ *  which only exposes removeUnit. */
+function CrudProbe() {
+  const { assets, addUnit, updateUnit } = useAssets();
+  return (
+    <div>
+      <div data-testid="names">
+        {assets.map((a) => `${a.id}:${a.name}:${a.unitCount}`).join(",")}
+      </div>
+      <button
+        onClick={() => addUnit({
+          name: "Boiler", buId: "bu-0", category: "stationary", unitCount: 1, remainingLife: 5, opex: 0,
+        })}
+      >
+        add
+      </button>
+      <button onClick={() => updateUnit("a-0", { unitCount: 9 })}>update</button>
+    </div>
+  );
+}
+
+describe("addUnit / updateUnit", () => {
+  it("addUnit adds a new asset visible through the hook", () => {
+    render(<AssetProvider storageKey={KEY}><CrudProbe /></AssetProvider>);
+    expect(screen.getByTestId("names").textContent).toBe("a-0:Genset:1");
+
+    fireEvent.click(screen.getByText("add"));
+
+    expect(screen.getByTestId("names").textContent).toBe("a-0:Genset:1,a-1:Boiler:1");
+  });
+
+  it("updateUnit patches one asset in place", () => {
+    render(<AssetProvider storageKey={KEY}><CrudProbe /></AssetProvider>);
+
+    fireEvent.click(screen.getByText("update"));
+
+    expect(screen.getByTestId("names").textContent).toBe("a-0:Genset:9");
+  });
+});
+
+describe("ensureAssetsFor — idempotence guard", () => {
+  it("mints once, then no-ops on a repeat call with the same combustion (registry object identity unchanged)", () => {
+    // migrateAssets always returns a FRESH { assets: [...] } array, even when
+    // it mints nothing new. Without the length/id-equality guard in
+    // ensureAssetsFor, a second call with the same combustion would still
+    // call setAssets with that fresh-but-equivalent array, giving the
+    // registry a new identity every call — exactly the shape of an infinite
+    // loop for a consumer that depends on it. This asserts object identity,
+    // not just count, so a regression reintroducing that unconditional
+    // setAssets would fail this test even though the asset CONTENT would
+    // still look correct.
+    const combustion = {
+      2025: [{
+        id: "c-1", name: "New Genset", category: "stationary", unitCount: 2, remainingLife: 5, opex: 100,
+      }],
+    };
+    const captured: Asset[][] = [];
+    function EnsureProbe() {
+      const { assets, ensureAssetsFor } = useAssets();
+      captured.push(assets);
+      return <button onClick={() => ensureAssetsFor(combustion)}>ensure</button>;
+    }
+
+    // Start from an empty registry so the first call actually mints "c-1".
+    window.localStorage.removeItem(KEY);
+    render(<AssetProvider storageKey={KEY}><EnsureProbe /></AssetProvider>);
+
+    fireEvent.click(screen.getByText("ensure")); // mints "c-1"
+    const afterFirst = captured[captured.length - 1];
+    expect(afterFirst.map((a) => a.id)).toEqual(["c-1"]);
+
+    fireEvent.click(screen.getByText("ensure")); // nothing new left to mint
+    const afterSecond = captured[captured.length - 1];
+
+    expect(afterSecond).toBe(afterFirst);
+  });
+});

@@ -10,15 +10,27 @@
 import {
   createContext, useContext, useEffect, useState, type ReactNode,
 } from "react";
+import { migrateAssets } from "@/lib/store-helpers";
 import {
   addAsset, removeAsset, updateAsset, ASSET_KEY_BASE,
 } from "./helpers";
 import type { Asset, AssetRegistry } from "./types";
 
 interface AssetsStoreShape extends AssetRegistry {
+  /** True once the one-time hydration effect has run — lets a consumer (e.g.
+   *  Task 4's wiring) gate work until the persisted registry has actually
+   *  loaded, instead of racing it. */
+  hydrated: boolean;
   addUnit: (init: Omit<Asset, "id">) => void;
   updateUnit: (id: string, patch: Partial<Asset>) => void;
   removeUnit: (id: string, referencedIds: string[]) => void;
+  /** Backfill one Asset per not-yet-migrated combustion entry. Not called
+   *  from anywhere in this file yet — a future caller must gate this on
+   *  `hydrated` to avoid racing the hydration effect above (an unconditional
+   *  setAssets from a child mount effect firing before this provider's own
+   *  hydration effect would discard the just-migrated assets when hydration
+   *  lands the persisted registry). */
+  ensureAssetsFor: (combustion: unknown) => void;
 }
 
 const Ctx = createContext<AssetsStoreShape | null>(null);
@@ -99,9 +111,26 @@ export function AssetProvider({
     setAssets((prev) => removeAsset({ assets: prev }, id, referencedIds).assets);
   };
 
+  /* migrateAssets ALWAYS returns a fresh `{ assets: [...] }` — the spread in
+   * its own implementation makes a new array even when it mints nothing new.
+   * Calling setAssets with that fresh-but-unchanged result on every call
+   * would make the registry object identity change every time, which is
+   * exactly the shape of an infinite loop for any caller that lists this
+   * registry (or this function) in a useEffect/useMemo dependency array: new
+   * identity -> effect reruns -> ensureAssetsFor runs again -> new identity
+   * -> ... So this compares the resulting ids against the current registry
+   * first and returns WITHOUT calling setAssets when nothing changed. */
+  const ensureAssetsFor: AssetsStoreShape["ensureAssetsFor"] = (combustion) => {
+    const next = migrateAssets(combustion, { assets });
+    const unchanged = next.assets.length === assets.length
+      && next.assets.every((a, i) => a.id === assets[i].id);
+    if (unchanged) return;
+    setAssets(next.assets);
+  };
+
   const value: AssetsStoreShape = {
-    assets,
-    addUnit, updateUnit, removeUnit,
+    assets, hydrated,
+    addUnit, updateUnit, removeUnit, ensureAssetsFor,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
