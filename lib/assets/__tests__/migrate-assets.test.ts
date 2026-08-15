@@ -174,3 +174,33 @@ describe("migrateAssets — malformed shapes never throw", () => {
     expect(() => migrateAssets(null as unknown as CombustionByYear, emptyRegistry())).not.toThrow();
   });
 });
+
+describe("migrateAssets — category is validated against the AssetCategory union, not merely typeof string", () => {
+  it("a corrupted category value ('foo') mints no asset", () => {
+    const combustion = {
+      2024: [{ ...entry({ id: "e-1" }), category: "foo" }],
+    } as unknown as CombustionByYear;
+    const out = migrateAssets(combustion, emptyRegistry());
+    expect(out.assets).toHaveLength(0);
+  });
+
+  it("a numeric category value mints no asset", () => {
+    const combustion = {
+      2024: [{ ...entry({ id: "e-1" }), category: 42 }],
+    } as unknown as CombustionByYear;
+    const out = migrateAssets(combustion, emptyRegistry());
+    expect(out.assets).toHaveLength(0);
+  });
+});
+
+describe("migrateAssets — accepts unknown, matching migrateRefrigeration/migrateSettings", () => {
+  it("compiles and behaves correctly when called with genuinely untyped values, no cast required at the call site", () => {
+    // Round-tripped through JSON, exactly as it would arrive from localStorage:
+    // typed `unknown`, not `CombustionByYear` / `AssetRegistry`.
+    const rawCombustion: unknown = JSON.parse(JSON.stringify({ 2024: [entry({ id: "e-1" })] }));
+    const rawExisting: unknown = JSON.parse(JSON.stringify(emptyRegistry()));
+    const out = migrateAssets(rawCombustion, rawExisting);
+    expect(out.assets).toHaveLength(1);
+    expect(out.assets[0].id).toBe("e-1");
+  });
+});
