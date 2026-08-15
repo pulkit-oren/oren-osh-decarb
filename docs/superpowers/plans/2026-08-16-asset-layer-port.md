@@ -139,6 +139,11 @@ It runs on every hydration against unvalidated `localStorage`, so it must never 
 - Mint default lever actions for newly resolved asset ids, skipping `isUnallocatedId` pseudo-assets — a remainder row must never get a lever.
 - Mount `AssetProvider` in `Shell.tsx` **wrapping `ScenarioProvider`**, keyed per company exactly like its siblings (`key={`assets-${activeId}`}`). The React key is load-bearing: hydration is `[]`-dep while persist depends on `storageKey`, so without a changing key a company switch writes the previous company's registry into the new company's slot.
 
+**Wiring `migrateAssets` — the ordering trap and its resolution.** `AssetProvider` must wrap `ScenarioProvider`, but the combustion data the migration needs only exists inside `ScenarioProvider`. Do NOT have the child call a backfill from its own mount effect: React fires passive effects child-before-parent, so that call lands BEFORE `AssetProvider`'s hydration effect, whose unconditional `setAssets` then discards it. Split the concerns instead:
+
+- **Historical backfill** — `AssetProvider` exposes its `hydrated` flag through context (Task 3 fix adds this), and `ScenarioProvider` gates its `ensureAssetsFor(combustion)` call on it so the call lands in a later commit. `ensureAssetsFor` must no-op when nothing is minted; `migrateAssets` always returns a fresh object, so without that guard a dependency array turns this into a loop.
+- **New entries** — no effect at all. Call `addUnit` imperatively from the handlers in `lib/store.tsx` that create entries (`addCombustion`, `importCombustion`, `addCombustionAsset`).
+
 `ScenarioProvider` must use `useAssetsOptional()`, not `useAssets()` — any pre-existing test that mounts it standalone would otherwise throw, and those tests are frozen.
 
 - [ ] **Step 1: check how many existing tests mount `ScenarioProvider` without an AssetProvider** — `grep -rl "ScenarioProvider" --include=*.test.tsx` — and record the number in the report; it justifies the optional accessor.
