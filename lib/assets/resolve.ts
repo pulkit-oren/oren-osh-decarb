@@ -38,6 +38,11 @@ export function resolveAssets(
       continue;
     }
 
+    // 0. sanitise the entry's own volume once, up front — a NaN/negative here
+    //    must never silently vanish the entry from the resolved output.
+    const nSanitised = Number(e.annualVolume);
+    const entryVolume = Number.isFinite(nSanitised) && nSanitised >= 0 ? nSanitised : 0;
+
     // 1. known-asset map — registry-present, non-electrical ids only.
     // 2. sanitise each volume to a finite non-negative number.
     const known: Record<string, number> = {};
@@ -47,10 +52,12 @@ export function resolveAssets(
       known[id] = readVolume(raw);
     }
 
-    // 3. clamp the sanitised map against the entry's own volume.
-    const clamped = clampAllocation(e.annualVolume, known);
+    // 3. clamp the sanitised map against the entry's own sanitised volume.
+    const clamped = clampAllocation(entryVolume, known);
 
-    // 4. emit rows from the CLAMPED values only.
+    // 4. emit rows from the CLAMPED values only. allocationMode/assetAllocations
+    //    are explicitly cleared — a resolved row is keyed to one asset (or is
+    //    the remainder), never itself a byAsset entry to be re-split.
     for (const [id, volume] of Object.entries(clamped)) {
       const asset = assetsById.get(id);
       if (!asset) continue; // clampAllocation only ever returns known ids, but stay defensive.
@@ -64,18 +71,22 @@ export function resolveAssets(
         opex: asset.opex,
         unitCount: asset.unitCount,
         remainingLife: asset.remainingLife,
+        allocationMode: undefined,
+        assetAllocations: undefined,
       });
     }
 
-    const remainder = unallocated(e.annualVolume, clamped);
+    const remainder = unallocated(entryVolume, clamped);
     if (remainder > 0) {
-      const share = e.annualVolume > 0 ? remainder / e.annualVolume : 0;
+      const share = entryVolume > 0 ? remainder / entryVolume : 0;
       out.push({
         ...e,
         id: `${e.id}${UNALLOCATED_SUFFIX}`,
         sourceEntryId: e.id,
         annualVolume: remainder,
         opex: share * e.opex,
+        allocationMode: undefined,
+        assetAllocations: undefined,
       });
     }
   }

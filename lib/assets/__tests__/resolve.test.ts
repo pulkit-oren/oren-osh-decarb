@@ -50,6 +50,17 @@ describe("resolveAssets — non-byAsset entries pass through by reference", () =
     const out = resolveAssets([e], registry([asset("a-1")]));
     expect(out[0]).toBe(e);
   });
+
+  it("a pass-through entry keeps its original allocationMode/assetAllocations, unlike a resolved row", () => {
+    const e = entry({
+      allocationMode: "entry",
+      assetAllocations: { "a-1": { volume: 1000 } },
+    });
+    const out = resolveAssets([e], registry([asset("a-1")]));
+    expect(out[0]).toBe(e);
+    expect(out[0].allocationMode).toBe("entry");
+    expect(out[0].assetAllocations).toEqual({ "a-1": { volume: 1000 } });
+  });
 });
 
 describe("resolveAssets — byAsset allocation invariant", () => {
@@ -222,5 +233,50 @@ describe("resolveAssets — byAsset allocation invariant", () => {
     expect(assetRow?.opex).toBe(999);
     // remainder is the entry's opex scaled by its 70% share of annualVolume
     expect(remainder?.opex).toBe(700);
+  });
+
+  it("clears allocationMode and assetAllocations on every emitted row (asset rows and the remainder)", () => {
+    const e = entry({
+      allocationMode: "byAsset",
+      assetAllocations: { "a-1": { volume: 300 } },
+    });
+    const out = resolveAssets([e], registry([asset("a-1")]));
+    const assetRow = out.find((r) => r.id === "a-1");
+    const remainder = out.find((r) => isUnallocatedId(r.id));
+    expect(assetRow?.allocationMode).toBeUndefined();
+    expect(assetRow?.assetAllocations).toBeUndefined();
+    expect(remainder?.allocationMode).toBeUndefined();
+    expect(remainder?.assetAllocations).toBeUndefined();
+    // the original entry object itself is untouched
+    expect(e.allocationMode).toBe("byAsset");
+    expect(e.assetAllocations).toEqual({ "a-1": { volume: 300 } });
+  });
+
+  it("annualVolume: NaN does not silently drop the entry — rows stay finite", () => {
+    const e = entry({
+      annualVolume: NaN,
+      allocationMode: "byAsset",
+      assetAllocations: { "a-1": { volume: 500 } },
+    });
+    const out = resolveAssets([e], registry([asset("a-1")]));
+    const rowsForEntry = out.filter((r) => r.sourceEntryId === "e-1");
+    expect(rowsForEntry.length).toBeGreaterThan(0);
+    expect(rowsForEntry.every((r) => Number.isFinite(r.annualVolume))).toBe(true);
+  });
+
+  it("takes unitCount and remainingLife from the ASSET, not the entry, when they differ", () => {
+    const e = entry({
+      unitCount: 1,
+      remainingLife: 10,
+      allocationMode: "byAsset",
+      assetAllocations: { "a-1": { volume: 1000 } },
+    });
+    const out = resolveAssets(
+      [e],
+      registry([asset("a-1", { unitCount: 7, remainingLife: 25 })]),
+    );
+    const assetRow = out.find((r) => r.id === "a-1");
+    expect(assetRow?.unitCount).toBe(7);
+    expect(assetRow?.remainingLife).toBe(25);
   });
 });
