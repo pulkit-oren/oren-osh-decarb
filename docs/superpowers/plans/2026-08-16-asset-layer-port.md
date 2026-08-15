@@ -30,18 +30,32 @@ Already done here, in commit `94d1980`: `lib/assets/types.ts`, `helpers.ts` and 
 - **Do not change any storage key.** `osh-scope1-planner-v4`, `osh-companies-v1`, `osh-goals-v1`, `osh-esg-v1`, `osh-scope2-planner-v1`. The loader returns `null` for an unrecognised key, so bumping one discards user data.
 - `lib/assets/` must not import from `lib/scope2`, `lib/goals` or `lib/esg`. Importing `CombustionAsset` as a type from `lib/model/types` and `uniqueId` from `lib/store-helpers` is expected.
 
-## Consumers to rewire — identified up front
+## Consumer inventory — the real size of this job
 
-In the source repo these were missed until the final review and caused silently wrong per-entry numbers while headline totals stayed correct. They are listed here so they are handled by design, not retrofit:
+In the source repo these were missed until the final review and caused silently wrong per-entry numbers while headline totals stayed correct. An exhaustive grep here (`perCombustion|baseAssets|selectedAssets`, production code only) finds **10 consumer files, ~51 references**, plus the two producers:
 
-| Consumer | What it does today | Why resolution breaks it |
+| File | Refs | Treatment |
 |---|---|---|
-| `components/tabs/DataInputTab.tsx:48` | `b.perCombustion.find(p => p.id === id)` | rows re-key to asset id, so a part-allocated entry shows a fraction of its emissions beside its full volume |
-| `components/tabs/CeoOverviewTab.tsx:20` | `result.baseline.perCombustion.find(p => p.id === a.id)` | same; feeds a grade, so a wrong value is invisible |
-| `lib/group-by-bu.ts:9` | groups rows by `r.bu ?? ""` | must receive RESOLVED rows or per-BU figures diverge from the engine |
-| `components/tabs/ActionPlanTab.tsx:51,59,66` | reads `a.bu` per asset for lever attribution | must read resolved rows so attribution matches the dashboard |
+| `components/tabs/BuilderTab.tsx` | 21 | **mixed** — `segStats`, `buildPathways`, `suggestAllSettings` compute levers → RESOLVED; name lookups and the editor at :519-541 → RAW |
+| `components/tabs/DataInputTab.tsx` | 8 | **mixed** — the `co2eOf` lookup at :48 → roll up by `sourceEntryId`; the editable row list → RAW |
+| `components/tabs/ActivityDataTab.tsx` | 7 | **RAW** — counts, per-source cards and `combById` are entry-level; a user counts entries, not assets |
+| `components/tabs/CeoOverviewTab.tsx` | 3 | **roll up** — `perCombustion.find(p => p.id === a.id)` feeds a grade, so a wrong value is invisible |
+| `components/tabs/ScenarioCalcPanel.tsx` | 3 | **RESOLVED** — shows the engine's own working, so it must match the engine |
+| `components/tabs/ActionPlanTab.tsx` | 2 | **RESOLVED** — computes per-asset abatement and attributes it by `bu` |
+| `components/tabs/CompareTab.tsx` | 2 | **RESOLVED** — compares saved scenarios against live; mixing lists makes the table non-comparable |
+| `components/tabs/CombinedCompare.tsx` | 2 | **RESOLVED** — same reason |
+| `components/tabs/activity/ScopeScreen.tsx` | 2 | **RAW** — lists entries for editing |
+| `components/tabs/BalanceTab.tsx` | 1 | **RESOLVED** — an energy balance that must agree with the engine |
+| `lib/model/baseline.ts` | 4 | producer — gains `sourceEntryId` (Task 5) |
+| `lib/store.tsx` | 7 | producer — gains the resolved memos (Task 4) |
 
-**Rule for the whole plan:** any call site that computes levers or emissions must consume the same list the engine consumes. A file having no diff is evidence it was not updated, not evidence it did not need to be.
+**The classification rule.** Three categories, and picking wrongly is silent either way:
+
+1. **Computes levers or emissions** → must consume the SAME list the engine consumes (`resolvedBaseAssets` / `resolvedSelectedAssets`). Anything else diverges from the dashboard, by up to 2× where a lever applies to a full volume instead of a share.
+2. **Looks up one entry's emissions** → must sum ALL resolved rows whose `sourceEntryId` matches, never `.find()` by id. Resolution re-keys rows to asset ids, so a `.find()` silently returns one share or nothing.
+3. **Displays, counts or edits entries** → must stay on RAW entries. The user edits and counts what they typed; showing them asset rows here would be a different bug.
+
+A file having no diff is evidence it was not updated, not evidence it did not need to be. Task 5 begins by re-running the grep and recording a decision for every reference, so none is skipped by omission.
 
 ---
 
@@ -135,23 +149,49 @@ It runs on every hydration against unvalidated `localStorage`, so it must never 
 
 ---
 
-## Task 5 — rewire the four consumers
+## Task 5 — `sourceEntryId` on `perCombustion`, and the roll-up consumers
 
-**Files:** modify `components/tabs/DataInputTab.tsx`, `components/tabs/CeoOverviewTab.tsx`, `components/tabs/ActionPlanTab.tsx`, `lib/group-by-bu.ts` callers
+**Files:** modify `lib/model/baseline.ts`, `components/tabs/DataInputTab.tsx`, `components/tabs/CeoOverviewTab.tsx`
 
-Each is listed in the table above with its current behaviour. Replace every `perCombustion.find(p => p.id === entryId)` with a sum over all rows whose `sourceEntryId` matches, and point lever-computing call sites at `resolvedBaseAssets`.
+`perCombustion` is built in `lib/model/baseline.ts`, so it must carry `sourceEntryId` for consumers to key off. Add it with an `?? a.id` fallback, which reproduces today's `.find(p => p.id === a.id)` semantics exactly for any row that never passed through the resolver — that fallback is what keeps every existing test and direct caller correct.
 
-`perCombustion` is built in `lib/model/baseline.ts`, so it must carry `sourceEntryId` through for consumers to key off — add it there with an `?? a.id` fallback so direct callers (and every existing test) keep their current semantics.
+Then fix the two category-2 consumers: replace `.find()` by entry id with a sum over all rows whose `sourceEntryId` matches.
 
-- [ ] **Step 1: enumerate every consumer** — `grep -rn "perCombustion\|baseAssets" --include=*.tsx components` — and list them in the report with a decision for each, so none is silently skipped.
-- [ ] **Step 2: add `sourceEntryId` to `perCombustion` with the fallback.**
-- [ ] **Step 3: rewire each consumer.**
-- [ ] **Step 4: add a test** that a part-allocated entry's per-entry roll-up equals its full emissions.
+- [ ] **Step 1: re-run the inventory** — `grep -rn "perCombustion\|baseAssets\|selectedAssets" --include=*.tsx --include=*.ts lib components app | grep -v __tests__` — and record in the report a category (1 resolved / 2 roll-up / 3 raw) for EVERY reference, against the plan's table. Report any reference the table does not cover; do not silently absorb it.
+- [ ] **Step 2: write the failing test** — a part-allocated entry's per-entry roll-up equals its full unallocated emissions.
+- [ ] **Step 3: add `sourceEntryId` to `perCombustion` with the `?? a.id` fallback.**
+- [ ] **Step 4: rewire `DataInputTab.tsx:48` and `CeoOverviewTab.tsx:20`.**
 - [ ] **Step 5: gates** including build. **Step 6: commit.**
 
 ---
 
-## Task 6 — asset registry editor
+## Task 6 — point the lever-computing consumers at resolved rows
+
+**Files:** modify `components/tabs/ActionPlanTab.tsx`, `CompareTab.tsx`, `CombinedCompare.tsx`, `BalanceTab.tsx`, `ScenarioCalcPanel.tsx`
+
+All category 1. Each currently destructures `baseAssets` from `useScenario()` and computes levers or an energy balance on it, while the dashboard's `result` uses the resolved list — so they disagree with the dashboard by up to 2× wherever a lever applies to a full volume rather than a share. `CompareTab` is the worst case, because it puts the live column and saved-scenario columns in one table.
+
+Switch each to `resolvedBaseAssets`. Read each file first and change only the asset-list argument — do not restructure.
+
+- [ ] **Step 1: for each file, quote in the report the line you changed and confirm no other `baseAssets` reference remains** that should have been switched.
+- [ ] **Step 2: implement.**
+- [ ] **Step 3: gates** including build. **Step 4: commit.**
+
+---
+
+## Task 7 — BuilderTab
+
+**Files:** modify `components/tabs/BuilderTab.tsx`
+
+Its own task because it holds 21 of the ~51 references and is genuinely mixed. `segStats`, `buildPathways` and `suggestAllSettings` compute levers and must take resolved rows; the name lookup at :247 and the source editor at :519-541 operate on entries the user edits and must stay raw.
+
+- [ ] **Step 1: list all 21 references in the report** with a category for each BEFORE changing anything, and flag any you are unsure about rather than guessing.
+- [ ] **Step 2: implement**, category 1 references only.
+- [ ] **Step 3: gates** including build. **Step 4: commit.**
+
+---
+
+## Task 8 — asset registry editor
 
 **Files:** create `components/assets/AssetRegistryEditor.tsx` and its test
 
@@ -164,7 +204,7 @@ Add / edit / remove assets, following whatever drawer or panel convention this r
 
 ---
 
-## Task 7 — the allocation panel and its entry point
+## Task 9 — the allocation panel and its entry point
 
 **Files:** create `components/assets/AssetAllocationPanel.tsx`; modify the entry editor under `components/tabs/activity/`
 
