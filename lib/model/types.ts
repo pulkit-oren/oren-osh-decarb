@@ -152,6 +152,12 @@ export interface CombustionAsset {
   endUse?: import("./end-use").EndUseId;
   /** FY this snapshot is for — selects the DEFRA factor year. */
   year?: number;
+  /** How this entry's volume is attributed to assets. Absent ⇒ "entry" (whole-entry, no split). */
+  allocationMode?: "entry" | "byAsset";
+  /** byAsset: per-asset share of annualVolume, keyed by asset id. */
+  assetAllocations?: Record<string, { volume: number }>;
+  /** Set on rows emitted by resolveAssets() — the id of the entry a resolved row descends from. */
+  sourceEntryId?: string;
 }
 
 export interface RefrigerationSystem {
