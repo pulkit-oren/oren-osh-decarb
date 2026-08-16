@@ -55,6 +55,15 @@ In the source repo these were missed until the final review and caused silently 
 2. **Looks up one entry's emissions** → must sum ALL resolved rows whose `sourceEntryId` matches, never `.find()` by id. Resolution re-keys rows to asset ids, so a `.find()` silently returns one share or nothing.
 3. **Displays, counts or edits entries** → must stay on RAW entries. The user edits and counts what they typed; showing them asset rows here would be a different bug.
 
+**Sharper rule, verified by reading the screens rather than inferring from the grep.** The sum invariant does most of the work here: because resolved rows always sum to the entry's `annualVolume`, any AGGREGATE — a fuel-category total, a company total, a sum over a filtered set — produces the identical number whether computed over raw entries or resolved rows. Only two things are genuinely sensitive to resolution:
+
+- **Id-keyed lookups against a resolved list.** `perCombustion.find(p => p.id === entryId)` breaks because resolution re-keys rows to asset ids. This is the real defect class, and it is narrow.
+- **Per-asset lever computation.** A lever applied to a full entry volume abates differently from one applied to an asset's share, so anything computing abatement must consume the same list the engine does.
+
+Everything else — counts, editable lists, per-entry displays, category aggregates — is safe on raw entries and should stay there.
+
+Verified individually: `ActivityDataTab`'s references are counts (`:68`, `:72`), per-entry displays (`:60`, `:64`), a category aggregate (`:81`, safe by the invariant), an id lookup against RAW entries (`:111`, not against `perCombustion`, so unaffected), and a prop feeding `SourceListScreen` (`:228`), which filters by fuel family to build an editable list and also receives `addCombustionAsset` — an editing surface. All correctly RAW. `activity/ScopeScreen` (`:42`, `:56`) filters entries by fuel family into display rows keyed by entry id — correctly RAW.
+
 A file having no diff is evidence it was not updated, not evidence it did not need to be. Task 5 begins by re-running the grep and recording a decision for every reference, so none is skipped by omission.
 
 ---
