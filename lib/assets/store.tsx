@@ -12,7 +12,7 @@ import {
 } from "react";
 import { migrateAssets } from "@/lib/store-helpers";
 import {
-  addAsset, removeAsset, updateAsset, ASSET_KEY_BASE,
+  addAsset, removeAsset, updateAsset, upsertAsset, ASSET_KEY_BASE,
 } from "./helpers";
 import type { Asset, AssetRegistry } from "./types";
 
@@ -22,6 +22,16 @@ interface AssetsStoreShape extends AssetRegistry {
    *  loaded, instead of racing it. */
   hydrated: boolean;
   addUnit: (init: Omit<Asset, "id">) => void;
+  /** Insert-or-replace by an EXPLICIT id, unlike addUnit (which always mints
+   *  a fresh one). This is what the combustion-entry-creation handlers in
+   *  lib/store.tsx must use, reusing the entry's own id as the asset id —
+   *  matching migrateAssets's contract exactly, so the historical-backfill
+   *  migration finds the asset already present on the next hydration and
+   *  mints nothing. Using addUnit there instead mints a SECOND, differently-
+   *  id'd self-asset every time the app reloads a session with new entries,
+   *  because migrateAssets keys its idempotence on the ENTRY id, not on
+   *  whatever fresh id addUnit minted. */
+  upsertUnit: (asset: Asset) => void;
   updateUnit: (id: string, patch: Partial<Asset>) => void;
   removeUnit: (id: string, referencedIds: string[]) => void;
   /** Backfill one Asset per not-yet-migrated combustion entry. Not called
@@ -87,6 +97,9 @@ export function AssetProvider({
   const addUnit: AssetsStoreShape["addUnit"] = (init) =>
     setAssets((prev) => addAsset({ assets: prev }, init).assets);
 
+  const upsertUnit: AssetsStoreShape["upsertUnit"] = (asset) =>
+    setAssets((prev) => upsertAsset({ assets: prev }, asset).assets);
+
   const updateUnit: AssetsStoreShape["updateUnit"] = (id, patch) =>
     setAssets((prev) => updateAsset({ assets: prev }, id, patch).assets);
 
@@ -130,7 +143,7 @@ export function AssetProvider({
 
   const value: AssetsStoreShape = {
     assets, hydrated,
-    addUnit, updateUnit, removeUnit, ensureAssetsFor,
+    addUnit, upsertUnit, updateUnit, removeUnit, ensureAssetsFor,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -118,11 +118,11 @@ export function ScenarioProvider({
   /* Non-throwing accessor — 15 pre-existing test files mount ScenarioProvider
    * standalone, with no AssetProvider above it, and useAssets() would throw
    * in that case. When there is no provider, useAssetsOptional() returns a
-   * module-level EMPTY_REGISTRY with no `hydrated`/`addUnit`/`ensureAssetsFor`
+   * module-level EMPTY_REGISTRY with no `hydrated`/`upsertUnit`/`ensureAssetsFor`
    * fields, so every optional access below safely no-ops instead of crashing. */
   const assetStore = useAssetsOptional() as AssetRegistry & {
     hydrated?: boolean;
-    addUnit?: (init: Omit<Asset, "id">) => void;
+    upsertUnit?: (asset: Asset) => void;
     ensureAssetsFor?: (combustion: unknown) => void;
   };
   const registryAssets = assetStore.assets;
@@ -159,7 +159,7 @@ export function ScenarioProvider({
    * to a later commit, once assetStore.assets already reflects the persisted
    * registry (or its absence). Deliberately excludes `combustion` from the
    * dependency array: this must fire once per hydration flip, not on every
-   * later edit — new entries are kept in sync imperatively via addUnit in
+   * later edit — new entries are kept in sync imperatively via upsertUnit in
    * the entry-creation handlers below, not by re-running this migration. */
   useEffect(() => {
     if (!assetStore.hydrated) return;
@@ -187,13 +187,19 @@ export function ScenarioProvider({
     });
     // Keep the asset registry in sync imperatively — no effect, no dependency
     // array. Directly after the state-setting calls above, not inside either
-    // updater: addUnit mutates a DIFFERENT provider's state, so calling it
+    // updater: upsertUnit mutates a DIFFERENT provider's state, so calling it
     // from inside a setCombustion/setSettingsState updater would be an
     // impure side effect there. A no-op when there's no AssetProvider above.
+    //
+    // upsertUnit (not addUnit) — reusing the entry's OWN id as the asset id,
+    // exactly matching migrateAssets's contract. addUnit mints a fresh id,
+    // which migrateAssets's entry-id-keyed idempotence check would never
+    // find on the next hydration, minting a SECOND self-asset for the same
+    // entry every reload.
     const minted = pendingAssetRef.current;
     if (minted) {
-      assetStore.addUnit?.({
-        name: minted.name, buId: minted.bu ?? "", category: minted.category,
+      assetStore.upsertUnit?.({
+        id: minted.id, name: minted.name, buId: minted.bu ?? "", category: minted.category,
         unitCount: minted.unitCount, remainingLife: minted.remainingLife, opex: minted.opex,
       });
     }
@@ -216,8 +222,8 @@ export function ScenarioProvider({
       return { ...p, byAsset };
     });
     for (const a of pendingImportRef.current) {
-      assetStore.addUnit?.({
-        name: a.name, buId: a.bu ?? "", category: a.category,
+      assetStore.upsertUnit?.({
+        id: a.id, name: a.name, buId: a.bu ?? "", category: a.category,
         unitCount: a.unitCount, remainingLife: a.remainingLife, opex: a.opex,
       });
     }
@@ -225,8 +231,8 @@ export function ScenarioProvider({
   const addCombustionAsset = (year: number, asset: CombustionAsset) => {
     setCombustion((prev) => ({ ...prev, [year]: [...(prev[year] ?? []), asset] }));
     setSettingsState((p) => (p.byAsset[asset.id] ? p : { ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }));
-    assetStore.addUnit?.({
-      name: asset.name, buId: asset.bu ?? "", category: asset.category,
+    assetStore.upsertUnit?.({
+      id: asset.id, name: asset.name, buId: asset.bu ?? "", category: asset.category,
       unitCount: asset.unitCount, remainingLife: asset.remainingLife, opex: asset.opex,
     });
   };

@@ -13,10 +13,11 @@
 //     since a raw (unresolved) entry is always exactly one row.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
-import { AssetProvider } from "@/lib/assets/store";
+import { AssetProvider, useAssets } from "@/lib/assets/store";
 import { assetKey } from "@/lib/assets/helpers";
 import { ScenarioProvider, useScenario } from "@/lib/store";
-import type { AssetRegistry } from "@/lib/assets/types";
+import { migrateAssets } from "@/lib/store-helpers";
+import type { Asset, AssetRegistry } from "@/lib/assets/types";
 import type { CombustionAsset } from "@/lib/model/types";
 
 const COMPANY_ID = "wiring-test-co";
@@ -118,5 +119,93 @@ describe("resolved-asset wiring (Task 4)", () => {
     const unallocatedTotal = perC.find((p) => p.id === "c-unallocated")!.co2eT;
     expect(allocatedTotal).toBeCloseTo(unallocatedTotal, 6);
     expect(unallocatedTotal).toBeGreaterThan(0); // guard against a vacuous 0 === 0 pass
+  });
+});
+
+/** Captures the raw asset registry via a mutated array prop — same reason as
+ *  Probe above (avoids the react-hooks/globals reassignment error). Uses
+ *  useAssets() (the throwing accessor), which is safe here since every test
+ *  below always mounts a real AssetProvider. */
+function AssetProbe({ into }: { into: Asset[][] }) {
+  into.push(useAssets().assets);
+  return null;
+}
+
+describe("upsertUnit id-reuse seam (fix round 1 — duplicate self-asset bug)", () => {
+  // The bug this seam test catches: addUnit mints a FRESH id ("a-N"), but
+  // migrateAssets's idempotence is keyed on the ENTRY's own id. So an entry
+  // created via addUnit got a self-asset immediately, and then the NEXT
+  // hydration's migrateAssets call never found an asset whose id matched the
+  // entry's id — and minted a SECOND one. A test that only checked
+  // upsertUnit in isolation would not catch this: the bug is specifically at
+  // the seam between "what id did the entry-creation handler use" and "what
+  // id does migrateAssets look for".
+  it("addCombustionAsset upserts the self-asset under the ENTRY's own id, so migrateAssets mints nothing more for it on the next hydration", () => {
+    const assetSnapshots: Asset[][] = [];
+    render(
+      <AssetProvider storageKey={ASSETS_KEY}>
+        <ScenarioProvider storageKey={SCENARIO_KEY}>
+          <Probe into={captured} />
+          <AssetProbe into={assetSnapshots} />
+        </ScenarioProvider>
+      </AssetProvider>,
+    );
+
+    const baseYear = captured[captured.length - 1].baseYear;
+    const entry: CombustionAsset = {
+      id: "e-5", name: "New genset", category: "stationary",
+      fuelType: "diesel", unit: "L", annualVolume: 5000, opex: 200,
+      remainingLife: 10, unitCount: 1, year: baseYear,
+    };
+
+    act(() => {
+      captured[captured.length - 1].addCombustionAsset(baseYear, entry);
+    });
+
+    const registryAfterCreate = assetSnapshots[assetSnapshots.length - 1];
+    // Exactly one self-asset, and it carries the ENTRY's own id — not some
+    // other freshly-minted id.
+    expect(registryAfterCreate.filter((a) => a.id === "e-5")).toHaveLength(1);
+
+    // Simulate the NEXT hydration: migrateAssets runs over the resulting
+    // combustion record and the resulting registry, exactly as
+    // ScenarioProvider's gated backfill effect does via ensureAssetsFor.
+    // Before the fix (addUnit instead of upsertUnit), this minted a SECOND
+    // self-asset for "e-5", because migrateAssets never found "e-5" among
+    // the registry's ids (only the fresh, unrelated "a-N" addUnit had
+    // minted).
+    const combustionAfterCreate = captured[captured.length - 1].combustion;
+    const migrated = migrateAssets(combustionAfterCreate, { assets: registryAfterCreate });
+    expect(migrated.assets.filter((a) => a.id === "e-5")).toHaveLength(1);
+    expect(migrated.assets).toHaveLength(registryAfterCreate.length); // nothing new minted
+  });
+
+  it("calling the creation path twice for the same entry id yields one asset, not two", () => {
+    const assetSnapshots: Asset[][] = [];
+    render(
+      <AssetProvider storageKey={ASSETS_KEY}>
+        <ScenarioProvider storageKey={SCENARIO_KEY}>
+          <Probe into={captured} />
+          <AssetProbe into={assetSnapshots} />
+        </ScenarioProvider>
+      </AssetProvider>,
+    );
+
+    const baseYear = captured[captured.length - 1].baseYear;
+    const entry: CombustionAsset = {
+      id: "e-7", name: "Repeat genset", category: "stationary",
+      fuelType: "diesel", unit: "L", annualVolume: 3000, opex: 150,
+      remainingLife: 10, unitCount: 1, year: baseYear,
+    };
+
+    act(() => {
+      captured[captured.length - 1].addCombustionAsset(baseYear, entry);
+    });
+    act(() => {
+      captured[captured.length - 1].addCombustionAsset(baseYear, entry);
+    });
+
+    const finalRegistry = assetSnapshots[assetSnapshots.length - 1];
+    expect(finalRegistry.filter((a) => a.id === "e-7")).toHaveLength(1);
   });
 });
