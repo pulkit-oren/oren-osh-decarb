@@ -5,6 +5,8 @@ import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
 import { GoalsProvider } from "@/lib/goals/store";
 import { EsgProvider } from "@/lib/esg/store";
+import { AssetProvider } from "@/lib/assets/store";
+import { assetKey } from "@/lib/assets/helpers";
 import type { GoalCategory } from "@/lib/goals/types";
 import { CompanyProvider, useCompany } from "@/lib/company/store";
 import { esgKey, goalsKey, scope1Key, scope2Key } from "@/lib/company/helpers";
@@ -105,6 +107,7 @@ function CompanyScopedShell() {
   const dualScope = tab === "overview" || tab === "action" || tab === "compare";
 
   return (
+    <AssetProvider key={`assets-${activeId}`} storageKey={assetKey(activeId)}>
     <ScenarioProvider key={`s1-${activeId}`} storageKey={scope1Key(activeId)}>
       <Scope2Provider key={`s2-${activeId}`} storageKey={scope2Key(activeId)}>
         <GoalsProvider key={`g-${activeId}`} storageKey={goalsKey(activeId)}>
@@ -133,5 +136,6 @@ function CompanyScopedShell() {
         </GoalsProvider>
       </Scope2Provider>
     </ScenarioProvider>
+    </AssetProvider>
   );
 }
