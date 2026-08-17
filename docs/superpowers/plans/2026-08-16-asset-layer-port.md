@@ -181,7 +181,9 @@ Then fix the two category-2 consumers: replace `.find()` by entry id with a sum 
 
 ## Task 6 — point the lever-computing consumers at resolved rows
 
-**Files:** modify `components/tabs/ActionPlanTab.tsx`, `CompareTab.tsx`, `CombinedCompare.tsx`, `BalanceTab.tsx`, `ScenarioCalcPanel.tsx`
+**Files:** modify `components/tabs/ActionPlanTab.tsx`, `CompareTab.tsx`, `CombinedCompare.tsx`, `BalanceTab.tsx`, `ScenarioCalcPanel.tsx`, and `components/tabs/CeoOverviewTab.tsx:24`
+
+**Added after Task 5.** `CeoOverviewTab` was classified "roll up" in the inventory table, but only one of its three references was. Line 24 calls `compute(baseAssets.filter(...), ...)` to build boardroom scenario variants — per-asset lever computation, category 1, which will diverge from the dashboard once entries are allocated. Task 5 correctly fixed only its line-20 lookup and flagged this rather than reaching outside its scope. A file can hold references in more than one category; classify per reference, not per file.
 
 All category 1. Each currently destructures `baseAssets` from `useScenario()` and computes levers or an energy balance on it, while the dashboard's `result` uses the resolved list — so they disagree with the dashboard by up to 2× wherever a lever applies to a full volume rather than a share. `CompareTab` is the worst case, because it puts the live column and saved-scenario columns in one table.
 
