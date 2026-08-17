@@ -30,7 +30,7 @@ export interface BaselineResult {
   combustionT: number;
   refrigerantT: number;
   totalT: number;
-  perCombustion: { id: string; name: string; co2eT: number; energyKJ: number }[];
+  perCombustion: { id: string; name: string; co2eT: number; energyKJ: number; sourceEntryId: string }[];
   perRefrigeration: { id: string; name: string; co2eT: number }[];
 }
 
@@ -43,6 +43,12 @@ export function baselineScope1(
     name: a.name,
     co2eT: combustionCO2e(a),
     energyKJ: combustionEnergyKJ(a),
+    // `a.sourceEntryId` is only set on rows that passed through resolveAssets
+    // (Task 1). For any other row it is undefined, so falling back to the
+    // row's own id reproduces today's `.find(p => p.id === a.id)` lookup
+    // semantics exactly — this is what keeps every pre-existing caller and
+    // test correct without editing them.
+    sourceEntryId: a.sourceEntryId ?? a.id,
   }));
   const perRefrigeration = systems.map((s) => ({
     id: s.id,

@@ -45,7 +45,11 @@ export function DataInputTab() {
   const [siteFilter, setSiteFilter] = useState("");
   const [importing, setImporting] = useState(false);
   const b = selectedBaseline;
-  const co2eOf = (id: string) => b.perCombustion.find((p) => p.id === id)?.co2eT ?? 0;
+  // Resolution re-keys perCombustion rows to ASSET ids, so a part-allocated
+  // entry can produce several rows plus a remainder row. Summing every row
+  // whose sourceEntryId matches the entry (rather than .find()-ing by id)
+  // returns the entry's full emissions instead of one asset's share.
+  const co2eOf = (id: string) => b.perCombustion.filter((p) => p.sourceEntryId === id).reduce((s, p) => s + p.co2eT, 0);
   const stationaryT = selectedAssets.filter((a) => a.category === "stationary").reduce((s, a) => s + co2eOf(a.id), 0);
   const mobileT = b.combustionT - stationaryT;
   const confidence = confidenceOf([
