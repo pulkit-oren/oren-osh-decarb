@@ -50,12 +50,12 @@ export function CombinedCompare() {
     const sc = s1Id === CURRENT ? null : s1.scenarios.find((x) => x.id === s1Id);
     if (!sc) return s1.result;
     return compute(
-      s1.baseAssets.filter((a) => !a.excluded),
+      s1.resolvedBaseAssets.filter((a) => !a.excluded),
       s1.baseSystems.filter((x) => !x.excluded),
       sc.settings,
       s1.baseYear,
     );
-  }, [s1Id, s1.scenarios, s1.result, s1.baseAssets, s1.baseSystems, s1.baseYear]);
+  }, [s1Id, s1.scenarios, s1.result, s1.resolvedBaseAssets, s1.baseSystems, s1.baseYear]);
 
   const s2Result = useMemo(() => {
     const sc = s2Id === CURRENT ? null : s2.scenarios.find((x) => x.id === s2Id);

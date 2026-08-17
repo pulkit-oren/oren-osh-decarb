@@ -14,14 +14,14 @@ import { HowTo } from "../ui/HowTo";
 import { WedgeChart } from "../charts/WedgeChart";
 
 export function CeoOverviewTab() {
-  const { result, baseAssets, baseSystems, scenarios, setSettings, settings, baseYear } = useScenario();
+  const { result, baseAssets, resolvedBaseAssets, baseSystems, scenarios, setSettings, settings, baseYear } = useScenario();
   const k = result.kpis;
   const confidence = confidenceOf([
     ...baseAssets.map((a) => ({ grade: combustionGrade(a), co2eT: result.baseline.perCombustion.filter((p) => p.sourceEntryId === a.id).reduce((s, p) => s + p.co2eT, 0) })),
     ...baseSystems.map((s) => ({ grade: refrigerantGrade(s), co2eT: result.baseline.perRefrigeration.find((p) => p.id === s.id)?.co2eT ?? 0 })),
   ]);
   const variants = boardroomVariants(settings).map((v) => {
-    const r = compute(baseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), v.settings, baseYear);
+    const r = compute(resolvedBaseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), v.settings, baseYear);
     return { ...v, reduction2030: r.kpis.reduction2030, totalCapex: r.kpis.totalCapex, onTrack: r.kpis.onTrack2030 };
   });
 

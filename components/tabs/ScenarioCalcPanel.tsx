@@ -102,7 +102,7 @@ export function ScenarioCalcPanel({ tone = "light", target = { kind: "all" } }: 
 }
 
 function buildContent(store: ReturnType<typeof useScenario>, target: CalcTarget): Content {
-  const { result, baseAssets, baseSystems, settings } = store;
+  const { result, baseAssets, resolvedBaseAssets, baseSystems, settings } = store;
 
   if (target.kind === "all") {
     const k = result.kpis;
@@ -136,7 +136,7 @@ function buildContent(store: ReturnType<typeof useScenario>, target: CalcTarget)
         rows.push({ label: s.name, value: `−${fmt(cut)} t/yr`, color: FAMILY_COLORS[1], formula: describeSystem(s, acts), info: LEVER_FORMULA.refrigerant });
       }
     } else {
-      for (const a of baseAssets.filter((x) => x.category === seg && !x.excluded)) {
+      for (const a of resolvedBaseAssets.filter((x) => x.category === seg && !x.excluded)) {
         const acts = settings.byAsset[a.id];
         if (!acts) continue;
         const res = applyAssetActions(a, acts, settings.assumptions);

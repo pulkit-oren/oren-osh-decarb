@@ -25,7 +25,7 @@ interface Col {
 }
 
 export function CompareTab() {
-  const { baseAssets, baseSystems, baseYear, scenarios, saveScenario, deleteScenario, result } = useScenario();
+  const { resolvedBaseAssets, baseSystems, baseYear, scenarios, saveScenario, deleteScenario, result } = useScenario();
   const [name, setName] = useState("");
 
   const cols: Col[] = [
@@ -37,7 +37,7 @@ export function CompareTab() {
         name: s.name,
         savedAt: s.savedAt,
         note: s.note,
-        result: compute(baseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), s.settings, baseYear),
+        result: compute(resolvedBaseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), s.settings, baseYear),
       })),
   ];
 

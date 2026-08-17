@@ -78,7 +78,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const s2 = useScope2();
   const { goals } = useGoals();
 
-  const assets = s1.baseAssets.filter((a) => !a.excluded);
+  const assets = s1.resolvedBaseAssets.filter((a) => !a.excluded);
   const systems = s1.baseSystems.filter((x) => !x.excluded);
   const facilities = s2.baseFacilities.filter((f) => !f.excluded);
 

@@ -29,7 +29,7 @@ import { Collapsible } from "@/components/tabs/activity/Collapsible";
 interface PlanItem { label: string; detail: string; tonnes: number; color: string; icon: React.ElementType; bu?: string; }
 
 export function ActionPlanTab() {
-  const { settings, setSettings, result, scenarios, baseAssets, baseSystems } = useScenario();
+  const { settings, setSettings, result, scenarios, resolvedBaseAssets, baseSystems } = useScenario();
   const [loaded, setLoaded] = useState("__live");
 
   const k = result.kpis;
@@ -38,7 +38,7 @@ export function ActionPlanTab() {
   // "What this plan does" — one line per active action, with its abatement.
   // Only include NON-excluded sources so that the rows sum to the headline KPIs.
   const planItems: PlanItem[] = [];
-  for (const a of baseAssets.filter((x) => !x.excluded)) {
+  for (const a of resolvedBaseAssets.filter((x) => !x.excluded)) {
     const acts = settings.byAsset[a.id];
     if (!acts) continue;
     const res = applyAssetActions(a, acts, settings.assumptions);
