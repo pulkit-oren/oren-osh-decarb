@@ -9,9 +9,18 @@
 // show an inline error, not crash or silently no-op.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { AssetProvider } from "@/lib/assets/store";
+import { AssetProvider, useAssets } from "@/lib/assets/store";
 import { ScenarioProvider } from "@/lib/store";
 import { AssetRegistryScreen } from "../activity/AssetRegistryScreen";
+
+/** Exposes the registry's raw ids so a test can assert on id IDENTITY, not
+ *  just on names appearing in the DOM — the only way to actually tell
+ *  addUnit (mints a fresh id) apart from upsertUnit (would reuse/collide an
+ *  explicit one), since the screen itself never renders ids. */
+function IdsProbe() {
+  const { assets } = useAssets();
+  return <div data-testid="asset-ids">{assets.map((a) => a.id).join(",")}</div>;
+}
 
 const ASSET_KEY = "osh-assets-v1";
 const SCENARIO_KEY = "osh-scope1-planner-v4";
@@ -97,15 +106,47 @@ describe("AssetRegistryScreen", () => {
     expect(screen.getByText("Genset B")).toBeTruthy();
   });
 
-  it("creating an asset via the form adds it to the list (addUnit, not upsertUnit)", () => {
-    renderScreen();
-    expect(screen.queryByText("New Boiler")).toBeFalsy();
+  it("creating an asset mints a fresh id (addUnit) instead of colliding with an entry-shaped existing id (upsertUnit)", () => {
+    // "c-1" mimics the id shape migrateAssets/upsertUnit produce for a
+    // not-yet-split combustion entry's self-asset (lib/assets/store.tsx) —
+    // exactly the id an errant upsertUnit call could collide with. Asserting
+    // only that "New Boiler" appears would pass just as well under
+    // upsertUnit, so this pins ID IDENTITY via IdsProbe instead.
+    seedAssets([
+      { id: "c-1", name: "Existing Genset", buId: "", category: "stationary", unitCount: 1, remainingLife: 10, opex: 0 },
+    ]);
+    // Seed an EMPTY combustion year map so ScenarioProvider's one-time
+    // backfill (ensureAssetsFor, lib/store.tsx:164-168) has no default
+    // entries to migrate — otherwise it mints extra assets for
+    // DEFAULT_COMBUSTION_BY_YEAR's seed rows and pollutes the id count this
+    // test is asserting on.
+    window.localStorage.setItem(
+      SCENARIO_KEY,
+      JSON.stringify({ combustion: {}, refrigeration: {}, settings: SETTINGS_SHAPE, scenarios: [], baseYear: 2025 }),
+    );
+    render(
+      <Wrapper>
+        <IdsProbe />
+        <AssetRegistryScreen setNav={() => {}} buUnits={[{ name: "Pune", aggregate: true }]} />
+      </Wrapper>,
+    );
+    expect(screen.getByTestId("asset-ids").textContent).toBe("c-1");
 
     fireEvent.click(screen.getByRole("button", { name: /Add asset/i }));
     fireEvent.change(screen.getByLabelText(/Name/i), { target: { value: "New Boiler" } });
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
 
+    // The seeded asset is untouched — not overwritten in place.
+    expect(screen.getByText("Existing Genset")).toBeTruthy();
     expect(screen.getByText("New Boiler")).toBeTruthy();
+
+    // And the new asset landed under a FRESH, DISTINCT id — proof this is
+    // addUnit, not upsertUnit (which would have to reuse/collide an id to
+    // even be called from a create form with no id field of its own).
+    const ids = screen.getByTestId("asset-ids").textContent!.split(",");
+    expect(ids).toHaveLength(2);
+    expect(ids).toContain("c-1");
+    expect(ids.some((id) => id !== "c-1")).toBe(true);
   });
 
   it("deleting an unreferenced asset removes it from the list", () => {

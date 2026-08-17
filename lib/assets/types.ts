@@ -28,7 +28,12 @@ export interface Tier2Answers {
 export interface Asset {
   id: string;
   name: string;
-  /** Business-unit id from lib/bu. Empty string = unassigned. */
+  /** Bare business-unit NAME (there is no lib/bu/ id registry in this repo —
+   *  every write path sets this to `entry.bu ?? ""`, e.g. lib/store.tsx's
+   *  addCombustionAsset/upsertUnit call sites). Compared name-to-name
+   *  against a combustion entry's own `bu` field (lib/assets/resolve.ts:69:
+   *  `asset.buId || e.bu`), not resolved through any separate id table.
+   *  Empty string = unassigned. */
   buId: string;
   facilityId?: string;
   category: AssetCategory;

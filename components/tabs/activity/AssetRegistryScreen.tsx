@@ -14,6 +14,20 @@
    call, specifically so this component's own try/catch can catch it
    and put the message in state — an error boundary would not see
    this, because nothing ever reaches render in a broken state.
+
+   DELIBERATE: this screen calls useAssets()/useScenario() ITSELF,
+   rather than receiving assets/mutators as props from ActivityDataTab
+   (the way BusinessUnitsScreen receives buReg/addBu/removeBu from
+   useBuConfig). Do not "fix" this into a props-based design to match
+   that sibling — components/tabs/__tests__/activity-data.test.tsx is
+   frozen and mounts ActivityDataTab with NO AssetProvider in its
+   wrapper. If ActivityDataTab called useAssets() at its top level to
+   pass assets down as props, that call would throw outside the
+   provider and break every test in that file the moment this screen
+   existed. Keeping the useAssets()/useScenario() calls inside THIS
+   component (only reached via nav.level === "assets", which none of
+   activity-data.test.tsx's scenarios navigate to) keeps ActivityDataTab
+   itself free of a hard AssetProvider dependency.
    ============================================================ */
 
 import { useState } from "react";
