@@ -56,6 +56,27 @@ const ERA_BADGE: Record<RefrigerantEra, { label: string; cls: string }> = {
 
 type SegStats = { count: number; active: number; abated: number };
 
+/** Resolved rows produced by resolving one entry — for an unsplit entry this
+ *  is just the entry itself (falls back to its own id, mirroring the
+ *  `sourceEntryId ?? a.id` normalisation lib/model/baseline.ts uses for the
+ *  same reason: an unsplit row never gets a sourceEntryId at all); for a
+ *  split entry it's every asset-allocated row plus any unallocated
+ *  remainder. Reused everywhere a per-source card needs to roll a split
+ *  entry's abatement up from its assets instead of missing on the entry's
+ *  own (lever-less) id — the same roll-up shape Task 5 established for
+ *  emissions (lib/model/baseline.ts, DataInputTab.tsx, CeoOverviewTab.tsx). */
+function resolvedRowsForEntry(entry: CombustionAsset, resolvedAssets: CombustionAsset[]): CombustionAsset[] {
+  return resolvedAssets.filter((r) => (r.sourceEntryId ?? r.id) === entry.id);
+}
+
+/** True once an entry has been split across assets — Task 10's allocation
+ *  panel is the only UI that can set this so far (verified by grep; see the
+ *  Task 9 brief). A split entry has no lever key of its own: see
+ *  resolvedRowsForEntry above. */
+function isSplitEntry(entry: CombustionAsset): boolean {
+  return entry.allocationMode === "byAsset";
+}
+
 function segStats(
   seg: Seg,
   baseAssets: CombustionAsset[],
@@ -125,10 +146,11 @@ function GradeBadge({ grade }: { grade: Grade }) {
 }
 
 function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset | RefrigerationSystem; onOpen: () => void }) {
-  const { settings } = useScenario();
+  const { settings, resolvedBaseAssets } = useScenario();
   let sub: string;
   let abated = 0;
   let active = 0;
+  let hasPlan = false;
   const excluded = source.excluded ?? false;
 
   if (seg === "refrigerant") {
@@ -136,6 +158,7 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
     const acts = settings.bySystem[sys.id];
     const cls = refrigClassProfile(sys);
     sub = `${SYSTEM_TYPE_LABELS[sys.systemType]}${cls ? ` · ${cls.label}` : ""}`;
+    hasPlan = !!acts;
     if (acts) {
       if (acts.gasSwitch.enabled) active++;
       if (acts.leakFix.enabled) active++;
@@ -148,19 +171,23 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
     }
   } else {
     const a = source as CombustionAsset;
-    const acts = settings.byAsset[a.id];
     const eu = endUseProfile(a);
     sub = `${FUELS[a.fuelType].label} · ${a.category}${eu ? ` · ${eu.label}` : ""}`;
-    if (acts) {
+    // Roll up over the entry's resolved rows: for an unsplit entry this is
+    // just itself (resolvedRowsForEntry), so behaviour is unchanged; for a
+    // split entry its levers live on its assets, not on the entry's own id.
+    for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
+      const acts = settings.byAsset[r.id];
+      if (!acts) continue;
+      hasPlan = true;
       if (acts.efficiency?.enabled) active++;
       if (acts.electrify.enabled) active++;
       if (acts.fuelSwitch.enabled) active++;
       if (acts.flexFuel?.enabled) active++;
-      const res = applyAssetActions(a, acts, settings.assumptions);
-      abated = res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
+      const res = applyAssetActions(r, acts, settings.assumptions);
+      abated += res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
     }
   }
-  const hasPlan = !!(seg === "refrigerant" ? settings.bySystem[(source as RefrigerationSystem).id] : settings.byAsset[(source as CombustionAsset).id]);
   const grade = seg === "refrigerant" ? refrigerantGrade(source as RefrigerationSystem) : combustionGrade(source as CombustionAsset);
   const potential = !hasPlan && !excluded ? suggestedAbatementFor(seg, source, settings.assumptions) : 0;
 
@@ -244,7 +271,11 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
   const diffRowsFor = (id: string): DiffRow[] => {
     const s = scenarios.find((x) => x.id === id);
     if (!s) return [];
-    const assetName = (aid: string) => baseAssets.find((a) => a.id === aid)?.name ?? aid;
+    // `aid` is a lever key — a settings.byAsset id, which for a split entry
+    // is a RESOLVED asset id, not the raw entry's own id. Check the resolved
+    // list (which carries every allocated asset's real name) first, falling
+    // back to the raw entries (unsplit pass-through) and finally the bare id.
+    const assetName = (aid: string) => resolvedBaseAssets.find((a) => a.id === aid)?.name ?? baseAssets.find((a) => a.id === aid)?.name ?? aid;
     const sysName = (sid: string) => baseSystems.find((sy) => sy.id === sid)?.name ?? sid;
     return [
       ...diffLeverMaps(settings.byAsset as unknown as LM, s.settings.byAsset as unknown as LM, assetName),
@@ -415,10 +446,19 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
   const [sort, setSort] = useState<SourceSort>("baseline");
 
   const assetMetrics = (a: CombustionAsset) => {
-    const acts = settings.byAsset[a.id];
-    const planned = !!acts && (!!acts.efficiency?.enabled || acts.electrify.enabled || acts.fuelSwitch.enabled || !!acts.flexFuel?.enabled);
-    const res = acts ? applyAssetActions(a, acts, settings.assumptions) : null;
-    return { baseline: combustionCO2e(a), abated: res ? res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT : 0, planned };
+    // Roll up over the entry's resolved rows: an unsplit entry has exactly
+    // one (itself), so this is byte-identical to the old direct lookup; a
+    // split entry's levers live on its assets, not on the entry's own id.
+    let abated = 0;
+    let planned = false;
+    for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
+      const acts = settings.byAsset[r.id];
+      if (!acts) continue;
+      if (!!acts.efficiency?.enabled || acts.electrify.enabled || acts.fuelSwitch.enabled || !!acts.flexFuel?.enabled) planned = true;
+      const res = applyAssetActions(r, acts, settings.assumptions);
+      abated += res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
+    }
+    return { baseline: combustionCO2e(a), abated, planned };
   };
   const visibleAssets = (assets: CombustionAsset[]) =>
     assets
@@ -611,6 +651,7 @@ function AlternativesPanel({ asset }: { asset: CombustionAsset }) {
 function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   const { settings, setSettings, updateAction, baseYear } = useScenario();
   const acts = settings.byAsset[asset.id];
+  const split = isSplitEntry(asset);
 
   if (!acts) {
     return (
@@ -623,14 +664,20 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
                 Excluded from totals
               </span>
             )}
-            <p className="text-sm text-ink-soft">No plan yet for this asset.</p>
+            <p className="text-sm text-ink-soft">
+              {split
+                ? "This entry is split across its assets — its levers now live on each asset, not here."
+                : "No plan yet for this asset."}
+            </p>
           </div>
-          <button
-            onClick={() => setSettings((p) => ({ ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }))}
-            className="text-sm font-medium rounded-lg bg-brand-500 text-white px-3 py-1.5 hover:bg-brand-600"
-          >
-            Add plan
-          </button>
+          {!split && (
+            <button
+              onClick={() => setSettings((p) => ({ ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }))}
+              className="text-sm font-medium rounded-lg bg-brand-500 text-white px-3 py-1.5 hover:bg-brand-600"
+            >
+              Add plan
+            </button>
+          )}
         </div>
       </div>
     );
@@ -748,9 +795,13 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
 /* Fuel switch — only offers drop-in bio fuels that match the asset's
    engine/burner, and caps the blend at what existing equipment can take
    (E20 / B20). Beyond that needs flex-fuel / new vehicles. */
-function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
+export function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
   const { settings, updateAction, baseYear } = useScenario();
-  const f = settings.byAsset[asset.id].fuelSwitch;
+  // A split entry has no lever key of its own (settings.byAsset is keyed by
+  // RESOLVED asset ids — lib/store.tsx:340-374) — tolerate that missing key
+  // rather than crashing, falling back to the same off-by-default shape
+  // Add plan would create.
+  const f = settings.byAsset[asset.id]?.fuelSwitch ?? defaultActions(asset).fuelSwitch;
   const compatible = ALT_FUELS_BY_FUEL[asset.fuelType] ?? [];
   const hasBio = compatible.length > 0;
   const effectiveAlt = hasBio ? (compatible.includes(f.altFuel) ? f.altFuel : compatible[0]) : null;
@@ -827,9 +878,11 @@ function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
 /* Flex-fuel vehicle conversion — for mobile petrol/diesel fleets only.
    Converts specific vehicles to run a high blend (E85/E100) beyond the
    E20/B20 drop-in limit. Counted per vehicle, with its own purchase cost. */
-function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
+export function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
   const { settings, updateAction } = useScenario();
-  const acts = settings.byAsset[asset.id];
+  // Same missing-key tolerance as FuelSwitchControls above — a split entry's
+  // own id never carries a settings.byAsset entry.
+  const acts = settings.byAsset[asset.id] ?? defaultActions(asset);
   const flex = acts.flexFuel ?? defaultFlexFuel(asset);
   const set = (patch: Partial<FlexFuelAction>) => updateAction(asset.id, "flexFuel", { ...flex, ...patch });
   const res = applyAssetActions(asset, { ...acts, flexFuel: flex }, settings.assumptions);
@@ -1188,6 +1241,11 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
   const system = kind === "system" ? baseSystems.find((s) => s.id === id) : undefined;
   if (!asset && !system) return null;
   const sug: Suggestion = asset ? suggestForAsset(asset) : suggestForSystem(system!);
+  // A split entry has no lever key of its own — applying here would write a
+  // dead settings.byAsset entry under the entry's id (zero effect on
+  // computed abatement, no error shown). Disable rather than offer a
+  // control that cannot work.
+  const isSplit = !!asset && isSplitEntry(asset);
 
   const apply = (actions: SuggestedAction[]) => {
     setSettings((p) => {
@@ -1213,12 +1271,29 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
           <div className="mt-0.5 font-bold text-ink">{sug.headline}</div>
           <p className="text-xs text-ink-soft mt-1">{sug.why}</p>
           {sug.actions.length > 0 && (
-            <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <button onClick={() => apply(sug.actions)} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-3.5 py-2 hover:bg-brand-600 transition-colors">Apply suggestion</button>
-              {sug.altHeadline && sug.altActions && (
-                <button onClick={() => apply(sug.altActions!)} className="text-sm font-medium text-brand-700 hover:underline">{sug.altHeadline}</button>
+            <>
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => !isSplit && apply(sug.actions)}
+                  disabled={isSplit}
+                  title={isSplit ? "This source is split across assets — set levers on each asset instead." : undefined}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3.5 py-2 transition-colors",
+                    isSplit ? "bg-surface-muted text-ink-faint cursor-not-allowed" : "bg-brand-500 text-white hover:bg-brand-600",
+                  )}
+                >
+                  Apply suggestion
+                </button>
+                {!isSplit && sug.altHeadline && sug.altActions && (
+                  <button onClick={() => apply(sug.altActions!)} className="text-sm font-medium text-brand-700 hover:underline">{sug.altHeadline}</button>
+                )}
+              </div>
+              {isSplit && (
+                <p className="mt-2 text-[11px] text-ink-faint">
+                  This source is split across its assets — its levers now live on each asset, so a suggestion can&apos;t be applied here yet.
+                </p>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -1227,14 +1302,24 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
 }
 
 function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
-  const { baseAssets, baseSystems, settings } = useScenario();
+  const { baseAssets, baseSystems, settings, resolvedBaseAssets } = useScenario();
   let baseT = 0, afterT = 0, capex = 0, spillT = 0;
   if (kind === "asset") {
     const a = baseAssets.find((x) => x.id === id); if (!a) return null;
     baseT = combustionCO2e(a);
-    const acts = settings.byAsset[a.id];
-    if (acts) { const res = applyAssetActions(a, acts, settings.assumptions); afterT = Math.max(0, baseT - res.efficiencyAbatementT - res.scope1AbatementT - res.fuelAbatementT); capex = capexForAsset(a, acts); spillT = res.scope2AddedT; }
-    else afterT = baseT;
+    // Roll up over the entry's resolved rows — see resolvedRowsForEntry: an
+    // unsplit entry resolves to itself (identical to the old direct lookup);
+    // a split entry's levers live on its assets, not on the entry's own id.
+    let abated = 0;
+    for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
+      const acts = settings.byAsset[r.id];
+      if (!acts) continue;
+      const res = applyAssetActions(r, acts, settings.assumptions);
+      abated += res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
+      capex += capexForAsset(r, acts);
+      spillT += res.scope2AddedT;
+    }
+    afterT = Math.max(0, baseT - abated);
   } else {
     const s = baseSystems.find((x) => x.id === id); if (!s) return null;
     baseT = refrigerantCO2e(s);
