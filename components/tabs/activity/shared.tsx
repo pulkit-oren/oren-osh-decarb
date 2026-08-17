@@ -17,6 +17,7 @@ export type Nav =
   | { level: "waste" }
   | { level: "home" }         // Energy & Emissions home (the Scope 1+2 categories)
   | { level: "bus" }
+  | { level: "assets" }       // Asset registry editor (Task 8)
   | { level: "scope"; scope: 1 | 2 }
   | { level: "biogenic" }
   | { level: "cat"; key: CatKey }
