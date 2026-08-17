@@ -222,7 +222,39 @@ Add / edit / remove assets, following whatever drawer or panel convention this r
 
 ---
 
-## Task 9 — the allocation panel and its entry point
+## Task 9 — teach the Builder's per-source UI about split entries
+
+**Files:** modify `components/tabs/BuilderTab.tsx`
+
+**Added after Task 7, by owner decision.** Task 7's investigations found four symptoms of one root cause: the model is asset-centric (levers are keyed by resolved asset id) while the Builder's per-source UI is entry-centric. A SPLIT entry has no lever key of its own — its assets hold them — so today:
+
+| Site | Behaviour for a split entry |
+|---|---|
+| `SuggestionCard` "Apply suggestion" (`:1186`) | writes a dead `settings.byAsset` entry under the entry's id; the engine only reads resolved asset ids, so it has **zero effect and shows no error** |
+| `SourceImpact` (`:1230`) | `settings.byAsset[a.id]` misses, `afterT` falls back to `baseT`, so it reads "no plan / 0% abated" even when the assets carry real levers |
+| `assetMetrics()` / `buRollup()` in `SegmentScreen` | same miss — the split entry's row shows unplanned / 0-abated |
+| `assetName` (`:247`) | `aid` is a lever key (an asset id), so the raw-entry lookup misses and the saved-scenario diff renders a bare id string instead of a name |
+
+**This task must land BEFORE Task 10.** Task 8 only lets a user create assets; Task 10's allocation panel is what lets them split an entry. Until Task 10 ships, none of the above is reachable — no UI writes `allocationMode: "byAsset"` or `assetAllocations` (verified by grep). Closing this first means the door opens onto a UI that already works.
+
+**What to build.** For each site, a split entry needs the asset-centric truth rather than a failed entry-id lookup:
+
+- **Roll up for display.** `SourceImpact` and `SegmentScreen`'s metrics should sum the abatement of the entry's constituent assets — the rows whose `sourceEntryId` matches the entry — rather than looking for one lever under the entry's id. That is the same roll-up shape Task 5 established for emissions.
+- **Do not offer a control that cannot work.** `SuggestionCard`'s apply action must not write a dead key. Either disable it for a split entry with a short explanation that its levers now live on its assets, or route the user to the assets. Disabling with an explanation is acceptable and much cheaper; a silent no-op is not.
+- **`assetName` must resolve asset ids.** Look the name up against the resolved list (or the asset registry) so a lever row shows a name rather than a bare id.
+- **Leave the unsplit path exactly as it is.** For an entry that is not split, resolution is a pass-through and its id IS its lever key, so today's behaviour is already correct and must not regress. This is the property most at risk while changing these call sites.
+
+**Do not break the recorded coupling.** `:541` and the editor path stay RAW — `ScenarioCalcPanel:162` depends on it.
+
+- [ ] **Step 1: write the failing tests first.** For a split entry: `SourceImpact`-equivalent abatement equals the sum over its assets' levers, not zero; and the suggestion control is disabled rather than writing a dead key. For an unsplit entry: every one of these behaves exactly as before.
+- [ ] **Step 2: run them and watch them fail.**
+- [ ] **Step 3: implement.**
+- [ ] **Step 4: gates** — `npx tsc --noEmit` (no output), `npm test`, `npm run lint` (exactly 3 errors / 22 warnings), `npm run build`.
+- [ ] **Step 5: commit.**
+
+---
+
+## Task 10 — the allocation panel and its entry point
 
 **Files:** create `components/assets/AssetAllocationPanel.tsx`; modify the entry editor under `components/tabs/activity/`
 
