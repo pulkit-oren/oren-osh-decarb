@@ -223,12 +223,12 @@ export function BuilderTab({ initialSeg }: { initialSeg?: Seg } = {}) {
 }
 
 function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; name: string; setName: (v: string) => void }) {
-  const { baseAssets, baseSystems, settings, result, scenarios, saveScenario, duplicateScenario, deleteScenario, setSettings, resetSettings, baseYear } = useScenario();
+  const { baseAssets, resolvedBaseAssets, baseSystems, settings, result, scenarios, saveScenario, duplicateScenario, deleteScenario, setSettings, resetSettings, baseYear } = useScenario();
   const [note, setNote] = useState("");
   const k = result.kpis;
   const segs = Object.keys(SEG_META) as Seg[];
 
-  const suggestAll = () => setSettings((p) => suggestAllSettings(baseAssets, baseSystems, p));
+  const suggestAll = () => setSettings((p) => suggestAllSettings(resolvedBaseAssets, baseSystems, p));
   const applyVariant = (id: "bau" | "accelerated") => {
     const v = boardroomVariants(settings).find((x) => x.id === id);
     if (v) setSettings(() => v.settings);
@@ -236,8 +236,8 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
 
   // What the suggestion engine could still add on top of the current plan, per segment.
   const suggestedSettings = useMemo(
-    () => suggestAllSettings(baseAssets, baseSystems, settings),
-    [baseAssets, baseSystems, settings],
+    () => suggestAllSettings(resolvedBaseAssets, baseSystems, settings),
+    [resolvedBaseAssets, baseSystems, settings],
   );
 
   type LM = Parameters<typeof diffLeverMaps>[0];
@@ -288,8 +288,8 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
           {segs.map((key) => {
             const m = SEG_META[key];
             const Icon = m.icon;
-            const st = segStats(key, baseAssets, baseSystems, settings);
-            const potential = Math.max(0, segStats(key, baseAssets, baseSystems, suggestedSettings).abated - st.abated);
+            const st = segStats(key, resolvedBaseAssets, baseSystems, settings);
+            const potential = Math.max(0, segStats(key, resolvedBaseAssets, baseSystems, suggestedSettings).abated - st.abated);
             const color = FAMILY_COLORS[m.colorIdx];
             return (
               <button
@@ -367,10 +367,10 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
 /* Three auto-built strategies (quick wins / balanced / max), each scored with
    the real model — computed only while the collapsible is open. */
 function PathwaysPanel({ onApply }: { onApply: (s: LeverSettings) => void }) {
-  const { baseAssets, baseSystems, settings, baseYear } = useScenario();
+  const { resolvedBaseAssets, baseSystems, settings, baseYear } = useScenario();
   const pathways = useMemo(
-    () => buildPathways(baseAssets, baseSystems, settings, baseYear),
-    [baseAssets, baseSystems, settings, baseYear],
+    () => buildPathways(resolvedBaseAssets, baseSystems, settings, baseYear),
+    [resolvedBaseAssets, baseSystems, settings, baseYear],
   );
 
   return (
@@ -403,11 +403,11 @@ function PathwaysPanel({ onApply }: { onApply: (s: LeverSettings) => void }) {
 type SourceSort = "baseline" | "abatement" | "name";
 
 function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => void; onOpenSource: (id: string) => void }) {
-  const { baseAssets, baseSystems, settings } = useScenario();
+  const { baseAssets, resolvedBaseAssets, baseSystems, settings } = useScenario();
   const m = SEG_META[seg];
   const Icon = m.icon;
   const color = FAMILY_COLORS[m.colorIdx];
-  const st = segStats(seg, baseAssets, baseSystems, settings);
+  const st = segStats(seg, resolvedBaseAssets, baseSystems, settings);
   const segAssets = baseAssets.filter((a) => a.category === seg);
 
   const [q, setQ] = useState("");
