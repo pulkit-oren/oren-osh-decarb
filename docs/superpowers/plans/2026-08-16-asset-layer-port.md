@@ -201,6 +201,8 @@ Switch each to `resolvedBaseAssets`. Read each file first and change only the as
 
 Its own task because it holds 21 of the ~51 references and is genuinely mixed. `segStats`, `buildPathways` and `suggestAllSettings` compute levers and must take resolved rows; the name lookup at :247 and the source editor at :519-541 operate on entries the user edits and must stay raw.
 
+**A coupling Task 6 created — do not break it.** `ScenarioCalcPanel.tsx:162` does `baseAssets.find(x => x.id === target.id)` and was deliberately left on RAW entries, because its only `{kind:"asset"}` call site is `BuilderTab.tsx:557`, whose `a.id` comes from `baseAssets.find` at `BuilderTab.tsx:541`. That lookup sits in an editor context (`:519` destructures `updateCombustion`) and feeds `AssetActionCard`, `AlternativesPanel` and `ScenarioCalcPanel` — so **`:541` must stay RAW**. Switching it to `resolvedBaseAssets` would make `target.id` an asset id and silently break `ScenarioCalcPanel:162` for every split entry, with no test to catch it.
+
 - [ ] **Step 1: list all 21 references in the report** with a category for each BEFORE changing anything, and flag any you are unsure about rather than guessing.
 - [ ] **Step 2: implement**, category 1 references only.
 - [ ] **Step 3: gates** including build. **Step 4: commit.**
