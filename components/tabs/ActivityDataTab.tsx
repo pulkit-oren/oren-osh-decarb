@@ -162,6 +162,23 @@ export function ActivityDataTab({
   }
 
   if (nav.level === "entry") {
+    // Prior-year per-asset volumes for THIS entry — the figures the
+    // allocation panel's "carryForward" basis reuses proportions from.
+    // Looked up here (the component that holds the scenario store) and
+    // threaded down as a prop; EntryScreen and the panel never reach into
+    // the store themselves. Entry ids persist across years (copyCombustion,
+    // the migration), so matching on id finds the same entry in year-1.
+    // Undefined when there's no matching entry last year, or it was never
+    // split — computeAllocation then falls back to even weighting.
+    const previousAllocation = nav.kind === "combustion"
+      ? (() => {
+          const prevEntry = (s1.combustion[year - 1] ?? []).find((e) => e.id === nav.id);
+          if (!prevEntry?.assetAllocations) return undefined;
+          return Object.fromEntries(
+            Object.entries(prevEntry.assetAllocations).map(([id, v]) => [id, v.volume]),
+          );
+        })()
+      : undefined;
     return (
       <EntryScreen
         nav={nav}
@@ -174,6 +191,7 @@ export function ActivityDataTab({
         updateFacility={s2.updateFacility}
         updateRefrigeration={s1.updateRefrigeration}
         co2Fac={co2Fac}
+        previousAllocation={previousAllocation}
       />
     );
   }

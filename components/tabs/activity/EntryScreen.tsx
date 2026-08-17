@@ -16,6 +16,7 @@ import { FacilityDetailContent } from "../../scope2/DataInputTab";
 import { Collapsible } from "./Collapsible";
 import { CAT_DEFS } from "./shared";
 import { DetailCard, TextField, NumField, SelectField, Stepper, SliderField, Segmented } from "./fields";
+import { AssetAllocationPanel } from "@/components/assets/AssetAllocationPanel";
 import type { CombustionAsset, RefrigerationSystem } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
 
@@ -30,6 +31,12 @@ type Props = {
   updateFacility: (year: number, id: string, patch: Partial<Facility>) => void;
   updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
   co2Fac: (id: string) => number;
+  /** Prior-year per-asset volumes for THIS entry (by asset id), for the
+   *  allocation panel's "carryForward" basis. Looked up by ActivityDataTab
+   *  (whichever component holds the scenario store) — the panel and this
+   *  screen never reach into that store themselves. Undefined when there's
+   *  no matching entry in year-1, or it was never split. */
+  previousAllocation?: Record<string, number>;
 };
 
 const HERO_INPUT =
@@ -41,7 +48,7 @@ const SYSTEM_OPTIONS: { value: RefrigerationSystem["systemType"]; label: string 
   { value: "retailRefrigeration", label: "Retail Refrigeration" },
 ];
 
-export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac }: Props) {
+export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac, previousAllocation }: Props) {
   /* ---- Refrigerant entry ---- */
   if (nav.kind === "refrigerant") {
     const s = refrigSysById(nav.id);
@@ -255,6 +262,19 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
         {a.opex === 0 && (
           <p className="text-[11px] text-amber-700 mt-3">Add annual spend to see cost savings in the modeller.</p>
         )}
+      </DetailCard>
+
+      <DetailCard title="Split across assets">
+        <AssetAllocationPanel
+          total={a.annualVolume}
+          unit={unitLabel(a.unit)}
+          bu={a.bu ?? ""}
+          allocations={Object.fromEntries(Object.entries(a.assetAllocations ?? {}).map(([id, v]) => [id, v.volume]))}
+          basis={a.allocationBasis ?? "manual"}
+          weightAttribute={a.weightAttribute}
+          previous={previousAllocation}
+          onChange={(patch) => updateCombustion(year, a.id, patch)}
+        />
       </DetailCard>
 
       <DetailCard title="How this is calculated">
