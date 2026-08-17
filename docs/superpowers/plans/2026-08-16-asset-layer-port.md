@@ -222,6 +222,14 @@ Add / edit / remove assets, following whatever drawer or panel convention this r
 
 ---
 
+## Testing trap for Tasks 9 and 10 — read before writing a test that mounts `ScenarioProvider`
+
+Task 4 wired a hydration-gated `ensureAssetsFor` backfill, so **any** test that mounts `ScenarioProvider` without seeding storage will mint assets from `DEFAULT_COMBUSTION_BY_YEAR`'s seed rows on mount. Task 8 hit this: an id-count assertion was polluted by unexpected extra assets until the test seeded an empty `combustion: {}` into the provider's storage key.
+
+If a test asserts on asset counts or ids, seed `combustion` explicitly rather than relying on an empty registry. Note also that `components/tabs/__tests__/activity-data.test.tsx` mounts `ActivityDataTab` with NO `AssetProvider` — a new test that navigates to an asset-dependent screen must supply one, or the screen throws when the route renders.
+
+---
+
 ## Task 9 — teach the Builder's per-source UI about split entries
 
 **Files:** modify `components/tabs/BuilderTab.tsx`
