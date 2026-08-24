@@ -10,12 +10,13 @@ import { fyLabel, type FuelUnit, type FuelId, type RefrigerantId } from "@/lib/m
 import { refrigClassesFor, refrigClassProfile, type RefrigClassId } from "@/lib/model/refrigerant-class";
 import { fmt, fmtMoney } from "@/lib/utils";
 import { CURRENCY } from "@/lib/defaults";
-import { endUsesFor, type EndUseId } from "@/lib/model/end-use";
+import { endUsesFor } from "@/lib/model/end-use";
 import { CombustionCalc, RefrigerantCalcBlock } from "../DataInputTab";
 import { FacilityDetailContent } from "../../scope2/DataInputTab";
 import { Collapsible } from "./Collapsible";
 import { CAT_DEFS } from "./shared";
-import { DetailCard, TextField, NumField, SelectField, Stepper, SliderField, Segmented } from "./fields";
+import { DetailCard, TextField, NumField, SelectField, Segmented } from "./fields";
+import { EquipmentSection } from "./EquipmentSection";
 import type { CombustionAsset, RefrigerationSystem } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
 
@@ -34,10 +35,13 @@ type Props = {
    *  the "carryForward" allocation basis. Looked up by ActivityDataTab
    *  (whichever component holds the scenario store) — this screen never
    *  reaches into that store itself. Undefined when there's no matching entry
-   *  in year-1, or it was never split. Unread until Task 6 mounts the
-   *  equipment editor here; kept on the prop contract so ActivityDataTab's
-   *  lookup does not have to be rebuilt. */
+   *  in year-1, or it was never split. Threaded straight through to
+   *  EquipmentSection, which is the only reader. */
   previousAllocation?: Record<string, number>;
+  /** True when a scenario lever is keyed to this equipment id. Looked up by
+   *  ActivityDataTab (which holds the scenario store) so that removing a split
+   *  that a plan depends on is confirmed rather than silent. */
+  hasLever?: (equipmentId: string) => boolean;
 };
 
 const HERO_INPUT =
@@ -49,7 +53,7 @@ const SYSTEM_OPTIONS: { value: RefrigerationSystem["systemType"]; label: string 
   { value: "retailRefrigeration", label: "Retail Refrigeration" },
 ];
 
-export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac }: Props) {
+export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac, previousAllocation, hasLever }: Props) {
   /* ---- Refrigerant entry ---- */
   if (nav.kind === "refrigerant") {
     const s = refrigSysById(nav.id);
@@ -167,7 +171,16 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
     const allowed = FUELS_BY_CATEGORY[cat];
     const patch: Partial<CombustionAsset> = { category: cat };
     if (!allowed.includes(a.fuelType)) { patch.fuelType = allowed[0]; patch.unit = FUELS[allowed[0]].unit; }
-    if (a.endUse && !endUsesFor(cat).some((p) => p.id === a.endUse)) patch.endUse = undefined;
+    // End-use lives on the equipment under D4/5.2 — clearing it flat here would
+    // be discarded by resolveEquipment, which stamps it from the equipment and
+    // ignores anything on the entry. Ruling K: `equipment` may be absent.
+    const offered = endUsesFor(cat);
+    const eq = a.equipment ?? [];
+    if (eq.some((e) => e.endUse && !offered.some((p) => p.id === e.endUse))) {
+      patch.equipment = eq.map((e) =>
+        e.endUse && !offered.some((p) => p.id === e.endUse) ? { ...e, endUse: undefined } : e,
+      );
+    }
     updateCombustion(year, a.id, patch);
   };
   const onFuel = (v: FuelId) => updateCombustion(year, a.id, { fuelType: v, unit: FUELS[v].unit });
@@ -230,13 +243,6 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
           </div>
           <SelectField label="Category" value={a.category} options={[{ value: "stationary", label: "Stationary" }, { value: "mobile", label: "Mobile" }]} onChange={onCategory} />
           <SelectField label="Fuel" value={a.fuelType} options={fuelOptions} onChange={onFuel} />
-          <SelectField
-            label="Equipment / end-use"
-            value={(a.endUse ?? "") as EndUseId | ""}
-            options={[{ value: "" as EndUseId | "", label: "Unspecified" }, ...endUsesFor(a.category).map((p) => ({ value: p.id as EndUseId | "", label: p.label }))]}
-            onChange={(v) => updateCombustion(year, a.id, { endUse: (v || undefined) as EndUseId | undefined })}
-            hint="What kind of equipment this is. Pre-fills realistic scenario-modeller assumptions (EV cost, heat-pump COP, bio-blend)."
-          />
           {mode === "metered" ? (
             <NumField
               label="Annual spend" suffix={`${CURRENCY}/yr`} value={a.opex} min={0}
@@ -255,15 +261,22 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
               hint="Metered fuel volume for the year. Edit directly or estimate it from spend above."
             />
           )}
-          <Stepper label="Number of units" value={a.unitCount ?? a.equipment?.[0]?.unitCount ?? 1} min={1} onChange={(v) => updateCombustion(year, a.id, { unitCount: v })} hint="How many of this asset are represented by this entry." />
-          <div className="sm:col-span-2">
-            <SliderField label="Remaining life" value={a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? 10} min={0} max={40} suffix="yrs" onChange={(v) => updateCombustion(year, a.id, { remainingLife: v })} hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset." />
-          </div>
         </div>
         {a.opex === 0 && (
           <p className="text-[11px] text-amber-700 mt-3">Add annual spend to see cost savings in the modeller.</p>
         )}
       </DetailCard>
+
+      {/* Units, remaining life and end-use are per EQUIPMENT now (D4/5.2), so
+          they live in here rather than on the source: resolveEquipment stamps
+          all three onto the resolved rows FROM the equipment and ignores
+          anything written flat on the entry. */}
+      <EquipmentSection
+        entry={a}
+        onChange={(patch) => updateCombustion(year, a.id, patch)}
+        previousAllocation={previousAllocation}
+        hasLever={hasLever}
+      />
 
       <DetailCard title="How this is calculated">
         <CombustionCalc a={a} />

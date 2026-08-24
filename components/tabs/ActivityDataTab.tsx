@@ -172,6 +172,15 @@ export function ActivityDataTab({
     const previousAllocation = nav.kind === "combustion"
       ? (s1.combustion[year - 1] ?? []).find((e) => e.id === nav.id)?.allocations
       : undefined;
+    // Levers are keyed by EQUIPMENT id (spec 3.3), so a split row can carry a
+    // plan of its own. Looked up here for the same reason as the allocation
+    // above: EntryScreen never reaches into the store itself.
+    const hasLever = (equipmentId: string) => {
+      const acts = s1.settings.byAsset[equipmentId];
+      if (!acts) return false;
+      return acts.electrify.enabled || acts.fuelSwitch.enabled
+        || acts.efficiency?.enabled === true || acts.flexFuel?.enabled === true;
+    };
     return (
       <EntryScreen
         nav={nav}
@@ -185,6 +194,7 @@ export function ActivityDataTab({
         updateRefrigeration={s1.updateRefrigeration}
         co2Fac={co2Fac}
         previousAllocation={previousAllocation}
+        hasLever={hasLever}
       />
     );
   }
