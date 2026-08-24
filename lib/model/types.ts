@@ -3,6 +3,8 @@
    Pure data — no React, no I/O. Mirrors the spec's "background engine".
    ============================================================ */
 
+import type { Equipment, CapacityUnit, AllocationBasis } from "@/lib/equipment/types";
+
 export type FuelId =
   // Liquid fossil fuels
   | "diesel"
@@ -144,24 +146,29 @@ export interface CombustionAsset {
   excluded?: boolean;
   /** Annual fuel + maintenance spend (currency). */
   opex: number;
-  /** Remaining useful life, years (retrofit guardrail). */
-  remainingLife: number;
-  /** Number of units (vehicles for mobile, units for stationary; single boiler = 1). */
-  unitCount: number;
-  /** Equipment / end-use class — drives scenario-lever defaults & feasibility. Absent ⇒ unspecified. */
+  /** Set on rows emitted by resolveEquipment(), copied from the row's single
+   *  equipment. Absent on a RAW source - the source of truth is
+   *  equipment[].remainingLife (D4). Kept flat so the nine model consumers
+   *  that read it need no change. */
+  remainingLife?: number;
+  /** Set on rows emitted by resolveEquipment(); see remainingLife. */
+  unitCount?: number;
+  /** Set on rows emitted by resolveEquipment(); see remainingLife. */
   endUse?: import("./end-use").EndUseId;
   /** FY this snapshot is for — selects the DEFRA factor year. */
   year?: number;
-  /** How this entry's volume is attributed to assets. Absent ⇒ "entry" (whole-entry, no split). */
-  allocationMode?: "entry" | "byAsset";
-  /** byAsset: per-asset share of annualVolume, keyed by asset id. */
-  assetAllocations?: Record<string, { volume: number }>;
-  /** How assetAllocations should be (re)computed. Absent ⇒ manual entry.
-   *  Inline-imported (not a top-of-file import) so this widely-imported file
-   *  gains no load-order dependency on lib/assets/. */
-  allocationBasis?: import("@/lib/assets/types").AllocationBasis;
-  /** The per-asset attribute "weighted" allocation distributes by. */
-  weightAttribute?: import("@/lib/assets/types").WeightAttribute;
+  /** This source's equipment. Always >=1 (D8). Order is display order. A
+   *  RESOLVED row emitted by resolveEquipment() carries the single equipment
+   *  it descends from, so a consumer reading a resolved row sees one machine. */
+  equipment: Equipment[];
+  /** Per-equipment volume, keyed by Equipment.id. Sums to <= annualVolume. */
+  allocations?: Record<string, number>;
+  /** The unit every equipment's `capacity` is expressed in (D9). Declared once
+   *  here so a source cannot hold incommensurable capacities - mixing tph with
+   *  kVA is unrepresentable, not merely validated against. */
+  capacityUnit?: CapacityUnit;
+  /** How `allocations` should be (re)computed. Absent => "load". */
+  allocationBasis?: AllocationBasis;
   /** Set on rows emitted by resolveAssets() — the id of the entry a resolved row descends from. */
   sourceEntryId?: string;
 }
