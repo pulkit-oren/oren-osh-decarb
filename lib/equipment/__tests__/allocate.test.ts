@@ -115,7 +115,7 @@ describe("basisAvailability", () => {
 
 describe("explainAllocation", () => {
   it("agrees with computeAllocation on the same input (spec 4.3)", () => {
-    const input = { entryVolume: 188000, basis: "load" as const, equipment: BOILERS };
+    const input = { entryVolume: 188000, basis: "load" as const, equipment: BOILERS, unit: "SCM" };
     const out = computeAllocation(input);
     const ex = explainAllocation(input);
     expect(ex).not.toBeNull();
@@ -124,15 +124,37 @@ describe("explainAllocation", () => {
     expect(out.e1).toBe(98086.96);
   });
 
+  it("renders the spec 4.3 shape: the unit beside both figures, and a real ×", () => {
+    const ex = explainAllocation({ entryVolume: 188000, basis: "load", equipment: BOILERS, unit: "SCM" });
+    // Spec 4.3's literal mockup:
+    //   Each equipment gets a share of 1,88,000 SCM in proportion to capacity × running hours.
+    //   Boiler 1 = 2 × 6,000 = 12,000 of 23,000 total → 42.6% → 98,086.96 SCM
+    // (the mockup's 42.6% is its own arithmetic slip; we print the computed 52.2%)
+    expect(ex!.formula).toBe(
+      "Each equipment gets a share of 1,88,000 SCM in proportion to capacity × running hours.",
+    );
+    expect(ex!.row).toBe("Boiler 1 = 2 × 6,000 = 12,000 of 23,000 total → 52.2% → 98,086.96 SCM");
+    // The multiplication sign is U+00D7, never an ASCII "x" (spec 4.3 mockup).
+    expect(ex!.row).not.toContain(" x ");
+    expect(ex!.formula).not.toContain(" x ");
+  });
+
+  it("omits the unit entirely when the caller does not supply one", () => {
+    const ex = explainAllocation({ entryVolume: 188000, basis: "load", equipment: BOILERS });
+    expect(ex!.formula).toContain("share of 1,88,000 in proportion");
+    expect(ex!.row.endsWith("98,086.96")).toBe(true);
+  });
+
   it("quotes the weight total, not a re-derived one", () => {
     const ex = explainAllocation({ entryVolume: 188000, basis: "load", equipment: BOILERS });
     expect(ex!.row).toContain("23,000");
   });
 
   it("explains the units basis in its own terms", () => {
-    const ex = explainAllocation({ entryVolume: 120000, basis: "units", equipment: FLEET });
-    expect(ex!.formula).toContain("number of units");
-    expect(ex!.row).toContain("3 of 5 units");
+    const ex = explainAllocation({ entryVolume: 120000, basis: "units", equipment: FLEET, unit: "L" });
+    // Spec 5.2 mockup 2, verbatim.
+    expect(ex!.formula).toBe("Each equipment gets a share of 1,20,000 L in proportion to number of units.");
+    expect(ex!.row).toBe("City vans = 3 of 5 units → 60.0% → 72,000 L");
     expect(ex!.row).toContain("→"); // Ruling D: the spec 4.3 mockup uses an arrow, not ->
   });
 

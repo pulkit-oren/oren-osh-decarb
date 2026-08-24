@@ -23,7 +23,7 @@
       already share. */
 
 import { useState } from "react";
-import { Plus, X, RotateCcw } from "lucide-react";
+import { Info, Plus, RotateCcw, X } from "lucide-react";
 import { basisAvailability, clampAllocation, computeAllocation, explainAllocation, unallocated } from "@/lib/equipment/allocate";
 import { mintFirstEquipment } from "@/lib/equipment/migrate";
 import type { AllocationBasis, CapacityUnit, Equipment } from "@/lib/equipment/types";
@@ -31,7 +31,8 @@ import type { CombustionAsset } from "@/lib/model/types";
 import { endUsesFor, type EndUseId } from "@/lib/model/end-use";
 import { FUELS } from "@/lib/model/factors";
 import { fmt } from "@/lib/utils";
-import { unitLabel } from "./shared";
+import { CURRENCY } from "@/lib/defaults";
+import { newId, unitLabel } from "./shared";
 
 type Props = {
   entry: CombustionAsset;
@@ -48,22 +49,18 @@ type Props = {
 
 const CAPACITY_UNITS: CapacityUnit[] = ["kW", "kVA", "TR", "tph"];
 
-/** Deliberately NOT "Number of units": that exact phrase is what
- *  explainAllocation() prints in its formula line, and a second element
- *  carrying it would make the explainer un-addressable. */
+/** Verbatim from the spec 5.2 mockups. Note "Load (capacity × hours)" is
+ *  SHORTER than explainAllocation()'s "capacity × running hours" — the picker
+ *  is a control, the explainer is prose, and the mockups differ deliberately. */
 const BASIS_LABEL: Record<AllocationBasis, string> = {
-  load: "Load (capacity × running hours)",
+  load: "Load (capacity × hours)",
   capacity: "Rated capacity",
-  units: "Unit count",
+  units: "Units",
   even: "Even split",
   carryForward: "Last year's split",
   manual: "Manual (typed by hand)",
 };
 const BASES = Object.keys(BASIS_LABEL) as AllocationBasis[];
-
-let _eqSeq = 0;
-/** Ids only have to be unique within one source's equipment list. */
-const nextEquipmentId = () => `eq-${Date.now().toString(36)}-${_eqSeq++}`;
 
 const CELL = "w-full border border-line rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400";
 const NUMCELL = `${CELL} text-right tabular-nums`;
@@ -91,7 +88,7 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
   const [pendingRemoval, setPendingRemoval] = useState<Equipment | null>(null);
 
   const avail = basisAvailability(equipment, previousAllocation);
-  const explain = explainAllocation({ entryVolume: volume, basis, equipment, previous: previousAllocation });
+  const explain = explainAllocation({ entryVolume: volume, basis, equipment, previous: previousAllocation, unit });
   const leftover = unallocated(volume, alloc);
   const unitTotal = equipment.reduce((s, e) => s + (e.unitCount || 0), 0);
 
@@ -122,7 +119,7 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
     // shared helper. Anything beyond the first is this screen's own row.
     const fresh: Equipment = equipment.length === 0
       ? mintFirstEquipment(entry)
-      : { id: nextEquipmentId(), name: `Equipment ${equipment.length + 1}`, unitCount: 1, remainingLife: 10 };
+      : { id: newId("eq"), name: `Equipment ${equipment.length + 1}`, unitCount: 1, remainingLife: 10 };
     writeEquipment([...equipment, fresh]);
   };
 
@@ -176,28 +173,56 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
 
   const endUseOptions = endUsesFor(entry.category);
 
+  /* D5 / invariant 6: spend follows the volume share. Derived from the very map
+     the Volume column renders, and by the same `volume / annualVolume` ratio
+     resolveEquipment() uses — NOT a second, independently computed share, which
+     is exactly how the shipped build came to inflate total spend on every
+     split (spec 2.2). Because the shares sum to 1 the figures sum to the
+     source's opex, which is what invariant 6 pins. */
+  const spendShares = volume > 0 && entry.opex > 0
+    ? equipment.map((e) => `${CURRENCY}${fmt(((alloc[e.id] ?? 0) / volume) * entry.opex)}`)
+    : [];
+  const spendLine = spendShares.length === 0
+    ? null
+    : spendShares.length === 1
+      ? spendShares[0]
+      : `${spendShares.slice(0, -1).join(", ")} and ${spendShares[spendShares.length - 1]}`;
+
   return (
     <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6">
       {/* ── Source header: the capacity unit is declared ONCE, here (D9) ── */}
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Equipment</div>
+          <div className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Equipment using this fuel</div>
           <p className="text-sm text-ink-soft mt-1">
             {entry.name} · {FUELS[entry.fuelType].label} · {entry.bu || "Central"} · {fmt(volume)} {unit}/yr
           </p>
         </div>
-        <label className="block shrink-0">
+        <button
+          type="button" onClick={onAdd}
+          className="group shrink-0 inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 text-brand-700 font-semibold text-sm px-4 py-2 hover:border-brand-400 hover:bg-brand-50 transition-colors"
+        >
+          <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
+            <Plus size={14} strokeWidth={2.5} />
+          </span>
+          Add equipment
+        </button>
+      </div>
+
+      <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2">
           <span className="text-xs font-semibold text-ink-soft">Capacity measured in</span>
           <select
             aria-label="Capacity measured in"
             value={entry.capacityUnit ?? ""}
             onChange={(e) => onPickCapacityUnit(e.target.value)}
-            className="mt-1.5 block border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400"
+            className="border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400"
           >
             <option value="">— not recorded</option>
             {CAPACITY_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
         </label>
+        <span className="text-[11px] text-ink-faint">(applies to this source)</span>
       </div>
 
       {notice && (
@@ -302,18 +327,8 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
         </table>
       </div>
 
-      <button
-        type="button" onClick={onAdd}
-        className="group mt-3 inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 text-brand-700 font-semibold text-sm px-4 py-2 hover:border-brand-400 hover:bg-brand-50 transition-colors w-fit"
-      >
-        <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
-          <Plus size={14} strokeWidth={2.5} />
-        </span>
-        Add equipment
-      </button>
-
       {/* ── How the volume is split ── */}
-      <div className="mt-5 border-t border-line/70 pt-4 flex flex-wrap items-end gap-3">
+      <div className="mt-4 border-t border-line/70 pt-4 flex flex-wrap items-end gap-3">
         <label className="block">
           <span className="text-xs font-semibold text-ink-soft">Split by</span>
           <select
@@ -349,17 +364,28 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
         </ul>
       )}
 
+      {/* Invariant 2: stated ALWAYS, including at zero, so "nothing is missing"
+          is something the screen says rather than something the user infers. */}
+      <p className={`mt-3 text-[12px] ${leftover > 0 ? "text-amber-800" : "text-ink-faint"}`}>
+        Unallocated: {fmt(leftover)} {unit}
+        {leftover > 0 ? " — it still reaches the model as an unassigned remainder, but no lever can act on it." : ""}
+      </p>
+
       {/* Verbatim from explainAllocation — see rule 3 in the module comment. */}
       {explain && (
         <div className="mt-3 rounded-lg bg-surface-muted px-3 py-2.5">
-          <p className="text-[12px] text-ink-soft">{explain.formula}</p>
+          <p className="text-[12px] font-semibold text-ink flex items-center gap-1.5">
+            <Info size={13} className="text-ink-faint shrink-0" aria-hidden="true" /> How this is split
+          </p>
+          <p className="mt-1.5 text-[12px] text-ink-soft">{explain.formula}</p>
           <p className="mt-1 text-[12px] font-mono text-ink break-words">{explain.row}</p>
         </div>
       )}
 
-      {leftover > 0 && (
-        <p className="mt-3 text-[12px] text-amber-800">
-          {fmt(leftover)} {unit}/yr unallocated — it still reaches the model as an unassigned remainder, but no lever can act on it.
+      {/* D5 / invariant 6 — the correction this whole branch exists to make. */}
+      {spendLine && (
+        <p className="mt-3 text-[12px] text-ink-soft">
+          Spend follows the volume share (D5): {spendLine}.
         </p>
       )}
 

@@ -16,6 +16,10 @@ export interface AllocationInput {
   previous?: Record<string, number>;
   /** manual: the current map, returned untouched. */
   existing?: Record<string, number>;
+  /** The source's volume unit, e.g. "SCM" / "L". Rendered by explainAllocation
+   *  beside both figures it quotes, per the spec 4.3 mockup. Optional: the
+   *  allocation maths never reads it, and computeAllocation ignores it. */
+  unit?: string;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -115,7 +119,7 @@ export function basisAvailability(
 }
 
 const FORMULA: Partial<Record<AllocationBasis, string>> = {
-  load: "capacity x running hours",
+  load: "capacity × running hours",
   capacity: "rated capacity",
   units: "number of units",
   even: "an equal share each",
@@ -129,7 +133,7 @@ const fmt = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 
 export function explainAllocation(
   input: AllocationInput,
 ): { formula: string; row: string } | null {
-  const { entryVolume, basis, equipment, previous } = input;
+  const { entryVolume, basis, equipment, previous, unit } = input;
   if (basis === "manual" || equipment.length === 0) return null;
 
   const weights = weightsFor(equipment, basis, previous);
@@ -140,17 +144,21 @@ export function explainAllocation(
   const first = equipment[0];
   const pct = ((weights[0] / total) * 100).toFixed(1);
 
-  const formula = `Each equipment gets a share of ${fmt(entryVolume)} in proportion to ${FORMULA[basis]}.`;
+  // " SCM" / " L" — appended, never interpolated into the number, so the
+  // figure itself stays exactly what fmt() produced.
+  const suffix = unit ? ` ${unit}` : "";
+
+  const formula = `Each equipment gets a share of ${fmt(entryVolume)}${suffix} in proportion to ${FORMULA[basis]}.`;
 
   const workings = basis === "load"
-    ? `${fmt(first.capacity ?? 0)} x ${fmt(first.operatingHours ?? 0)} = ${fmt(weights[0])} of ${fmt(total)} total`
+    ? `${fmt(first.capacity ?? 0)} × ${fmt(first.operatingHours ?? 0)} = ${fmt(weights[0])} of ${fmt(total)} total`
     : basis === "units"
       ? `${fmt(weights[0])} of ${fmt(total)} units`
       : `${fmt(weights[0])} of ${fmt(total)} total`;
 
   return {
     formula,
-    row: `${first.name} = ${workings} → ${pct}% → ${fmt(volumes[0])}`,
+    row: `${first.name} = ${workings} → ${pct}% → ${fmt(volumes[0])}${suffix}`,
   };
 }
 

@@ -157,6 +157,55 @@ describe("EquipmentSection", () => {
     expect(onChange.mock.calls[0][0].capacityUnit).toBe("kW");
   });
 
+  it("heads the explainer 'How this is split' (spec 4.3)", () => {
+    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
+    // Without it the user meets an unlabelled block of arithmetic.
+    expect(screen.getByText(/how this is split/i)).toBeTruthy();
+  });
+
+  it("carries the source unit into the explainer, with a real × (spec 4.3)", () => {
+    render(<EquipmentSection entry={entry()} onChange={() => {}} />);
+    const row = screen.getByText(/of 18,000 total/i).textContent ?? "";
+    expect(row).toContain("×");        // U+00D7, not an ASCII "x"
+    expect(row).not.toContain(" x ");
+    expect(row.endsWith("1,25,333.33 m³")).toBe(true);  // the unit rides along
+    expect(screen.getByText(/in proportion to/i).textContent)
+      .toContain("share of 1,88,000 m³ in proportion");
+  });
+
+  it("states the per-equipment spend, taken from the volume share (D5, invariant 6)", () => {
+    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
+    // Spec 5.2 mockup 2, verbatim. 0.6 and 0.4 of the source's own opex, so the
+    // figures sum back to it — the correction this branch exists to make.
+    expect(screen.getByText(/spend follows the volume share/i).textContent)
+      .toContain("₹68,40,000 and ₹45,60,000");
+  });
+
+  it("shows Unallocated even when it is zero (invariant 2)", () => {
+    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
+    expect(screen.getByText(/unallocated/i).textContent).toMatch(/Unallocated:\s*0\s*L/);
+  });
+
+  it("warns before removing an equipment that carries a lever", () => {
+    const onChange = vi.fn();
+    render(<EquipmentSection entry={fleet} onChange={onChange} hasLever={(id) => id === "f1"} />);
+    const levered = screen.getByTestId("equipment-row-f1");
+    fireEvent.click(within(levered).getByRole("button", { name: /remove/i }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog").textContent).toMatch(/lever/i);
+    fireEvent.click(screen.getByRole("button", { name: /remove it anyway/i }));
+    expect(onChange.mock.calls[0][0].equipment.map((e: { id: string }) => e.id)).toEqual(["f2"]);
+  });
+
+  it("removes an equipment with no lever without a confirm", () => {
+    const onChange = vi.fn();
+    render(<EquipmentSection entry={fleet} onChange={onChange} hasLever={(id) => id === "f1"} />);
+    const clean = screen.getByTestId("equipment-row-f2");
+    fireEvent.click(within(clean).getByRole("button", { name: /remove/i }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onChange.mock.calls[0][0].equipment.map((e: { id: string }) => e.id)).toEqual(["f1"]);
+  });
+
   it("tolerates a source with no equipment at all (Ruling K) and mints through the shared helper (Ruling O)", () => {
     const bare = entry({ equipment: undefined, allocations: undefined, endUse: "boiler" } as Partial<CombustionAsset>);
     const onChange = vi.fn();
