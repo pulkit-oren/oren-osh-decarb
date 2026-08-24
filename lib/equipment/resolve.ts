@@ -31,7 +31,11 @@ export function resolveEquipment(entries: CombustionAsset[]): CombustionAsset[] 
     // A source with no equipment cannot happen under D8, but persisted state
     // predates the guarantee - pass it through rather than dropping it.
     if (equipment.length === 0) {
-      out.push(e);
+      // Cleared for the same reason every other emitted row clears it: a
+      // resolved row is never itself re-splittable. Under D8 a source always
+      // has equipment, so this branch only fires for persisted state that
+      // predates the guarantee.
+      out.push({ ...e, allocations: undefined });
       continue;
     }
 

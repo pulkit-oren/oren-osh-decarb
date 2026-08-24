@@ -125,4 +125,9 @@ describe("resolveEquipment", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe("c-1");
   });
+
+  it("clears allocations on the malformed empty-equipment fallback row too", () => {
+    const rows = resolveEquipment([source({ equipment: [] })]);
+    expect(rows[0].allocations).toBeUndefined();
+  });
 });
