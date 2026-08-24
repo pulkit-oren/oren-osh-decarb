@@ -27,7 +27,6 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
-import { AssetProvider } from "@/lib/assets/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { BuilderTab, FuelSwitchControls, FlexFuelControls } from "../BuilderTab";
 import type { CombustionAsset } from "@/lib/model/types";
@@ -35,13 +34,11 @@ import type { CombustionAsset } from "@/lib/model/types";
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <CompanyProvider>
-      <AssetProvider>
-        <ScenarioProvider>
-          <Scope2Provider>
-            {children}
-          </Scope2Provider>
-        </ScenarioProvider>
-      </AssetProvider>
+      <ScenarioProvider>
+        <Scope2Provider>
+          {children}
+        </Scope2Provider>
+      </ScenarioProvider>
     </CompanyProvider>
   );
 }
@@ -76,23 +73,13 @@ const FUEL_SWITCH_OFF = {
   targetYear: 2033,
 };
 
-/** Registry of two stationary assets, one combustion entry ("split-entry",
- *  100,000 L diesel) split across them 60,000 / 40,000 (no remainder), and a
+/** One combustion entry ("split-entry", 100,000 L diesel) carrying two
+ *  equipment and split across them 60,000 / 40,000 (no remainder), with a
  *  real enabled electrify lever on ONLY "asset-a". The entry's own id has no
  *  settings.byAsset entry at all — matching production shape exactly, since
- *  nothing (short of Task 10's not-yet-built allocation panel) ever writes a
- *  lever under a split entry's raw id. */
+ *  nothing (short of Task 6's equipment editor) ever writes a lever under a
+ *  split entry's raw id. */
 function seedSplitEntry(scenarios: unknown[] = []) {
-  window.localStorage.setItem(
-    "osh-assets-v1",
-    JSON.stringify({
-      assets: [
-        { id: "asset-a", name: "Boiler A", buId: "Pune", category: "stationary", unitCount: 1, remainingLife: 10, opex: 5_700_000 },
-        { id: "asset-b", name: "Boiler B", buId: "Pune", category: "stationary", unitCount: 1, remainingLife: 10, opex: 3_800_000 },
-      ],
-    }),
-  );
-
   const settings = {
     assumptions: ASSUMPTIONS,
     byAsset: {
@@ -115,11 +102,11 @@ function seedSplitEntry(scenarios: unknown[] = []) {
           remainingLife: 10,
           unitCount: 1,
           bu: "Pune",
-          allocationMode: "byAsset",
-          assetAllocations: {
-            "asset-a": { volume: 60000 },
-            "asset-b": { volume: 40000 },
-          },
+          equipment: [
+            { id: "asset-a", name: "Boiler A", unitCount: 1, remainingLife: 10 },
+            { id: "asset-b", name: "Boiler B", unitCount: 1, remainingLife: 10 },
+          ],
+          allocations: { "asset-a": 60000, "asset-b": 40000 },
         },
       ],
     },
@@ -135,7 +122,6 @@ function seedSplitEntry(scenarios: unknown[] = []) {
  *  real, enabled lever directly — the property every one of these sites must
  *  keep behaving exactly as before. */
 function seedUnsplitEntry() {
-  window.localStorage.setItem("osh-assets-v1", JSON.stringify({ assets: [] }));
   const settings = {
     assumptions: ASSUMPTIONS,
     byAsset: {
@@ -274,8 +260,11 @@ describe("BuilderTab — FuelSwitchControls / FlexFuelControls tolerate a missin
     remainingLife: 10,
     unitCount: 1,
     bu: "Pune",
-    allocationMode: "byAsset",
-    assetAllocations: { "asset-a": { volume: 60000 }, "asset-b": { volume: 40000 } },
+    equipment: [
+      { id: "asset-a", name: "Boiler A", unitCount: 1, remainingLife: 10 },
+      { id: "asset-b", name: "Boiler B", unitCount: 1, remainingLife: 10 },
+    ],
+    allocations: { "asset-a": 60000, "asset-b": 40000 },
   };
 
   const splitMobileAsset: CombustionAsset = {
@@ -289,8 +278,11 @@ describe("BuilderTab — FuelSwitchControls / FlexFuelControls tolerate a missin
     remainingLife: 8,
     unitCount: 10,
     bu: "Pune",
-    allocationMode: "byAsset",
-    assetAllocations: { "asset-a": { volume: 30000 }, "asset-b": { volume: 20000 } },
+    equipment: [
+      { id: "asset-a", name: "Boiler A", unitCount: 5, remainingLife: 8 },
+      { id: "asset-b", name: "Boiler B", unitCount: 5, remainingLife: 8 },
+    ],
+    allocations: { "asset-a": 30000, "asset-b": 20000 },
   };
 
   it("FuelSwitchControls renders without throwing when settings.byAsset has no entry for the asset's id", () => {

@@ -160,7 +160,7 @@ export interface CombustionAsset {
   /** This source's equipment. Always >=1 (D8). Order is display order. A
    *  RESOLVED row emitted by resolveEquipment() carries the single equipment
    *  it descends from, so a consumer reading a resolved row sees one machine. */
-  equipment: Equipment[];
+  equipment?: Equipment[];
   /** Per-equipment volume, keyed by Equipment.id. Sums to <= annualVolume. */
   allocations?: Record<string, number>;
   /** The unit every equipment's `capacity` is expressed in (D9). Declared once

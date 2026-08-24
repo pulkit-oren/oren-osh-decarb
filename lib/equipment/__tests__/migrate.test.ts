@@ -16,11 +16,11 @@ describe("migrateEquipment", () => {
   it("mints one equipment reusing the entry id, so lever keys survive", () => {
     const out = migrateEquipment({ 2025: [legacy()] });
     expect(out[2025][0].equipment).toHaveLength(1);
-    expect(out[2025][0].equipment[0].id).toBe("c-1");
+    expect(out[2025][0].equipment![0].id).toBe("c-1");
   });
 
   it("carries remainingLife, endUse and unitCount down onto the equipment", () => {
-    const eq = migrateEquipment({ 2025: [legacy()] })[2025][0].equipment[0];
+    const eq = migrateEquipment({ 2025: [legacy()] })[2025][0].equipment![0];
     expect(eq.remainingLife).toBe(10);
     expect(eq.endUse).toBe("process");
     expect(eq.unitCount).toBe(30);
@@ -34,7 +34,7 @@ describe("migrateEquipment", () => {
   it("defaults a missing remainingLife to 10 and a missing unitCount to 1", () => {
     const eq = migrateEquipment({
       2025: [legacy({ remainingLife: undefined, unitCount: undefined })],
-    })[2025][0].equipment[0];
+    })[2025][0].equipment![0];
     expect(eq.remainingLife).toBe(10);
     expect(eq.unitCount).toBe(1);
   });
@@ -81,13 +81,13 @@ describe("migrateEquipment", () => {
       ],
     });
     expect(out[2025][0].allocations).toEqual({ "c-1": 0 });
-    expect(out[2025][1].equipment[0].remainingLife).toBe(10);
-    expect(out[2025][1].equipment[0].unitCount).toBe(1);
+    expect(out[2025][1].equipment![0].remainingLife).toBe(10);
+    expect(out[2025][1].equipment![0].unitCount).toBe(1);
   });
 
   it("migrates every year independently", () => {
     const out = migrateEquipment({ 2024: [legacy()], 2025: [legacy()] });
-    expect(out[2024][0].equipment[0].id).toBe("c-1");
-    expect(out[2025][0].equipment[0].id).toBe("c-1");
+    expect(out[2024][0].equipment![0].id).toBe("c-1");
+    expect(out[2025][0].equipment![0].id).toBe("c-1");
   });
 });

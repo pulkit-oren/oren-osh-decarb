@@ -1,21 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { baselineScope1 } from "../baseline";
-import { resolveAssets } from "@/lib/assets/resolve";
-import type { Asset, AssetRegistry } from "@/lib/assets/types";
+import { resolveEquipment } from "@/lib/equipment/resolve";
 import type { CombustionAsset } from "../types";
-
-const asset = (id: string, over: Partial<Asset> = {}): Asset => ({
-  id,
-  name: id,
-  buId: "",
-  category: "stationary",
-  unitCount: 1,
-  remainingLife: 10,
-  opex: 0,
-  ...over,
-});
-
-const registry = (assets: Asset[]): AssetRegistry => ({ assets });
 
 const entry = (over: Partial<CombustionAsset> = {}): CombustionAsset => ({
   id: "e-1",
@@ -41,16 +27,16 @@ function rollUpFor(perCombustion: { sourceEntryId: string; co2eT: number }[], en
 describe("baseline.ts — perCombustion.sourceEntryId and the roll-up it enables", () => {
   it("a part-allocated entry's per-entry roll-up equals the same entry's full unallocated emissions", () => {
     const e = entry({
-      allocationMode: "byAsset",
-      assetAllocations: { "a-1": { volume: 300 } }, // partial: 300 of 1000, remainder 700
+      equipment: [{ id: "a-1", name: "a-1", unitCount: 1, remainingLife: 10 }],
+      allocations: { "a-1": 300 }, // partial: 300 of 1000, remainder 700
     });
 
-    const resolved = resolveAssets([e], registry([asset("a-1")]));
+    const resolved = resolveEquipment([e]);
     const resolvedBaseline = baselineScope1(resolved, []);
     const rolledUp = rollUpFor(resolvedBaseline.perCombustion, "e-1");
 
     // The same entry, never resolved, run through the engine whole.
-    const unallocated = entry({ allocationMode: undefined, assetAllocations: undefined });
+    const unallocated = entry({ equipment: undefined, allocations: undefined });
     const unallocatedBaseline = baselineScope1([unallocated], []);
 
     expect(rolledUp).toBeCloseTo(unallocatedBaseline.perCombustion[0].co2eT, 6);
@@ -58,10 +44,10 @@ describe("baseline.ts — perCombustion.sourceEntryId and the roll-up it enables
 
   it("every resolved row carries sourceEntryId, including the remainder", () => {
     const e = entry({
-      allocationMode: "byAsset",
-      assetAllocations: { "a-1": { volume: 300 } },
+      equipment: [{ id: "a-1", name: "a-1", unitCount: 1, remainingLife: 10 }],
+      allocations: { "a-1": 300 },
     });
-    const resolved = resolveAssets([e], registry([asset("a-1")]));
+    const resolved = resolveEquipment([e]);
     const b = baselineScope1(resolved, []);
     expect(b.perCombustion.length).toBeGreaterThan(1);
     expect(b.perCombustion.every((p) => p.sourceEntryId === "e-1")).toBe(true);

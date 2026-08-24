@@ -22,31 +22,27 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { ScenarioProvider } from "@/lib/store";
 import { Scope2Provider } from "@/lib/scope2/store";
-import { AssetProvider } from "@/lib/assets/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { CompareTab } from "../CompareTab";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <CompanyProvider>
-      <AssetProvider>
-        <ScenarioProvider>
-          <Scope2Provider>
-            {children}
-          </Scope2Provider>
-        </ScenarioProvider>
-      </AssetProvider>
+      <ScenarioProvider>
+        <Scope2Provider>
+          {children}
+        </Scope2Provider>
+      </ScenarioProvider>
     </CompanyProvider>
   );
 }
 
 /**
  * Seeds:
- *  - an asset registry ("osh-assets-v1") with two stationary assets,
- *    "asset-a" and "asset-b"
- *  - one combustion entry ("split-entry", 100,000 L) in byAsset mode,
- *    allocating its FULL volume across those two assets (60,000 / 40,000 —
- *    no unallocated remainder, so resolveAssets emits exactly two rows)
+ *  - one combustion entry ("split-entry", 100,000 L) carrying two equipment,
+ *    "asset-a" and "asset-b", and allocating its FULL volume across them
+ *    (60,000 / 40,000 — no unallocated remainder, so resolveEquipment emits
+ *    exactly two rows)
  *  - a lever (60% electrify) enabled ONLY on settings.byAsset["asset-a"] —
  *    the raw entry id ("split-entry") has no lever settings at all
  *  - one saved scenario whose settings are a deep copy of the live settings,
@@ -54,16 +50,6 @@ function Wrapper({ children }: { children: React.ReactNode }) {
  *    asset list (raw vs resolved) they run over
  */
 function seedSplitEntry() {
-  window.localStorage.setItem(
-    "osh-assets-v1",
-    JSON.stringify({
-      assets: [
-        { id: "asset-a", name: "Boiler A", buId: "Pune", category: "stationary", unitCount: 1, remainingLife: 10, opex: 5_700_000 },
-        { id: "asset-b", name: "Boiler B", buId: "Pune", category: "stationary", unitCount: 1, remainingLife: 10, opex: 3_800_000 },
-      ],
-    }),
-  );
-
   const settings = {
     assumptions: {
       gridEf: 0.71,
@@ -113,11 +99,11 @@ function seedSplitEntry() {
           remainingLife: 10,
           unitCount: 1,
           bu: "Pune",
-          allocationMode: "byAsset",
-          assetAllocations: {
-            "asset-a": { volume: 60000 },
-            "asset-b": { volume: 40000 },
-          },
+          equipment: [
+            { id: "asset-a", name: "Boiler A", unitCount: 1, remainingLife: 10 },
+            { id: "asset-b", name: "Boiler B", unitCount: 1, remainingLife: 10 },
+          ],
+          allocations: { "asset-a": 60000, "asset-b": 40000 },
         },
       ],
     },

@@ -57,10 +57,11 @@ export function electrifyCapexFor(asset: CombustionAsset, e: ElectrifyAction): n
 
 /** 0..1 share of the asset affected by an electrify action. */
 export function fractionFor(a: ElectrifyAction, asset: CombustionAsset): number {
+  const units = asset.unitCount ?? 1;
   const raw =
     asset.category === "mobile"
-      ? asset.unitCount > 0
-        ? a.unitsToConvert / asset.unitCount
+      ? units > 0
+        ? a.unitsToConvert / units
         : 0
       : a.capacityPct / 100;
   return Math.max(0, Math.min(1, raw));
@@ -72,7 +73,7 @@ export function defaultEfficiency(asset: CombustionAsset): EfficiencyAction {
   return {
     enabled: false,
     savingPct: efficiencyHintFor(asset.endUse),
-    capex: asset.category === "mobile" ? 25_000 * Math.max(1, asset.unitCount) : 500_000,
+    capex: asset.category === "mobile" ? 25_000 * Math.max(1, asset.unitCount ?? 1) : 500_000,
     startYear: 2026,
     targetYear: 2028,
   };
@@ -152,8 +153,9 @@ export function applyAssetActions(
   // Flex-fuel: specific vehicles converted to a high blend (E85/E100). Mobile only,
   // and never more of the fleet than is left after electrification.
   const flex = acts.flexFuel;
-  const flexOn = !!flex?.enabled && asset.category === "mobile" && asset.unitCount > 0 && flex.unitsToConvert > 0;
-  const flexFrac = flexOn ? Math.min(clamp01(flex!.unitsToConvert / asset.unitCount), 1 - elecFrac) : 0;
+  const flexUnits = asset.unitCount ?? 1;
+  const flexOn = !!flex?.enabled && asset.category === "mobile" && flexUnits > 0 && flex.unitsToConvert > 0;
+  const flexFrac = flexOn ? Math.min(clamp01(flex!.unitsToConvert / flexUnits), 1 - elecFrac) : 0;
   const flexBioShare = flexOn ? flexFrac * clamp01(flex!.highBlendPct / 100) : 0;
 
   // Drop-in blend on the STANDARD fleet — what's neither electrified nor flex.

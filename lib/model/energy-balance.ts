@@ -33,7 +33,7 @@ export function applyDials(assets: CombustionAsset[], systems: RefrigerationSyst
       electrify.targetYear = TARGET_YEAR;
       electrify.cop = eu?.electrify.cop ?? electrify.cop;
       if (a.category === "mobile") {
-        electrify.unitsToConvert = Math.round(a.unitCount * (d.electrifyPct / 100));
+        electrify.unitsToConvert = Math.round((a.unitCount ?? 1) * (d.electrifyPct / 100));
         electrify.assetCapex = eu?.electrify.capexPerUnit ?? electrify.assetCapex;
       } else {
         electrify.capacityPct = d.electrifyPct;
@@ -105,8 +105,9 @@ export function deriveDials(assets: CombustionAsset[], systems: RefrigerationSys
   const elecPairs = act.filter(electrifyFeasible).map((a) => {
     const e = settings.byAsset[a.id]?.electrify;
     const on = !!e?.enabled;
+    const units = a.unitCount ?? 1;
     const v = !on ? 0 : a.category === "mobile"
-      ? (a.unitCount > 0 ? (e!.unitsToConvert / a.unitCount) * 100 : 0)
+      ? (units > 0 ? (e!.unitsToConvert / units) * 100 : 0)
       : e!.capacityPct;
     return { v: Math.max(0, Math.min(100, v)), w: combustionBreakdown(a).energyGJ };
   });

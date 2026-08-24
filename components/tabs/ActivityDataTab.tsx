@@ -21,7 +21,6 @@ import { WaterScreen } from "./activity/WaterScreen";
 import { WasteScreen } from "./activity/WasteScreen";
 import { HomeScreen } from "./activity/HomeScreen";
 import { BusinessUnitsScreen } from "./activity/BusinessUnitsScreen";
-import { AssetRegistryScreen } from "./activity/AssetRegistryScreen";
 import { CategoryScreen } from "./activity/CategoryScreen";
 import { ElectricityBuScreen } from "./activity/ElectricityBuScreen";
 import { SourceListScreen } from "./activity/SourceListScreen";
@@ -162,22 +161,16 @@ export function ActivityDataTab({
   }
 
   if (nav.level === "entry") {
-    // Prior-year per-asset volumes for THIS entry — the figures the
-    // allocation panel's "carryForward" basis reuses proportions from.
-    // Looked up here (the component that holds the scenario store) and
-    // threaded down as a prop; EntryScreen and the panel never reach into
-    // the store themselves. Entry ids persist across years (copyCombustion,
-    // the migration), so matching on id finds the same entry in year-1.
-    // Undefined when there's no matching entry last year, or it was never
-    // split — computeAllocation then falls back to even weighting.
+    // Prior-year per-equipment volumes for THIS entry — the figures the
+    // "carryForward" allocation basis reuses proportions from. Looked up here
+    // (the component that holds the scenario store) and threaded down as a
+    // prop; EntryScreen never reaches into the store itself. Entry ids persist
+    // across years (copyCombustion, the migration), so matching on id finds
+    // the same entry in year-1. Undefined when there's no matching entry last
+    // year, or it was never split — computeAllocation then falls back to even
+    // weighting.
     const previousAllocation = nav.kind === "combustion"
-      ? (() => {
-          const prevEntry = (s1.combustion[year - 1] ?? []).find((e) => e.id === nav.id);
-          if (!prevEntry?.assetAllocations) return undefined;
-          return Object.fromEntries(
-            Object.entries(prevEntry.assetAllocations).map(([id, v]) => [id, v.volume]),
-          );
-        })()
+      ? (s1.combustion[year - 1] ?? []).find((e) => e.id === nav.id)?.allocations
       : undefined;
     return (
       <EntryScreen
@@ -203,15 +196,6 @@ export function ActivityDataTab({
         buReg={buReg}
         addBu={addBu}
         removeBu={removeBu}
-      />
-    );
-  }
-
-  if (nav.level === "assets") {
-    return (
-      <AssetRegistryScreen
-        setNav={setNav}
-        buUnits={buReg.units}
       />
     );
   }

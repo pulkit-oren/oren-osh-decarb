@@ -23,7 +23,7 @@ export function suggestForAsset(asset: CombustionAsset): Suggestion {
   const altFuel: AltFuelId | null =
     eu?.fuelSwitch.preferred && compatible.includes(eu.fuelSwitch.preferred) ? eu.fuelSwitch.preferred : (compatible[0] ?? null);
   const maxBlend = altFuel ? maxBlendPctFor(asset.category, altFuel) : 0;
-  const halfUnits = Math.max(1, Math.round(asset.unitCount * 0.5));
+  const halfUnits = Math.max(1, Math.round((asset.unitCount ?? 1) * 0.5));
 
   const electrifyAction = (): SuggestedAction =>
     isMobile

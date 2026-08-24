@@ -31,9 +31,9 @@ describe("resolveEquipment", () => {
   it("takes name, remainingLife, endUse and unitCount from the equipment", () => {
     const [a, b] = resolveEquipment([source()]);
     expect(a.name).toBe("Boiler 1");
-    expect(a.equipment[0].remainingLife).toBe(12);
-    expect(a.equipment[0].unitCount).toBe(2);
-    expect(b.equipment[0].unitCount).toBe(3);
+    expect(a.equipment![0].remainingLife).toBe(12);
+    expect(a.equipment![0].unitCount).toBe(2);
+    expect(b.equipment![0].unitCount).toBe(3);
   });
 
   it("stamps remainingLife, unitCount and endUse FLAT on the row (Ruling A)", () => {

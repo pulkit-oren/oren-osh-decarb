@@ -172,7 +172,7 @@ export function DataInputTab() {
                         updateCombustion(selectedYear, a.id, patch);
                       }} options={[["stationary", "Stationary"], ["mobile", "Mobile"]]} label={`${a.name} category`} /></td>
                       <td className="py-1.5 px-2"><FuelSelect category={a.category} value={a.fuelType} onChange={(v) => updateCombustion(selectedYear, a.id, { fuelType: v, unit: FUELS[v].unit })} label={`${a.name} fuel type`} /></td>
-                      <td className="py-1.5 px-2"><NumCell value={a.unitCount} onChange={(v) => updateCombustion(selectedYear, a.id, { unitCount: Math.max(1, Math.round(v)) })} label={`${a.name} unit count`} /></td>
+                      <td className="py-1.5 px-2"><NumCell value={a.unitCount ?? a.equipment?.[0]?.unitCount ?? 1} onChange={(v) => updateCombustion(selectedYear, a.id, { unitCount: Math.max(1, Math.round(v)) })} label={`${a.name} unit count`} /></td>
                       <td className="py-1.5 px-2">
                         <div className="flex items-center gap-1.5">
                           <NumCell value={a.annualVolume} onChange={(v) => updateCombustion(selectedYear, a.id, { annualVolume: v })} label={`${a.name} annual volume`} />
@@ -431,7 +431,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true,
         </label>
         <LabeledNum
           label="Remaining life (yrs)" hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset."
-          value={a.remainingLife} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
+          value={a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? 10} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
         />
       </div>
     );
@@ -523,7 +523,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true,
           />
           <LabeledNum
             label="Remaining life (yrs)" hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset."
-            value={a.remainingLife} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
+            value={a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? 10} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
           />
         </div>
       </div>

@@ -116,7 +116,13 @@ export function endUsesFor(category: "mobile" | "stationary"): EndUseProfile[] {
   return (Object.values(END_USES) as EndUseProfile[]).filter((p) => p.category === category && !p.legacy);
 }
 
-/** Profile for an asset's end-use, or undefined when unspecified. */
-export function endUseProfile(asset: { endUse?: EndUseId }): EndUseProfile | undefined {
-  return asset.endUse ? END_USES[asset.endUse] : undefined;
+/** Profile for an asset's end-use, or undefined when unspecified. Reads the
+ *  flat field first — resolveEquipment() stamps it onto every emitted row
+ *  (Ruling A) — then falls back to the source's first equipment, which is
+ *  where migrateEquipment() moved a legacy entry's endUse to. Without that
+ *  fallback a RAW entry (what the Builder's per-source cards bind to) would
+ *  report "unspecified" for every migrated source. */
+export function endUseProfile(asset: { endUse?: EndUseId; equipment?: { endUse?: EndUseId }[] }): EndUseProfile | undefined {
+  const id = asset.endUse ?? asset.equipment?.[0]?.endUse;
+  return id ? END_USES[id] : undefined;
 }

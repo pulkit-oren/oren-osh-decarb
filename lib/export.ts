@@ -31,7 +31,7 @@ export function inputsSheet(
   ]];
   for (const y of FY_YEARS) {
     for (const a of combustion[y] ?? []) {
-      rows.push([fyLabel(y), "Combustion", a.name, a.category, FUELS[a.fuelType].label, a.unit, a.annualVolume, "", a.opex, a.remainingLife, a.unitCount]);
+      rows.push([fyLabel(y), "Combustion", a.name, a.category, FUELS[a.fuelType].label, a.unit, a.annualVolume, "", a.opex, a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? "", a.unitCount ?? a.equipment?.[0]?.unitCount ?? ""]);
     }
     for (const s of refrigeration[y] ?? []) {
       rows.push([fyLabel(y), "Refrigeration", s.name, s.systemType, REFRIGERANTS[s.refrigerant].label, "kg", s.toppedUpKg, "", s.gasCostPerKg, "", ""]);

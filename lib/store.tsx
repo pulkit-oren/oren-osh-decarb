@@ -25,9 +25,8 @@ import {
 } from "./defaults";
 import { resolveCombustion, resolveRefrigeration } from "./yearly";
 import { allIds, migrateRefrigeration, migrateSettings, uniqueId } from "./store-helpers";
-import { useAssetsOptional } from "./assets/store";
-import { isUnallocatedId, resolveAssets } from "./assets/resolve";
-import type { Asset, AssetRegistry } from "./assets/types";
+import { resolveEquipment } from "./equipment/resolve";
+import { migrateEquipment } from "./equipment/migrate";
 
 interface StoreShape {
   combustion: CombustionByYear;
@@ -67,9 +66,9 @@ interface StoreShape {
   selectedAssets: CombustionAsset[];
   selectedSystems: RefrigerationSystem[];
   selectedBaseline: BaselineResult;
-  /** baseAssets / selectedAssets expanded across the asset registry (Task 4)
-   *  — one row per allocated asset plus an unallocated remainder, re-keyed to
-   *  the asset id. Only the engine (compute / baselineScope1) consumes these;
+  /** baseAssets / selectedAssets expanded across each source's own equipment
+   *  — one row per equipment plus an unallocated remainder, re-keyed to the
+   *  equipment id. Only the engine (compute / baselineScope1) consumes these;
    *  editors keep binding to baseAssets / selectedAssets so a user keeps
    *  editing what they typed. */
   resolvedBaseAssets: CombustionAsset[];
@@ -115,23 +114,11 @@ export function ScenarioProvider({
   const [selectedYear, setSelectedYear] = useState<number>(DEFAULT_BASE_YEAR);
   const [hydrated, setHydrated] = useState(false);
 
-  /* Non-throwing accessor — 15 pre-existing test files mount ScenarioProvider
-   * standalone, with no AssetProvider above it, and useAssets() would throw
-   * in that case. When there is no provider, useAssetsOptional() returns a
-   * module-level EMPTY_REGISTRY with no `hydrated`/`upsertUnit`/`ensureAssetsFor`
-   * fields, so every optional access below safely no-ops instead of crashing. */
-  const assetStore = useAssetsOptional() as AssetRegistry & {
-    hydrated?: boolean;
-    upsertUnit?: (asset: Asset) => void;
-    ensureAssetsFor?: (combustion: unknown) => void;
-  };
-  const registryAssets = assetStore.assets;
-
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- one-time hydration from localStorage */
     const p = load(storageKey);
     if (p) {
-      if (p.combustion) setCombustion(p.combustion);
+      if (p.combustion) setCombustion(migrateEquipment(p.combustion));
       const migratedRefrigeration = p.refrigeration ? migrateRefrigeration(p.refrigeration) : null;
       if (migratedRefrigeration) setRefrigeration(migratedRefrigeration);
       const sysForMigration = resolveRefrigeration(migratedRefrigeration ?? DEFAULT_REFRIGERATION_BY_YEAR, p.baseYear ?? DEFAULT_BASE_YEAR);
@@ -150,23 +137,6 @@ export function ScenarioProvider({
     window.localStorage.setItem(storageKey, JSON.stringify(data));
   }, [combustion, refrigeration, settings, scenarios, baseYear, hydrated, storageKey]);
 
-  /* Historical backfill: mint one Asset per not-yet-migrated combustion entry
-   * the first time the asset store reports hydrated — i.e. in the commit
-   * AFTER AssetProvider's own hydration effect has landed. React fires
-   * passive effects child-before-parent, so an ungated call here would run
-   * BEFORE AssetProvider's hydration effect and be discarded by its
-   * unconditional setAssets. Gating on assetStore.hydrated defers this call
-   * to a later commit, once assetStore.assets already reflects the persisted
-   * registry (or its absence). Deliberately excludes `combustion` from the
-   * dependency array: this must fire once per hydration flip, not on every
-   * later edit — new entries are kept in sync imperatively via upsertUnit in
-   * the entry-creation handlers below, not by re-running this migration. */
-  useEffect(() => {
-    if (!assetStore.hydrated) return;
-    assetStore.ensureAssetsFor?.(combustion);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time per hydration flip; see comment above
-  }, [assetStore.hydrated]);
-
   /* ---- combustion (per year) ---- */
   const pendingAssetRef = useRef<CombustionAsset | null>(null);
   const pendingImportRef = useRef<CombustionAsset[]>([]);
@@ -176,7 +146,12 @@ export function ScenarioProvider({
       const id = uniqueId("c", allIds(prev));
       const annualVolume = 10000;
       const opex = Math.round(annualVolume * (FUELS.diesel.typicalPricePerUnit ?? 0));
-      const line: CombustionAsset = { id, name: "New fuel", category: "stationary", fuelType: "diesel", unit: "L", remainingLife: 10, unitCount: 1, annualVolume, opex };
+      const line: CombustionAsset = {
+        id, name: "New fuel", category: "stationary", fuelType: "diesel", unit: "L",
+        annualVolume, opex,
+        equipment: [{ id, name: "New fuel", unitCount: 1, remainingLife: 10 }],
+        allocations: { [id]: annualVolume },
+      };
       pendingAssetRef.current = line;
       return { ...prev, [year]: [...(prev[year] ?? []), line] };
     });
@@ -185,24 +160,6 @@ export function ScenarioProvider({
       if (!line || p.byAsset[line.id]) return p;
       return { ...p, byAsset: { ...p.byAsset, [line.id]: defaultActions(line) } };
     });
-    // Keep the asset registry in sync imperatively — no effect, no dependency
-    // array. Directly after the state-setting calls above, not inside either
-    // updater: upsertUnit mutates a DIFFERENT provider's state, so calling it
-    // from inside a setCombustion/setSettingsState updater would be an
-    // impure side effect there. A no-op when there's no AssetProvider above.
-    //
-    // upsertUnit (not addUnit) — reusing the entry's OWN id as the asset id,
-    // exactly matching migrateAssets's contract. addUnit mints a fresh id,
-    // which migrateAssets's entry-id-keyed idempotence check would never
-    // find on the next hydration, minting a SECOND self-asset for the same
-    // entry every reload.
-    const minted = pendingAssetRef.current;
-    if (minted) {
-      assetStore.upsertUnit?.({
-        id: minted.id, name: minted.name, buId: minted.bu ?? "", category: minted.category,
-        unitCount: minted.unitCount, remainingLife: minted.remainingLife, opex: minted.opex,
-      });
-    }
   };
   const importCombustion = (year: number, rows: Omit<CombustionAsset, "id">[]) => {
     if (rows.length === 0) return;
@@ -211,7 +168,15 @@ export function ScenarioProvider({
       const lines = rows.map((r) => {
         const id = uniqueId("c", ids);
         ids.push(id);
-        return { ...r, id } as CombustionAsset;
+        // D8 again: the single minted equipment reuses the entry id, so the
+        // byAsset seeding below (keyed on the entry id) is already the
+        // equipment's lever key.
+        return {
+          ...r, id,
+          equipment: r.equipment?.length
+            ? r.equipment
+            : [{ id, name: r.name, unitCount: r.unitCount ?? 1, remainingLife: r.remainingLife ?? 10 }],
+        } as CombustionAsset;
       });
       pendingImportRef.current = lines;
       return { ...prev, [year]: [...(prev[year] ?? []), ...lines] };
@@ -221,20 +186,10 @@ export function ScenarioProvider({
       for (const a of pendingImportRef.current) if (!byAsset[a.id]) byAsset[a.id] = defaultActions(a);
       return { ...p, byAsset };
     });
-    for (const a of pendingImportRef.current) {
-      assetStore.upsertUnit?.({
-        id: a.id, name: a.name, buId: a.bu ?? "", category: a.category,
-        unitCount: a.unitCount, remainingLife: a.remainingLife, opex: a.opex,
-      });
-    }
   };
   const addCombustionAsset = (year: number, asset: CombustionAsset) => {
     setCombustion((prev) => ({ ...prev, [year]: [...(prev[year] ?? []), asset] }));
     setSettingsState((p) => (p.byAsset[asset.id] ? p : { ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }));
-    assetStore.upsertUnit?.({
-      id: asset.id, name: asset.name, buId: asset.bu ?? "", category: asset.category,
-      unitCount: asset.unitCount, remainingLife: asset.remainingLife, opex: asset.opex,
-    });
   };
   const delCombustion = (year: number, id: string) =>
     setCombustion((prev) => ({ ...prev, [year]: (prev[year] ?? []).filter((a) => a.id !== id) }));
@@ -245,7 +200,11 @@ export function ScenarioProvider({
     setCombustion((prev) => ({ ...prev, [toYear]: src }));
     setSettingsState((p) => {
       const byAsset = { ...p.byAsset };
-      for (const a of src) if (!byAsset[a.id]) byAsset[a.id] = defaultActions(a);
+      for (const a of src) {
+        for (const unit of a.equipment ?? []) {
+          if (!byAsset[unit.id]) byAsset[unit.id] = defaultActions({ ...a, equipment: [unit] });
+        }
+      }
       return { ...p, byAsset };
     });
   };
@@ -335,43 +294,13 @@ export function ScenarioProvider({
   const selectedSystems = useMemo(() => resolveRefrigeration(refrigeration, selectedYear), [refrigeration, selectedYear]);
 
   // Resolved rows — what the engine consumes. baseAssets/selectedAssets stay
-  // as the raw, editable entries; only these expand byAsset entries across
-  // the registry into one row per allocated asset (+ remainder).
-  const resolvedBaseAssets = useMemo(
-    () => resolveAssets(baseAssets, { assets: registryAssets }),
-    [baseAssets, registryAssets],
-  );
-  const resolvedSelectedAssets = useMemo(
-    () => resolveAssets(selectedAssets, { assets: registryAssets }),
-    [selectedAssets, registryAssets],
-  );
+  // as the raw, editable entries; only these expand each source into one row
+  // per equipment (+ remainder).
+  const resolvedBaseAssets = useMemo(() => resolveEquipment(baseAssets), [baseAssets]);
+  const resolvedSelectedAssets = useMemo(() => resolveEquipment(selectedAssets), [selectedAssets]);
 
   const result = useMemo(() => compute(resolvedBaseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), settings, baseYear), [resolvedBaseAssets, baseSystems, settings, baseYear]);
   const selectedBaseline = useMemo(() => baselineScope1(resolvedSelectedAssets.filter((a) => !a.excluded), selectedSystems.filter((s) => !s.excluded)), [resolvedSelectedAssets, selectedSystems]);
-
-  // Mint default lever actions for any newly-resolved asset id — e.g. an
-  // entry's first byAsset allocation surfacing an asset id that has never
-  // had a settings.byAsset entry. Skips isUnallocatedId pseudo-rows: a
-  // remainder row must never get its own lever. The updater bails out
-  // (returns `prev` unchanged) whenever nothing needs minting, so this is a
-  // genuine no-op — not just a lint workaround — on every render where
-  // resolvedBaseAssets hasn't surfaced a new id.
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect -- mints missing lever
-       defaults for resolved asset ids; guarded to bail out (return `prev`)
-       when there is nothing new, mirroring the no-op guard AssetProvider's
-       own ensureAssetsFor uses for the same reason. */
-    setSettingsState((prev) => {
-      let byAsset: LeverSettings["byAsset"] | null = null;
-      for (const a of resolvedBaseAssets) {
-        if (isUnallocatedId(a.id) || prev.byAsset[a.id]) continue;
-        if (!byAsset) byAsset = { ...prev.byAsset };
-        byAsset[a.id] = defaultActions(a);
-      }
-      return byAsset ? { ...prev, byAsset } : prev;
-    });
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [resolvedBaseAssets]);
 
   const value: StoreShape = {
     combustion, refrigeration, settings, scenarios, selectedYear, baseYear,

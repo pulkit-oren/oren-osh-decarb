@@ -7,9 +7,8 @@
 import { DEFAULT_SETTINGS } from "./defaults";
 import { defaultSystemActions } from "./model/segments";
 import type {
-  CombustionAsset, LeverSettings, RefrigerantId, RefrigerationByYear, RefrigerationSystem, SystemActions,
+  LeverSettings, RefrigerantId, RefrigerationByYear, RefrigerationSystem, SystemActions,
 } from "./model/types";
-import type { Asset, AssetRegistry } from "./assets/types";
 
 /** Upgrade persisted refrigeration data to the mass-balance shape: older
  *  systems stored chargeKg + leakRatePct; the topped-up (leaked) mass is
@@ -93,66 +92,4 @@ export function migrateSettings(raw: unknown, systems: RefrigerationSystem[]): L
     };
   });
   return { ...base, bySystem };
-}
-
-/** category values a CombustionAsset can legitimately carry. Checked against
- *  this literal set, not just `typeof === "string"` — a corrupted persisted
- *  entry with e.g. `category: "foo"` is a string but not a valid
- *  AssetCategory, and would otherwise sail through into `Asset.category` as
- *  a value the type system swears cannot exist. */
-const VALID_COMBUSTION_CATEGORIES = new Set(["stationary", "mobile"]);
-
-/** Mint one Asset per fuel entry, reusing the entry's id as the asset's id —
- *  that reuse is the entire reason no lever migration is needed, since
- *  LeverSettings is keyed by entry id and an asset sharing that id keeps every
- *  saved scenario resolving. Never mints a fresh id: an entry with no usable
- *  string id is skipped, since inventing one would silently break that
- *  guarantee. Idempotent (keyed on id presence, first occurrence across years
- *  wins) so it can run on every hydration without disturbing a user's later
- *  edits to an already-migrated asset. Reads the entries only — never mutates
- *  them — and never throws. Both parameters are typed `unknown`, matching
- *  migrateRefrigeration/migrateSettings: this runs against unvalidated
- *  localStorage inside a hydration effect, and a trusted-shape signature
- *  would let a call site skip casting on a guarantee that isn't real. */
-export function migrateAssets(combustion: unknown, existing: unknown): AssetRegistry {
-  const existingAssets: Asset[] = Array.isArray((existing as { assets?: unknown } | null | undefined)?.assets)
-    ? (existing as AssetRegistry).assets
-    : [];
-  const seen = new Set(existingAssets.map((a) => a.id));
-  const minted: Asset[] = [];
-
-  const byYear = combustion && typeof combustion === "object" ? (combustion as Record<number, unknown>) : {};
-  for (const list of Object.values(byYear)) {
-    if (!Array.isArray(list)) continue; // a year's value that isn't an array — tolerate, skip
-    for (const raw of list) {
-      if (!raw || typeof raw !== "object") continue; // null / non-object entry
-      const e = raw as Partial<CombustionAsset>;
-
-      if (typeof e.id !== "string" || e.id.length === 0) continue; // no usable string id: SKIP, never mint one
-      if (seen.has(e.id)) continue; // already an asset (idempotent run, or a later-year duplicate) — first occurrence wins
-
-      // name/category are required on Asset. Skipping costs nothing in reported
-      // emissions: a non-byAsset entry still passes through resolveAssets() by
-      // reference regardless of whether an asset exists for it. Defaulting
-      // instead would seat an invented name/category that later electrification-
-      // eligibility logic (Tasks 8/9) would treat as ground truth — the same
-      // out-of-union-value-from-persisted-JSON bug class the plan's Provenance
-      // section records as having cost two review rounds elsewhere in this port.
-      if (typeof e.name !== "string") continue;
-      if (typeof e.category !== "string" || !VALID_COMBUSTION_CATEGORIES.has(e.category)) continue;
-
-      seen.add(e.id);
-      minted.push({
-        id: e.id,
-        name: e.name,
-        category: e.category,
-        unitCount: e.unitCount ?? 0,
-        remainingLife: e.remainingLife ?? 0,
-        opex: e.opex ?? 0,
-        buId: e.bu ?? "",
-      });
-    }
-  }
-
-  return { assets: [...existingAssets, ...minted] };
 }

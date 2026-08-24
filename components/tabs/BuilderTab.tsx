@@ -74,7 +74,7 @@ function resolvedRowsForEntry(entry: CombustionAsset, resolvedAssets: Combustion
  *  Task 9 brief). A split entry has no lever key of its own: see
  *  resolvedRowsForEntry above. */
 function isSplitEntry(entry: CombustionAsset): boolean {
-  return entry.allocationMode === "byAsset";
+  return (entry.equipment?.length ?? 0) > 1;
 }
 
 function segStats(

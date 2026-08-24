@@ -41,9 +41,6 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
           <button onClick={() => setNav({ level: "bus" })} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-line bg-surface px-3 py-1.5 hover:border-brand-300 transition-colors">
             🏢 Business units{buReg.units.length > 0 ? ` · ${buReg.units.length}` : ""}
           </button>
-          <button onClick={() => setNav({ level: "assets" })} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg border border-line bg-surface px-3 py-1.5 hover:border-brand-300 transition-colors">
-            🏭 Assets
-          </button>
           <label className="flex items-center gap-2" title="Choose which financial year you're entering data for. The base year (the target anchor) is set in the top bar.">
             <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Data year</span>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400">

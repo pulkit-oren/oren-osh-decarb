@@ -16,7 +16,6 @@ import { FacilityDetailContent } from "../../scope2/DataInputTab";
 import { Collapsible } from "./Collapsible";
 import { CAT_DEFS } from "./shared";
 import { DetailCard, TextField, NumField, SelectField, Stepper, SliderField, Segmented } from "./fields";
-import { AssetAllocationPanel } from "@/components/assets/AssetAllocationPanel";
 import type { CombustionAsset, RefrigerationSystem } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
 
@@ -31,11 +30,13 @@ type Props = {
   updateFacility: (year: number, id: string, patch: Partial<Facility>) => void;
   updateRefrigeration: (year: number, id: string, patch: Partial<RefrigerationSystem>) => void;
   co2Fac: (id: string) => number;
-  /** Prior-year per-asset volumes for THIS entry (by asset id), for the
-   *  allocation panel's "carryForward" basis. Looked up by ActivityDataTab
-   *  (whichever component holds the scenario store) — the panel and this
-   *  screen never reach into that store themselves. Undefined when there's
-   *  no matching entry in year-1, or it was never split. */
+  /** Prior-year per-equipment volumes for THIS entry (by equipment id), for
+   *  the "carryForward" allocation basis. Looked up by ActivityDataTab
+   *  (whichever component holds the scenario store) — this screen never
+   *  reaches into that store itself. Undefined when there's no matching entry
+   *  in year-1, or it was never split. Unread until Task 6 mounts the
+   *  equipment editor here; kept on the prop contract so ActivityDataTab's
+   *  lookup does not have to be rebuilt. */
   previousAllocation?: Record<string, number>;
 };
 
@@ -48,7 +49,7 @@ const SYSTEM_OPTIONS: { value: RefrigerationSystem["systemType"]; label: string 
   { value: "retailRefrigeration", label: "Retail Refrigeration" },
 ];
 
-export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac, previousAllocation }: Props) {
+export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac }: Props) {
   /* ---- Refrigerant entry ---- */
   if (nav.kind === "refrigerant") {
     const s = refrigSysById(nav.id);
@@ -254,27 +255,14 @@ export function EntryScreen({ nav, setNav, year, combById, facById, refrigSysByI
               hint="Metered fuel volume for the year. Edit directly or estimate it from spend above."
             />
           )}
-          <Stepper label="Number of units" value={a.unitCount} min={1} onChange={(v) => updateCombustion(year, a.id, { unitCount: v })} hint="How many of this asset are represented by this entry." />
+          <Stepper label="Number of units" value={a.unitCount ?? a.equipment?.[0]?.unitCount ?? 1} min={1} onChange={(v) => updateCombustion(year, a.id, { unitCount: v })} hint="How many of this asset are represented by this entry." />
           <div className="sm:col-span-2">
-            <SliderField label="Remaining life" value={a.remainingLife} min={0} max={40} suffix="yrs" onChange={(v) => updateCombustion(year, a.id, { remainingLife: v })} hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset." />
+            <SliderField label="Remaining life" value={a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? 10} min={0} max={40} suffix="yrs" onChange={(v) => updateCombustion(year, a.id, { remainingLife: v })} hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset." />
           </div>
         </div>
         {a.opex === 0 && (
           <p className="text-[11px] text-amber-700 mt-3">Add annual spend to see cost savings in the modeller.</p>
         )}
-      </DetailCard>
-
-      <DetailCard title="Split across assets">
-        <AssetAllocationPanel
-          total={a.annualVolume}
-          unit={unitLabel(a.unit)}
-          bu={a.bu ?? ""}
-          allocations={Object.fromEntries(Object.entries(a.assetAllocations ?? {}).map(([id, v]) => [id, v.volume]))}
-          basis={a.allocationBasis ?? "manual"}
-          weightAttribute={a.weightAttribute}
-          previous={previousAllocation}
-          onChange={(patch) => updateCombustion(year, a.id, patch)}
-        />
       </DetailCard>
 
       <DetailCard title="How this is calculated">

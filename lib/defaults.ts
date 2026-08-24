@@ -47,6 +47,9 @@ function lineFor(s: CombustionSpec, year: number): CombustionAsset {
     id: s.id, name: s.name, category: s.category, fuelType: s.fuelType, unit: s.unit,
     remainingLife: s.remainingLife, unitCount: s.units,
     annualVolume: Math.round(s.vol2025 * f), opex: Math.round(s.opex2025 * f),
+    // D8: a source always has at least one equipment, and the first one reuses
+    // the entry id so every lever key in DEFAULT_SETTINGS keeps resolving.
+    equipment: [{ id: s.id, name: s.name, unitCount: s.units, remainingLife: s.remainingLife }],
   };
 }
 

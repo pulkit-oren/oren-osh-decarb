@@ -7,7 +7,7 @@ import type { CombustionAsset } from "./types";
 
 /** FY in which the asset retires: base year + remaining useful life. */
 export function retirementYear(asset: CombustionAsset, baseYear: number): number {
-  return baseYear + asset.remainingLife;
+  return baseYear + (asset.remainingLife ?? asset.equipment?.[0]?.remainingLife ?? 10);
 }
 
 /** True when an action completing in `targetYear` outlives the asset. */
