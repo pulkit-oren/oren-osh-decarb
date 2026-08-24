@@ -159,7 +159,12 @@ function buildContent(store: ReturnType<typeof useScenario>, target: CalcTarget)
 
   // single source
   if (target.kind === "asset") {
-    const a = baseAssets.find((x) => x.id === target.id);
+    // Resolved rows first: the Builder targets one EQUIPMENT row (D3), whose
+    // id is absent from baseAssets for every machine past the first. A
+    // one-equipment source resolves to a row with the entry's own id and
+    // identical volume, so the fallback only matters for a source that
+    // resolution passed through unexpanded (Ruling K).
+    const a = resolvedBaseAssets.find((x) => x.id === target.id) ?? baseAssets.find((x) => x.id === target.id);
     if (!a) return { title: "How this is calculated", subtitle: "", rows: [], footer: "" };
     const acts = settings.byAsset[a.id];
     const base = combustionCO2e(a);

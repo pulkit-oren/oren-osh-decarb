@@ -15,6 +15,7 @@ import { Gauge } from "lucide-react";
 import { endUseProfile, endUsesFor, type EndUseId } from "@/lib/model/end-use";
 import { alternativesFor, type EquipmentAlternative } from "@/lib/model/alternatives";
 import { refrigClassProfile } from "@/lib/model/refrigerant-class";
+import { isUnallocatedId } from "@/lib/equipment/resolve";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { CURRENCY } from "@/lib/defaults";
@@ -56,25 +57,16 @@ const ERA_BADGE: Record<RefrigerantEra, { label: string; cls: string }> = {
 
 type SegStats = { count: number; active: number; abated: number };
 
-/** Resolved rows produced by resolving one entry — for an unsplit entry this
- *  is just the entry itself (falls back to its own id, mirroring the
- *  `sourceEntryId ?? a.id` normalisation lib/model/baseline.ts uses for the
- *  same reason: an unsplit row never gets a sourceEntryId at all); for a
- *  split entry it's every asset-allocated row plus any unallocated
- *  remainder. Reused everywhere a per-source card needs to roll a split
- *  entry's abatement up from its assets instead of missing on the entry's
- *  own (lever-less) id — the same roll-up shape Task 5 established for
- *  emissions (lib/model/baseline.ts, DataInputTab.tsx, CeoOverviewTab.tsx). */
+/** The rows one source resolves to: one per equipment, plus an unallocated
+ *  remainder when a manual split leaves volume over. Each row carries its own
+ *  lever key (spec 3.3), so this is both how a source-level card rolls its
+ *  abatement up and how the per-source screen finds the machines to plan on
+ *  (D3). Falls back to the row's own id, mirroring the `sourceEntryId ?? a.id`
+ *  normalisation lib/model/baseline.ts uses for the same reason: the
+ *  degraded pass-through row an equipment-less source emits (Ruling K) never
+ *  gets a sourceEntryId at all. */
 function resolvedRowsForEntry(entry: CombustionAsset, resolvedAssets: CombustionAsset[]): CombustionAsset[] {
   return resolvedAssets.filter((r) => (r.sourceEntryId ?? r.id) === entry.id);
-}
-
-/** True once an entry has been split across assets — Task 10's allocation
- *  panel is the only UI that can set this so far (verified by grep; see the
- *  Task 9 brief). A split entry has no lever key of its own: see
- *  resolvedRowsForEntry above. */
-function isSplitEntry(entry: CombustionAsset): boolean {
-  return (entry.equipment?.length ?? 0) > 1;
 }
 
 function segStats(
@@ -173,9 +165,8 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
     const a = source as CombustionAsset;
     const eu = endUseProfile(a);
     sub = `${FUELS[a.fuelType].label} · ${a.category}${eu ? ` · ${eu.label}` : ""}`;
-    // Roll up over the entry's resolved rows: for an unsplit entry this is
-    // just itself (resolvedRowsForEntry), so behaviour is unchanged; for a
-    // split entry its levers live on its assets, not on the entry's own id.
+    // Roll up over the entry's resolved rows — its levers live on its
+    // equipment, never on the entry's own id (spec 3.3).
     for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
       const acts = settings.byAsset[r.id];
       if (!acts) continue;
@@ -271,10 +262,10 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
   const diffRowsFor = (id: string): DiffRow[] => {
     const s = scenarios.find((x) => x.id === id);
     if (!s) return [];
-    // `aid` is a lever key — a settings.byAsset id, which for a split entry
-    // is a RESOLVED asset id, not the raw entry's own id. Check the resolved
-    // list (which carries every allocated asset's real name) first, falling
-    // back to the raw entries (unsplit pass-through) and finally the bare id.
+    // `aid` is a lever key — an equipment id, not an entry id. Check the
+    // resolved list (which carries every machine's real name) first, falling
+    // back to the raw entries (the pass-through a source with no equipment
+    // still emits, Ruling K) and finally the bare id.
     const assetName = (aid: string) => resolvedBaseAssets.find((a) => a.id === aid)?.name ?? baseAssets.find((a) => a.id === aid)?.name ?? aid;
     const sysName = (sid: string) => baseSystems.find((sy) => sy.id === sid)?.name ?? sid;
     return [
@@ -446,9 +437,8 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
   const [sort, setSort] = useState<SourceSort>("baseline");
 
   const assetMetrics = (a: CombustionAsset) => {
-    // Roll up over the entry's resolved rows: an unsplit entry has exactly
-    // one (itself), so this is byte-identical to the old direct lookup; a
-    // split entry's levers live on its assets, not on the entry's own id.
+    // Roll up over the entry's resolved rows: a one-equipment source has
+    // exactly one, and its levers live on that equipment's id.
     let abated = 0;
     let planned = false;
     for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
@@ -556,7 +546,7 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
 }
 
 function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: string; onBack: () => void }) {
-  const { baseAssets, baseSystems, updateCombustion, baseYear } = useScenario();
+  const { baseAssets, resolvedBaseAssets, baseSystems, updateCombustion, baseYear } = useScenario();
   const label = SEG_META[seg].label;
   const back = (
     <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
@@ -570,7 +560,7 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
     return (
       <div className="screen-in flex flex-col gap-5">
         {back}
-        <SuggestionCard kind="system" id={sys.id} />
+        <SuggestionCard system={sys} />
         <SourceImpact kind="system" id={sys.id} />
         <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "system", id: sys.id }} /></div>
         <SystemActionCard system={sys} />
@@ -580,23 +570,59 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
   }
   const a = baseAssets.find((x) => x.id === sourceId);
   if (!a) { onBack(); return null; }
+
+  // D3 — equipment is the planning unit. The source resolves to one row per
+  // machine, each carrying its own lever key, so the plan is set per machine
+  // rather than once for the source. `SourceImpact` stays at source level: it
+  // is the roll-up of these rows.
+  const rows = resolvedRowsForEntry(a, resolvedBaseAssets);
+  const machines = rows.filter((r) => !isUnallocatedId(r.id));
+  const leftover = rows.find((r) => isUnallocatedId(r.id));
+
+  /** End-use belongs to the machine (D4), so this writes onto the equipment —
+   *  a flat write is what resolveEquipment discards. Ruling K: `equipment` is
+   *  optional, and an equipment-less source resolves to one pass-through row
+   *  that DOES read the flat field, so that shape keeps the flat write. */
+  const setEndUse = (rowId: string, v: EndUseId | undefined) => {
+    const eq = a.equipment ?? [];
+    if (eq.length === 0) { updateCombustion(baseYear, a.id, { endUse: v }); return; }
+    updateCombustion(baseYear, a.id, { equipment: eq.map((u) => (u.id === rowId ? { ...u, endUse: v } : u)) });
+  };
+
   return (
     <div className="screen-in flex flex-col gap-5">
       {back}
-      <DetailCard title="Equipment / vehicle type">
-        <SelectField
-          label="Type"
-          value={(a.endUse ?? "") as EndUseId | ""}
-          options={[{ value: "" as EndUseId | "", label: "Unspecified" }, ...endUsesFor(a.category).map((p) => ({ value: p.id as EndUseId | "", label: p.label }))]}
-          onChange={(v) => updateCombustion(baseYear, a.id, { endUse: (v || undefined) as EndUseId | undefined })}
-          hint="Changing the type updates the suggestion and the lever defaults below — click Apply suggestion to adopt the new type's numbers. It does not change your baseline or any lever you've already set."
-        />
-      </DetailCard>
-      <SuggestionCard kind="asset" id={a.id} />
+      {machines.length > 1 && (
+        <div>
+          <h1 className="text-xl font-extrabold text-ink">{a.name}</h1>
+          <p className="text-sm text-ink-soft">
+            {FUELS[a.fuelType].label} · {fmt(a.annualVolume)} {a.unit}/yr · {machines.length} equipment — plan each one below
+          </p>
+        </div>
+      )}
       <SourceImpact kind="asset" id={a.id} />
-      <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "asset", id: a.id }} /></div>
-      <AssetActionCard asset={a} />
-      <AlternativesPanel asset={a} />
+      {leftover && leftover.annualVolume > 0 && (
+        <p className="text-[11px] text-ink-faint">
+          {fmt(leftover.annualVolume)} {a.unit}/yr is not allocated to any equipment, so no lever can act on it. Allocate it in Activity data.
+        </p>
+      )}
+      {machines.map((r) => (
+        <div key={r.id} className="flex flex-col gap-5">
+          <DetailCard title={machines.length > 1 ? `${r.name} — equipment / vehicle type` : "Equipment / vehicle type"}>
+            <SelectField
+              label="Type"
+              value={(r.endUse ?? "") as EndUseId | ""}
+              options={[{ value: "" as EndUseId | "", label: "Unspecified" }, ...endUsesFor(r.category).map((p) => ({ value: p.id as EndUseId | "", label: p.label }))]}
+              onChange={(v) => setEndUse(r.id, (v || undefined) as EndUseId | undefined)}
+              hint="Changing the type updates the suggestion and the lever defaults below — click Apply suggestion to adopt the new type's numbers. It does not change your baseline or any lever you've already set."
+            />
+          </DetailCard>
+          <SuggestionCard asset={r} />
+          <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "asset", id: r.id }} /></div>
+          <AssetActionCard asset={r} />
+          <AlternativesPanel asset={r} />
+        </div>
+      ))}
       <AssumptionsCard seg={seg} />
     </div>
   );
@@ -614,11 +640,11 @@ const MATURITY_CLS: Record<EquipmentAlternative["maturity"], string> = {
 };
 
 function AlternativesPanel({ asset }: { asset: CombustionAsset }) {
-  // Through the equipment: a RAW baseAssets entry has no flat endUse (D4
-  // moved it onto equipment[0]), so alternativesFor() returned [] and this
-  // whole panel silently vanished for every migrated source. Task 7 rebinds
-  // this component to the resolved rows and deletes the fallback.
-  const alts = alternativesFor(asset.endUse ?? asset.equipment?.[0]?.endUse);
+  // `asset` is a RESOLVED equipment row, so endUse is stamped flat on it by
+  // resolveEquipment (Ruling A). Task 4's `?? asset.equipment?.[0]?.endUse`
+  // fallback existed only because this was bound to the raw entry, which has
+  // no flat endUse after migration; the rebinding above makes it dead.
+  const alts = alternativesFor(asset.endUse);
   if (alts.length === 0) return null;
   const label = endUseProfile(asset)?.label ?? "this equipment";
   return (
@@ -655,11 +681,10 @@ function AlternativesPanel({ asset }: { asset: CombustionAsset }) {
 function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   const { settings, setSettings, updateAction, baseYear } = useScenario();
   const acts = settings.byAsset[asset.id];
-  const split = isSplitEntry(asset);
 
   if (!acts) {
     return (
-      <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", asset.excluded && "opacity-60")}>
+      <div data-testid={`equipment-card-${asset.id}`} className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", asset.excluded && "opacity-60")}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-ink">{asset.name}</h3>
@@ -668,20 +693,19 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
                 Excluded from totals
               </span>
             )}
-            <p className="text-sm text-ink-soft">
-              {split
-                ? "This entry is split across its assets — its levers now live on each asset, not here."
-                : "No plan yet for this asset."}
-            </p>
+            {/* The machine's OWN allocated volume — a source's equipment each
+                burn a share of it (D3), so the card has to say which share. */}
+            <p className="text-sm text-ink-soft">{fmt(asset.annualVolume)} {asset.unit}/yr · No plan yet for this asset.</p>
           </div>
-          {!split && (
-            <button
-              onClick={() => setSettings((p) => ({ ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }))}
-              className="text-sm font-medium rounded-lg bg-brand-500 text-white px-3 py-1.5 hover:bg-brand-600"
-            >
-              Add plan
-            </button>
-          )}
+          {/* Alive again: `asset` is an equipment row, so asset.id IS the lever
+              key. Under the old model this button was hidden for a split entry
+              because the key it wrote was dead. */}
+          <button
+            onClick={() => setSettings((p) => ({ ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }))}
+            className="text-sm font-medium rounded-lg bg-brand-500 text-white px-3 py-1.5 hover:bg-brand-600"
+          >
+            Add plan
+          </button>
         </div>
       </div>
     );
@@ -698,7 +722,7 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
   const eColor = FAMILY_COLORS[isMobile ? 5 : 6];
 
   return (
-    <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", asset.excluded && "opacity-60")}>
+    <div data-testid={`equipment-card-${asset.id}`} className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", asset.excluded && "opacity-60")}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${eColor}1A` }}>
@@ -714,7 +738,9 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
               )}
             </div>
             <p className="text-sm text-ink-soft mt-0.5">
-              {isMobile ? `${asset.unitCount} vehicles` : "1 unit"} · {fmt(asset.annualVolume)} {asset.unit}/yr{(() => { const eu = endUseProfile(asset); return eu ? <> · <span className="font-medium text-ink">{eu.label}</span></> : null; })()}
+              {/* D8: one equipment may stand for several identical units, so
+                  the stationary case can no longer be hardcoded to "1 unit". */}
+              {isMobile ? `${asset.unitCount} vehicles` : `${asset.unitCount ?? 1} unit${(asset.unitCount ?? 1) === 1 ? "" : "s"}`} · {fmt(asset.annualVolume)} {asset.unit}/yr{(() => { const eu = endUseProfile(asset); return eu ? <> · <span className="font-medium text-ink">{eu.label}</span></> : null; })()}
             </p>
             {!asset.excluded && asset.annualVolume === 0 && (
               <p className="text-[11px] text-ink-faint mt-0.5">No consumption entered yet</p>
@@ -801,10 +827,9 @@ function AssetActionCard({ asset }: { asset: CombustionAsset }) {
    (E20 / B20). Beyond that needs flex-fuel / new vehicles. */
 export function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
   const { settings, updateAction, baseYear } = useScenario();
-  // A split entry has no lever key of its own (settings.byAsset is keyed by
-  // RESOLVED asset ids — lib/store.tsx:340-374) — tolerate that missing key
-  // rather than crashing, falling back to the same off-by-default shape
-  // Add plan would create.
+  // An equipment row has no settings.byAsset entry until Add plan is pressed
+  // — tolerate that missing key rather than crashing, falling back to the
+  // same off-by-default shape Add plan would create.
   const f = settings.byAsset[asset.id]?.fuelSwitch ?? defaultActions(asset).fuelSwitch;
   const compatible = ALT_FUELS_BY_FUEL[asset.fuelType] ?? [];
   const hasBio = compatible.length > 0;
@@ -884,8 +909,8 @@ export function FuelSwitchControls({ asset }: { asset: CombustionAsset }) {
    E20/B20 drop-in limit. Counted per vehicle, with its own purchase cost. */
 export function FlexFuelControls({ asset }: { asset: CombustionAsset }) {
   const { settings, updateAction } = useScenario();
-  // Same missing-key tolerance as FuelSwitchControls above — a split entry's
-  // own id never carries a settings.byAsset entry.
+  // Same missing-key tolerance as FuelSwitchControls above — an unplanned
+  // equipment row carries no settings.byAsset entry.
   const acts = settings.byAsset[asset.id] ?? defaultActions(asset);
   const flex = acts.flexFuel ?? defaultFlexFuel(asset);
   const set = (patch: Partial<FlexFuelAction>) => updateAction(asset.id, "flexFuel", { ...flex, ...patch });
@@ -1239,33 +1264,23 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
    Global assumptions
    ============================================================ */
 
-function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) {
-  const { baseAssets, baseSystems, setSettings } = useScenario();
-  const asset = kind === "asset" ? baseAssets.find((a) => a.id === id) : undefined;
-  const system = kind === "system" ? baseSystems.find((s) => s.id === id) : undefined;
+/** `asset` is a RESOLVED equipment row (D3), never a raw entry: its id is the
+ *  lever key, and resolveEquipment has stamped endUse / unitCount / remaining
+ *  life flat on it. Task 4's `forLevers` read-through existed only because
+ *  this was bound to the raw entry — where endUse is absent (generic
+ *  efficiency hint, no end-use-aware electrify cop/capex) and unitCount is
+ *  absent too, which segments.ts masks as `?? 1`, collapsing a migrated
+ *  30-vehicle fleet's suggested unitsToConvert to 1. Binding the row deletes
+ *  the need for it. */
+function SuggestionCard({ asset, system }: { asset?: CombustionAsset; system?: RefrigerationSystem }) {
+  const { setSettings } = useScenario();
   if (!asset && !system) return null;
-  // Same D4 read-through as AlternativesPanel. Without it suggestForAsset sees
-  // no endUse (generic efficiency hint, no end-use-aware electrify cop/capex)
-  // and no unitCount, which segments.ts masks as `?? 1` - collapsing a migrated
-  // 30-vehicle fleet's suggested unitsToConvert to 1. Also feeds defaultActions
-  // below, whose mobile efficiency capex scales with unitCount. Task 7 rebinds
-  // this component to the resolved rows and deletes it.
-  const forLevers = asset && {
-    ...asset,
-    endUse: asset.endUse ?? asset.equipment?.[0]?.endUse,
-    unitCount: asset.unitCount ?? asset.equipment?.[0]?.unitCount ?? 1,
-  };
-  const sug: Suggestion = forLevers ? suggestForAsset(forLevers) : suggestForSystem(system!);
-  // A split entry has no lever key of its own — applying here would write a
-  // dead settings.byAsset entry under the entry's id (zero effect on
-  // computed abatement, no error shown). Disable rather than offer a
-  // control that cannot work.
-  const isSplit = !!asset && isSplitEntry(asset);
+  const sug: Suggestion = asset ? suggestForAsset(asset) : suggestForSystem(system!);
 
   const apply = (actions: SuggestedAction[]) => {
     setSettings((p) => {
       if (asset) {
-        const cur = p.byAsset[asset.id] ?? defaultActions(forLevers!);
+        const cur = p.byAsset[asset.id] ?? defaultActions(asset);
         const next: typeof cur = { ...cur };
         for (const a of actions) (next as unknown as Record<string, unknown>)[a.lever] = { ...(next as unknown as Record<string, Record<string, unknown>>)[a.lever], ...a.patch };
         return { ...p, byAsset: { ...p.byAsset, [asset.id]: next } };
@@ -1289,25 +1304,15 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
             <>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <button
-                  onClick={() => !isSplit && apply(sug.actions)}
-                  disabled={isSplit}
-                  title={isSplit ? "This source is split across assets — set levers on each asset instead." : undefined}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3.5 py-2 transition-colors",
-                    isSplit ? "bg-surface-muted text-ink-faint cursor-not-allowed" : "bg-brand-500 text-white hover:bg-brand-600",
-                  )}
+                  onClick={() => apply(sug.actions)}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3.5 py-2 transition-colors bg-brand-500 text-white hover:bg-brand-600"
                 >
                   Apply suggestion
                 </button>
-                {!isSplit && sug.altHeadline && sug.altActions && (
+                {sug.altHeadline && sug.altActions && (
                   <button onClick={() => apply(sug.altActions!)} className="text-sm font-medium text-brand-700 hover:underline">{sug.altHeadline}</button>
                 )}
               </div>
-              {isSplit && (
-                <p className="mt-2 text-[11px] text-ink-faint">
-                  This source is split across its assets — its levers now live on each asset, so a suggestion can&apos;t be applied here yet.
-                </p>
-              )}
             </>
           )}
         </div>
@@ -1322,9 +1327,8 @@ function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
   if (kind === "asset") {
     const a = baseAssets.find((x) => x.id === id); if (!a) return null;
     baseT = combustionCO2e(a);
-    // Roll up over the entry's resolved rows — see resolvedRowsForEntry: an
-    // unsplit entry resolves to itself (identical to the old direct lookup);
-    // a split entry's levers live on its assets, not on the entry's own id.
+    // Roll up over the entry's resolved rows — see resolvedRowsForEntry.
+    // The levers live on the equipment, not on the entry's own id.
     let abated = 0;
     for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
       const acts = settings.byAsset[r.id];
