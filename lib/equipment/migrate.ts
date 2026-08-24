@@ -16,6 +16,28 @@ function num(raw: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
+/** The ONE definition of a source's first equipment. Every mint site goes
+ *  through this: migrateEquipment below, DataInputTab's write-path fallback,
+ *  and (Task 5) the source-creation site in SourceListScreen. It is a function
+ *  rather than a documented convention because two hand-written copies of it
+ *  diverged on `endUse` inside a single fix round.
+ *
+ *  Reuses the entry's OWN id, which is what keeps a saved lever resolving:
+ *  LeverSettings is keyed by equipment id, and a pre-equipment lever was keyed
+ *  by the entry id (spec 3.3). Coerces through num() and re-reads the entry as
+ *  unknown because a caller may be handing over unvalidated localStorage — the
+ *  static type is no guarantee at this boundary. */
+export function mintFirstEquipment(entry: CombustionAsset): Equipment {
+  const e = entry as unknown as Record<string, unknown>;
+  return {
+    id: String(e.id),
+    name: typeof e.name === "string" && e.name ? e.name : "Equipment 1",
+    unitCount: Math.max(1, Math.round(num(e.unitCount, 1))),
+    remainingLife: num(e.remainingLife, 10),
+    endUse: e.endUse as Equipment["endUse"],
+  };
+}
+
 export function migrateEquipment(
   byYear: Record<number, CombustionAsset[]>,
 ): Record<number, CombustionAsset[]> {
@@ -27,13 +49,7 @@ export function migrateEquipment(
 
       if (Array.isArray(e.equipment) && e.equipment.length > 0) return entry;
 
-      const equipment: Equipment = {
-        id: String(e.id),
-        name: typeof e.name === "string" && e.name ? e.name : "Equipment 1",
-        unitCount: Math.max(1, Math.round(num(e.unitCount, 1))),
-        remainingLife: num(e.remainingLife, 10),
-        endUse: e.endUse as Equipment["endUse"],
-      };
+      const equipment: Equipment = mintFirstEquipment(entry);
 
       const volume = num(e.annualVolume, 0);
 

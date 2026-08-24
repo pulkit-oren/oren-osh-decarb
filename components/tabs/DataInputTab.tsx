@@ -11,6 +11,7 @@ import {
   type CombustionAsset, type FuelId, type RefrigerantId, type RefrigerationSystem,
 } from "@/lib/model/types";
 import type { Equipment } from "@/lib/equipment/types";
+import { mintFirstEquipment } from "@/lib/equipment/migrate";
 import { cn, fmt, fmtMoney, fmtNum } from "@/lib/utils";
 import { combustionGrade, refrigerantGrade, confidenceOf } from "@/lib/data-quality";
 import { siteList, filterBySite } from "@/lib/sites";
@@ -411,14 +412,20 @@ function firstEquipment(a: CombustionAsset): Equipment | undefined {
 
 /** Patch for the FIRST equipment. Writing these two flat is silently discarded:
  *  resolveEquipment stamps them from the equipment and ignores anything on the
- *  entry, so a flat write moves the input and not the model. Mints the
- *  equipment (reusing the entry id, exactly as migrateEquipment does, so lever
- *  keys keep resolving) when a pre-D8 source has none - otherwise the control
- *  would be inert rather than merely ignored. */
+ *  entry, so a flat write moves the input and not the model.
+ *
+ *  When a pre-D8 source has no equipment at all - which is every source
+ *  SourceListScreen creates until Task 5 mints one there - the write delegates
+ *  to mintFirstEquipment(), the single shared mint in lib/equipment/migrate.ts.
+ *  Delegating rather than rebuilding the literal is the point: the hand-written
+ *  copy this replaced dropped the entry's `endUse`, and resolveEquipment then
+ *  stamped `undefined` over the flat copy, silently degrading that source's
+ *  alternatives and suggestions. Minting (rather than no-op'ing) keeps the
+ *  control from being inert as well as ignored. */
 function equipmentPatch(a: CombustionAsset, patch: Partial<Equipment>): Partial<CombustionAsset> {
   const eq = a.equipment ?? [];
   if (eq.length === 0) {
-    return { equipment: [{ id: a.id, name: a.name, unitCount: 1, remainingLife: 10, ...patch }] };
+    return { equipment: [{ ...mintFirstEquipment(a), ...patch }] };
   }
   return { equipment: [{ ...eq[0], ...patch }, ...eq.slice(1)] };
 }

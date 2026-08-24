@@ -17,6 +17,7 @@ import { ScenarioProvider, useScenario } from "@/lib/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { BuilderTab } from "../BuilderTab";
 import { CombustionDetails } from "../DataInputTab";
+import type { CombustionAsset } from "@/lib/model/types";
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -133,12 +134,13 @@ describe("DataInputTab — the unit-count and remaining-life controls read and w
     expect(JSON.parse(screen.getByTestId("flat").textContent ?? "{}")).toEqual({});
   });
 
-  it("mints the first equipment (reusing the entry id) when a pre-D8 source has none", () => {
-    // Sources created by SourceListScreen carry no equipment until Task 5 mints
-    // one there; the control must still move the model rather than no-op.
+  it("a source PERSISTED without equipment is minted on hydrate, so the control writes onto it", () => {
+    // Deliberately not equipmentPatch's mint branch: migrateEquipment already
+    // minted on hydrate, so by render time equipment[0] exists. The
+    // in-session mint branch is exercised separately below.
     seed({
       id: "no-eq-1", name: "Fuel oil", category: "stationary", fuelType: "fuelOil",
-      unit: "L", annualVolume: 1000, opex: 50_000,
+      unit: "L", annualVolume: 1000, opex: 50_000, endUse: "boiler",
     });
     render(<Wrapper><ModellerHost /></Wrapper>);
     fireEvent.change(screen.getByLabelText("Number of units"), { target: { value: "4" } });
@@ -146,6 +148,89 @@ describe("DataInputTab — the unit-count and remaining-life controls read and w
     expect(equipment).toHaveLength(1);
     expect(equipment[0].id).toBe("no-eq-1");
     expect(equipment[0].unitCount).toBe(4);
+    expect(equipment[0].endUse).toBe("boiler");
+  });
+});
+
+/* ── 1b. equipmentPatch's own mint branch (Ruling O) ─────────────────────── */
+
+/** Adds an equipment-LESS entry in-session, which is the only way to reach
+ *  equipmentPatch's mint branch: anything arriving via localStorage has already
+ *  been minted by migrateEquipment on hydrate. This is exactly the shape
+ *  SourceListScreen creates today, pre-Task 5. */
+function MintHost({ entry }: { entry: CombustionAsset }) {
+  const { combustion, addCombustionAsset } = useScenario();
+  const a = combustion[2025]?.find((x) => x.id === entry.id);
+  return (
+    <>
+      <button onClick={() => addCombustionAsset(2025, entry)}>seed in session</button>
+      {a && (
+        <>
+          <CombustionDetails a={a} year={2025} modellerOnly />
+          <span data-testid="equipment">{JSON.stringify(a.equipment)}</span>
+        </>
+      )}
+    </>
+  );
+}
+
+describe("DataInputTab — equipmentPatch mints through the one shared mint", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  /** A source created the way SourceListScreen creates one today: flat fields
+   *  the user set, and no equipment at all. */
+  const FLAT_SOURCE = {
+    id: "kiln-1",
+    name: "Coal Kiln",
+    category: "stationary",
+    fuelType: "coal",
+    unit: "t",
+    annualVolume: 500,
+    opex: 4_000_000,
+    endUse: "furnaceKiln",
+    unitCount: 6,
+    remainingLife: 3,
+  } as unknown as CombustionAsset;
+
+  function renderWithFlatSource() {
+    window.localStorage.setItem(
+      "osh-scope1-planner-v4",
+      JSON.stringify({ combustion: { 2025: [] }, refrigeration: {}, settings: EMPTY_SETTINGS, scenarios: [], baseYear: 2025 }),
+    );
+    render(<Wrapper><MintHost entry={FLAT_SOURCE} /></Wrapper>);
+    fireEvent.click(screen.getByText("seed in session"));
+  }
+
+  it("carries the entry's endUse onto the minted equipment", () => {
+    renderWithFlatSource();
+    // The regression this pins: a hand-written mint literal dropped endUse, and
+    // resolveEquipment then stamped `undefined` over the flat copy — silently
+    // degrading this source's alternatives and suggestions.
+    fireEvent.change(screen.getByLabelText("Number of units"), { target: { value: "8" } });
+    const equipment = JSON.parse(screen.getByTestId("equipment").textContent ?? "[]");
+    expect(equipment).toHaveLength(1);
+    expect(equipment[0].endUse).toBe("furnaceKiln");
+  });
+
+  it("carries the entry's id, name and remainingLife too, and applies the patch on top", () => {
+    renderWithFlatSource();
+    fireEvent.change(screen.getByLabelText("Number of units"), { target: { value: "8" } });
+    const equipment = JSON.parse(screen.getByTestId("equipment").textContent ?? "[]");
+    expect(equipment[0].id).toBe("kiln-1");        // the lever key must not move
+    expect(equipment[0].name).toBe("Coal Kiln");
+    expect(equipment[0].remainingLife).toBe(3);   // NOT the 10-year default
+    expect(equipment[0].unitCount).toBe(8);       // the patch wins over the entry's 6
+  });
+
+  it("mints from the shared definition when editing remaining life instead", () => {
+    renderWithFlatSource();
+    fireEvent.change(screen.getByLabelText("Remaining life (yrs)"), { target: { value: "2" } });
+    const equipment = JSON.parse(screen.getByTestId("equipment").textContent ?? "[]");
+    expect(equipment[0].endUse).toBe("furnaceKiln");
+    expect(equipment[0].unitCount).toBe(6);       // carried from the entry
+    expect(equipment[0].remainingLife).toBe(2);   // the patch
   });
 });
 
