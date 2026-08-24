@@ -124,6 +124,8 @@ describe("migrateEquipment", () => {
     expect(e.allocations).toEqual({ "c-1": 9572631.3 });
   });
 
+  // Ruling A: these are absent on a RAW source. resolveEquipment stamps them
+  // back onto resolved rows, which is what keeps the model consumers working.
   it("drops the source-level fields that moved down", () => {
     const e = migrateEquipment({ 2025: [legacy()] })[2025][0] as unknown as Record<string, unknown>;
     expect(e.remainingLife).toBeUndefined();
@@ -209,15 +211,9 @@ export interface Equipment {
 
 - [ ] **Step 4: Change `CombustionAsset`**
 
-In `lib/model/types.ts`, delete these six fields from `CombustionAsset`:
+In `lib/model/types.ts`, delete these three fields from `CombustionAsset`:
 
 ```ts
-  /** Remaining useful life, years (retrofit guardrail). */
-  remainingLife: number;
-  /** Number of units (vehicles for mobile, units for stationary; single boiler = 1). */
-  unitCount: number;
-  /** Equipment / end-use class - drives scenario-lever defaults & feasibility. Absent => unspecified. */
-  endUse?: import("./end-use").EndUseId;
   /** How this entry's volume is attributed to assets. Absent => "entry" (whole-entry, no split). */
   allocationMode?: "entry" | "byAsset";
   /** byAsset: per-asset share of annualVolume, keyed by asset id. */
@@ -225,6 +221,22 @@ In `lib/model/types.ts`, delete these six fields from `CombustionAsset`:
   /** The per-asset attribute "weighted" allocation distributes by. */
   weightAttribute?: import("@/lib/assets/types").WeightAttribute;
 ```
+
+**Ruling A — `remainingLife`, `unitCount` and `endUse` are NOT deleted; they become optional resolved-row stamps.** The 2026-08-24 pre-flight scan found twenty-five non-test files reading these FLAT off a resolved row — `segments.ts:62,75,156`, `energy-balance.ts:36,109`, `suggestions.ts:26`, `validate.ts:10`, `export.ts:34` among them. Deleting them outright would make spec §2.1's central claim ("every consumer keeps working untouched") false and leave Task 4's build gate unreachable. Retype them, keeping the existing `sourceEntryId?` field as the precedent for this pattern:
+
+```ts
+  /** Set on rows emitted by resolveEquipment(), copied from the row's single
+   *  equipment. Absent on a RAW source - the source of truth is
+   *  equipment[].remainingLife (D4). Kept flat so the nine model consumers
+   *  that read it need no change. */
+  remainingLife?: number;
+  /** Set on rows emitted by resolveEquipment(); see remainingLife. */
+  unitCount?: number;
+  /** Set on rows emitted by resolveEquipment(); see remainingLife. */
+  endUse?: import("./end-use").EndUseId;
+```
+
+Raw sources stop writing all three — Task 1's migration removes them, and Task 5 stops seeding them. Resolution (Task 3) is the only writer.
 
 Add in their place:
 
@@ -490,6 +502,7 @@ describe("explainAllocation", () => {
     const ex = explainAllocation({ entryVolume: 120000, basis: "units", equipment: FLEET });
     expect(ex!.formula).toContain("number of units");
     expect(ex!.row).toContain("3 of 5 units");
+    expect(ex!.row).toContain("→"); // Ruling D: the spec 4.3 mockup uses an arrow, not ->
   });
 
   it("returns null under manual - there is no formula to explain", () => {
@@ -675,7 +688,7 @@ export function explainAllocation(
 
   return {
     formula,
-    row: `${first.name} = ${workings} -> ${pct}% -> ${fmt(volumes[0])}`,
+    row: `${first.name} = ${workings} → ${pct}% → ${fmt(volumes[0])}`,
   };
 }
 
@@ -774,6 +787,16 @@ describe("resolveEquipment", () => {
     expect(a.equipment[0].remainingLife).toBe(12);
     expect(a.equipment[0].unitCount).toBe(2);
     expect(b.equipment[0].unitCount).toBe(3);
+  });
+
+  it("stamps remainingLife, unitCount and endUse FLAT on the row (Ruling A)", () => {
+    const [a, b] = resolveEquipment([source()]);
+    // The nine model consumers read these flat; equipment[0] is the truth,
+    // the flat copy is what keeps them from being rewritten.
+    expect(a.remainingLife).toBe(12);
+    expect(a.unitCount).toBe(2);
+    expect(b.unitCount).toBe(3);
+    expect(b.remainingLife).toBe(8);
   });
 
   it("inherits fuelType, unit and bu from the source", () => {
@@ -950,10 +973,15 @@ export function resolveEquipment(entries: CombustionAsset[]): CombustionAsset[] 
         // full opex onto every row and inflated company spend on every split
         // (spec 2.2). Invariant 6 is the test.
         opex: share * e.opex,
-        // The row carries exactly the one machine it descends from, so every
-        // consumer reading remainingLife / unitCount / endUse off a resolved
-        // row gets that machine's values.
+        // The row carries exactly the one machine it descends from...
         equipment: [unit],
+        // ...and Ruling A stamps that machine's values FLAT, because the nine
+        // model consumers (segments.ts:62,75,156, energy-balance.ts:36,109,
+        // suggestions.ts:26, validate.ts:10, export.ts:34) read them flat off
+        // the row. Resolution is the only writer of these three.
+        remainingLife: unit.remainingLife,
+        unitCount: unit.unitCount,
+        endUse: unit.endUse,
         allocations: undefined,
       });
     }
@@ -1013,6 +1041,10 @@ volume share, which is what the remainder row already did."
 - Produces: `resolvedBaseAssets` and `resolvedSelectedAssets` on the store context, unchanged in name and type. Every downstream consumer keeps its current import.
 
 **These land together or not at all.** `lib/store.tsx:28` imports `useAssetsOptional`; deleting `AssetProvider` without rewiring the store breaks the build, and rewiring the store without deleting the provider leaves a second source of truth. A reviewer cannot approve half of this.
+
+**Ruling C — this task also removes the `AssetAllocationPanel` import and mount from `EntryScreen.tsx` (`:19`, `:268`).** Deleting `components/assets/` while `EntryScreen` still imports it makes Step 9's build gate unreachable, and Task 6 is two tasks away. The entry screen therefore has **no** equipment UI until Task 6 adds `EquipmentSection` in the same place. That gap is deliberate; the branch is not deployed until Task 8.
+
+**Ruling E — this task also makes the minimum mechanical edits for a green typecheck in files no other task owns:** `DataInputTab.tsx` (the two `remainingLife` sliders at `:434`, `:526`), `ActionPlanTab.tsx`, `BalanceTab.tsx`, `ActivityDataTab.tsx`, `export.ts:34`, `defaults.ts`, `import-combustion.ts:43`, `store-helpers.ts`. The plan had a hole here: Task 1 breaks the typecheck and nothing owned these files. **Mechanical only** — a field read moves to the equipment, a write is dropped. Ruling A means most of these need no change at all, since resolved rows still carry the flat fields; verify each before editing, and list in the report every file you touched with the reason. Behavioural change to `SourceListScreen` and `EntryScreen` stays with Tasks 5 and 6.
 
 **Delete the lever-minting effect (`store.tsx:359-374`).** It is the cause of the dead "Add plan" button recorded in the port ledger: it pre-writes a default lever for *every* resolved id on mount, so the button never has anything to add. Under D8 equipment exists from creation and `addCombustion` / `copyCombustion` / `importCombustion` seed `byAsset` for the equipment id directly, so the effect has nothing left to do.
 
@@ -1621,6 +1653,8 @@ git commit -m "feat(activity): entry-screen equipment section with basis picker 
 - [ ] **Step 1: Write the failing test**
 
 Create `components/tabs/__tests__/builder-equipment.test.tsx`:
+
+**Ruling B — do not use `data-testid` selectors here.** `BuilderTab.tsx` contains none, and the ones written below were invented. Query by visible text and accessible role instead. Where a row genuinely cannot be addressed any other way, add the testid to the component in the same commit and say so in the report. Treat every selector in this test as a guess to be corrected against what actually renders.
 
 ```tsx
 import { describe, it, expect } from "vitest";
