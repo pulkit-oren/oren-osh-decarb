@@ -1,9 +1,11 @@
 # Source → equipment split — design
 
 **Date:** 2026-08-20
-**Status:** awaiting review
+**Status:** approved — the three open questions were resolved on 2026-08-24
+(§11). Ready for an implementation plan.
 **Supersedes:** the asset layer shipped by `docs/superpowers/plans/2026-08-16-asset-layer-port.md`
-(branch `asset-layer-port`, 25 commits, never merged, never deployed)
+(branch `asset-layer-port`, 27 commits on top of `feature/goals-esg-scenario-modules`,
+never merged, never deployed)
 
 ## 1. Why this replaces the shipped asset layer
 
@@ -50,19 +52,29 @@ Settled in brainstorming on 2026-08-20:
 | D1 | Equipment belongs to **one source**. It is created by hand inside that source's entry screen. The split only ever offers that source's own equipment. |
 | D2 | Each equipment carries **name + rated capacity + annual running hours**. Fuel burn tracks capacity × hours, so this is the only physically honest computed split, and it is explainable in one checkable line. |
 | D3 | **Equipment is the planning unit.** A lever applies to one machine — electrify Boiler 1, leave Boiler 2 on gas. The Builder, action plan and compare screens show equipment rows. |
-| D4 | Remaining life and end-use **move down** from the source to the equipment. "Number of units" disappears: one equipment *is* one unit. |
-| D5 | **Annual spend stays on the source** and is apportioned by volume share, as `resolve.ts:97` already does. |
+| D4 | Remaining life, end-use and **number of units** move down from the source to the equipment. *(Amended 2026-08-24 — the original clause had the number of units disappearing on the grounds that one equipment is one unit. It does not disappear; see D8.)* |
+| D5 | **Annual spend stays on the source** and is apportioned to each equipment by volume share. *(Amended 2026-08-24 — the original clause claimed `resolve.ts:97` "already does" this. It does not; see §2.2.)* |
 | D6 | The **Add a source** form drops **End-use**, going from five fields to four: Name, Type, Fuel, Business unit. |
 | D7 | Implementation follows **Approach A**: re-scope equipment onto the source entry and keep the resolution pipeline and every downstream consumer. |
 
-### 2.1 The one decision D4 forces
+Settled on 2026-08-24, closing the three questions this spec was held on:
+
+| # | Decision |
+|---|----------|
+| D8 | **Every source always holds at least one equipment**, minted on creation. An equipment may represent **several identical units** — it carries its own `unitCount`, defaulting to 1. A fleet of five vans is one equipment with `unitCount: 5` until the user chooses to split it. |
+| D9 | **The capacity unit is declared once, on the source**, not per equipment. Mixed units within a source become unrepresentable rather than validated against. |
+| D10 | A **`units` basis** joins the allocation bases, weighting by `unitCount`. |
+
+### 2.1 The one decision D4 forces — resolved as D8
 
 D4 says attributes live on equipment. D1 says adding equipment is manual. Taken
 literally together, a source with no equipment has nowhere to keep its
 remaining life — and lever feasibility (`lib/model/alternatives.ts`, the
 retrofit guardrail) reads `remainingLife` on every source, split or not.
+`lib/model/validate.ts:10` computes `baseYear + asset.remainingLife`, so an
+absent value silently yields `NaN` and the guardrail stops guarding.
 
-**Resolution: every source always has at least one equipment.** Creating a
+**Resolution (D8): every source always has at least one equipment.** Creating a
 source mints exactly one equipment named after it, holding 100% of the volume.
 Adding a second equipment is what "splitting" means. The unsplit case is
 simply *one equipment holding everything*.
@@ -70,6 +82,54 @@ simply *one equipment holding everything*.
 This makes D4 unconditional — there is exactly one place to look for remaining
 life — and it makes resolution uniform, because every entry resolves to at
 least one equipment row.
+
+**What D8 does *not* mean: one equipment is not one unit.** The 2026-08-20 draft
+inferred that from D4 and deleted `unitCount` outright. That inference was
+wrong, and the cost of it was traced on 2026-08-24: unit counts are load-bearing
+in nine places across four model files.
+
+| Consumer | Reads |
+|---|---|
+| `lib/model/segments.ts:62-63,155-156` | `unitsToConvert / unitCount` — the electrified and flex-fuel fractions |
+| `lib/model/segments.ts:75` | mobile electrify capex, `25,000 × max(1, unitCount)` |
+| `lib/model/energy-balance.ts:36,109` | `unitsToConvert = round(unitCount × electrifyPct / 100)`, and its inverse |
+| `lib/model/suggestions.ts:26,46` | `halfUnits`, and the copy "electrify 2 of 5 vehicles" |
+| `lib/model/index.ts:152,170` | flex-fuel gating and `unitsToConvert × vehicleCapex` |
+| `lib/export.ts:34` | the exported unit-count column |
+
+Forcing `unitCount` to 1 would collapse electrify and flex-fuel to on/off per
+machine, flatten mobile capex to a single unit's worth, and silently change the
+meaning of live scenarios — the seeded company has a 30-unit DG Set and two
+5-unit fleets carrying `unitsToConvert: 2` and `3`. Modelling "electrify 2 of 5
+vans" would require hand-creating five equipment rows first.
+
+So `unitCount` **moves down to equipment** rather than dying. Every consumer
+above keeps working untouched, because resolution already stamps `unitCount`
+onto each emitted row (`resolve.ts:72`).
+
+### 2.2 D5's stated justification was false
+
+D5 reads "as `resolve.ts:97` already does". Two things are wrong with that. The
+line is `resolve.ts:87`, and it applies only to the **remainder** row:
+
+```ts
+// resolve.ts:87 — the remainder row, correct
+opex: share * e.opex,
+
+// resolve.ts:71 — every allocated row, wrong
+opex: asset.opex,
+```
+
+An allocated row takes the registry asset's *whole* opex, and `migrateAssets`
+(`store-helpers.ts:151`) copies the full entry spend onto every minted
+self-asset. So in the shipped build, splitting a source **inflates** total
+spend instead of dividing it, and `lib/model/index.ts:165` derives
+`fossilUnitPrice = opex / annualVolume` from the inflated figure.
+
+D5's conclusion stands — spend belongs on the source — but it describes work to
+be done, not behaviour to be preserved. The fix is to make the allocated rows
+use the same `share * e.opex` rule the remainder row already uses, and
+§4.2 invariant 6 pins it.
 
 This is *not* the bug from §1. The failure there was a **company-wide** registry
 mirroring the **source list**, so unrelated sources became split targets. Here
@@ -81,8 +141,10 @@ is dead for every entry because Task 4's effect pre-writes a default lever for
 every resolved asset. With equipment guaranteed to exist and levers keyed to
 equipment ids from the start, that effect is deleted rather than worked around.
 
-**This is the item most worth challenging in review** — it is adjacent to, not
-identical to, what was approved in brainstorming. See §11.
+This was the item flagged as most worth challenging, being adjacent to rather
+than identical to what brainstorming approved. It was challenged on 2026-08-24
+and **approved as D8**, with one correction: the `unitCount` deletion it carried
+was reversed. See §11.
 
 ## 3. Data model
 
@@ -98,11 +160,15 @@ export interface Equipment {
   id: string;
   /** User-typed, required, non-empty. */
   name: string;
-  /** Rated capacity. Absent ⇒ excluded from capacity/load bases. */
+  /** Rated capacity, in the SOURCE's capacityUnit (D9). Absent ⇒ excluded
+   *  from the capacity and load bases. */
   capacity?: number;
-  capacityUnit?: CapacityUnit;
   /** Running hours per year. Absent ⇒ excluded from the load basis. */
   operatingHours?: number;
+  /** Identical units this equipment stands for; one machine ⇒ 1 (D8).
+   *  Moved down from the source, NOT deleted — see §2.1 for the nine
+   *  consumers that depend on it. Weights the `units` basis (D10). */
+  unitCount: number;
   /** Remaining useful life, years. Retrofit guardrail — moved down from the
    *  source (D4), so a heat pump on Boiler 1 is checked against Boiler 1's
    *  own life, not a blended average. */
@@ -118,15 +184,20 @@ export interface Equipment {
 **Added:**
 
 ```ts
-/** This source's equipment. Always ≥1 (§2.1). Order is display order. */
+/** This source's equipment. Always ≥1 (D8). Order is display order. */
 equipment: Equipment[];
 /** Per-equipment volume, keyed by Equipment.id. Sums to ≤ annualVolume. */
 allocations?: Record<string, number>;
+/** The unit every equipment's `capacity` is expressed in (D9). Declared once
+ *  here so a source cannot hold incommensurable capacities. Absent ⇒ no
+ *  capacities recorded, and the capacity/load bases are unavailable. */
+capacityUnit?: CapacityUnit;
 ```
 
-**Removed:** `remainingLife` and `endUse` move to `Equipment`. `unitCount` is
-deleted outright rather than moved — one equipment *is* one unit (D4), so a
-count on either side would be redundant.
+**Moved to `Equipment`:** `remainingLife`, `endUse` and `unitCount`. All three
+leave `CombustionAsset`; none is deleted. The 2026-08-20 draft deleted
+`unitCount` on the reasoning that one equipment *is* one unit — reversed by D8
+(§2.1).
 
 **Removed** (superseded): `allocationMode`, `assetAllocations`, `weightAttribute`.
 `allocationMode` is gone because equipment always exists — there is no
@@ -146,6 +217,11 @@ always an **equipment id**, never an entry id. Because the migration (§7) mints
 each source's first equipment **reusing the source's own id**, every existing
 lever key keeps working across the migration without a rewrite.
 
+This id reuse is load-bearing, not incidental: it is the only thing standing
+between the migration and a silent loss of every saved lever. It is asserted in
+§8, not assumed. A later change that mints a fresh id for the first equipment
+must rewrite `byAsset` in the same step.
+
 ## 4. Allocation
 
 ### 4.1 Bases
@@ -154,6 +230,7 @@ lever key keeps working across the migration without a rewrite.
 |---|---|---|
 | `load` | `capacity × operatingHours` | every equipment has both. **Default.** |
 | `capacity` | `capacity` | every equipment has a capacity |
+| `units` | `unitCount` | always (D10) |
 | `even` | `1` | always |
 | `carryForward` | prior year's allocation for the same equipment id | prior year has a non-zero allocation |
 | `manual` | — values typed by hand | always |
@@ -162,11 +239,22 @@ A basis whose precondition fails is shown disabled with the reason ("three
 machines have no running hours"), not hidden. Silently falling back to `even`
 is how the shipped version made a wrong split look computed.
 
+Because the capacity unit is a property of the source (D9), the only reason
+`load` or `capacity` can be unavailable is a **missing value** — never a unit
+mismatch. There is no unit-agreement check to write.
+
+**Why `units` earns its place (D10).** It costs one line — the weight *is*
+`unitCount` — and for a fleet it is the basis a user can actually answer.
+"Five vans, two of them on the city route" is knowledge they have; rated
+capacity × running hours per van is not. The superseded `WeightAttribute`
+union carried exactly this option (`lib/assets/types.ts:9`), so dropping it
+would have been a regression against the shipped port.
+
 ### 4.2 Invariants
 
-1. **Computed bases consume the whole total.** `load`, `capacity`, `even` and
-   `carryForward` distribute `annualVolume` exactly; unallocated is 0 by
-   construction. The shipped `distribute()` already guarantees this (last
+1. **Computed bases consume the whole total.** `load`, `capacity`, `units`,
+   `even` and `carryForward` distribute `annualVolume` exactly; unallocated is
+   0 by construction. The shipped `distribute()` already guarantees this (last
    element absorbs rounding), and it is kept as-is.
 2. **Only `manual` can leave a remainder.** An under-allocation emits a
    remainder row; the panel states the leftover explicitly.
@@ -182,6 +270,17 @@ is how the shipped version made a wrong split look computed.
 5. **Editing one row does not silently rewrite the others.** A manual edit
    switches the basis to `manual` and writes only that row, except when the
    clamp fires.
+6. **Total spend is invariant to the split.** The emitted rows' `opex` sums to
+   the source's `opex`, under every basis and every number of equipment — the
+   same guarantee invariant 4 gives emissions. The shipped build **fails this
+   today** (§2.2), so it lands as a regression test, not a restatement.
+7. **Unit counts are never auto-apportioned.** Splitting a source does not
+   divide its `unitCount` across the new equipment; each equipment's count is
+   user data, typed by hand. The entry screen shows the running total across
+   equipment so that `2 + 3 = 5` is visible and `5 + 5` is obviously wrong.
+   Without this the user cannot see that they have doubled `segments.ts:75`'s
+   mobile capex. Deliberately advisory: a legitimate split may add machines
+   that were never counted on the source.
 
 ### 4.3 The "how is it done" explainer (D2)
 
@@ -213,8 +312,11 @@ computed basis, which invariant 2 forbids. Corrected here.)
 (lines ~380–390). Remaining: Name, Type, Fuel, Business unit. End-use is now
 asked per equipment.
 
-`handleAdd` stops seeding `remainingLife: 10`, `unitCount: 1` and `endUse`, and
-instead mints the source's first equipment (§2.1) carrying `remainingLife: 10`.
+`handleAdd` stops seeding `remainingLife`, `unitCount` and `endUse` on the
+source and instead mints its first equipment (D8), carrying
+`remainingLife: 10` and `unitCount: 1` — the same defaults, one level down.
+`capacityUnit` is left unset on the source; the user picks it when they first
+record a capacity.
 
 ### 5.2 Entry screen — the equipment section
 
@@ -226,30 +328,62 @@ PNG · piped natural gas · Pune plant · 1,88,000 SCM/yr
 ──────────────────────────────────────────────────────────
 EQUIPMENT USING THIS FUEL                  + Add equipment
 
+Capacity measured in [ tph ▾ ]            (applies to this source)
 Split by:  [ Load (capacity × hours) ▾ ]    [ Redistribute ]
 
-  Boiler 1        2.0 tph   6,000 h   12 yrs  →  98,087 SCM
-  Boiler 2        1.0 tph   6,000 h   12 yrs  →  49,043 SCM
-  Kitchen range   0.5 tph   4,000 h    8 yrs  →  16,348 SCM
-  Water heater    0.5 tph   4,000 h    8 yrs  →  16,348 SCM
-  Genset (standby) 1.0 tph  1,000 h   15 yrs  →   8,174 SCM
+                    cap    hours   units   life
+  Boiler 1          2.0    6,000     1    12 yrs  →  98,087 SCM
+  Boiler 2          1.0    6,000     1    12 yrs  →  49,043 SCM
+  Kitchen range     0.5    4,000     1     8 yrs  →  16,348 SCM
+  Water heater      0.5    4,000     1     8 yrs  →  16,348 SCM
+  Genset (standby)  1.0    1,000     1    15 yrs  →   8,174 SCM
+                                    ───
+                            5 units total
 
   Unallocated: 0 SCM
 
   ⓘ How this is split  ...
 ```
 
-Each row is inline-editable: name, capacity + unit, running hours, remaining
-life, end-use, volume. Volume edits switch the basis to `manual`.
+A fleet is the case D8 and D10 exist for — one equipment standing for several
+identical machines, split by count rather than by a capacity nobody recorded:
+
+```
+Diesel fleet · diesel · 1,20,000 L/yr · ₹1,14,00,000/yr
+──────────────────────────────────────────────────────────
+Capacity measured in [ — ▾ ]
+Split by:  [ Units ▾ ]                      [ Redistribute ]
+
+                    cap    hours   units   life
+  City vans          —       —       3     6 yrs  →  72,000 L
+  Highway vans       —       —       2     6 yrs  →  48,000 L
+                                    ───
+                            5 units total
+
+  ⓘ How this is split
+    Each equipment gets a share of 1,20,000 L in proportion to
+    number of units.
+    City vans = 3 of 5 units → 60.0% → 72,000 L
+
+  Spend follows the volume share (D5): ₹68,40,000 and ₹45,60,000.
+```
+
+Each row is inline-editable: name, capacity, running hours, unit count,
+remaining life, end-use, volume. Volume edits switch the basis to `manual`.
 `Redistribute` recomputes from the current basis; it is hidden under `manual`
 (no formula to redistribute from) — the shipped panel got this right and the
 behaviour is kept.
 
-Deleting an equipment is blocked when it is the last one (§2.1) and warns when
+Deleting an equipment is blocked when it is the last one (D8) and warns when
 it carries a lever.
 
-Fields **removed** from this screen: `Number of units` (D4) and the
-source-level `Remaining life` slider (`EntryScreen.tsx:259`), now per row.
+The capacity unit sits in the source header, not on the rows (D9). Changing it
+reinterprets every capacity in the source at once, so it takes a confirm when
+any equipment already has a capacity recorded.
+
+Fields **removed** from this screen: the source-level `Remaining life` slider
+(`EntryScreen.tsx:259`) and the source-level `Number of units` field, both now
+per row. `Annual spend` **stays** on the source (D5).
 
 ### 5.3 Scenario modeller — equipment rows (D3)
 
@@ -278,13 +412,22 @@ header, the Assets tile on `HomeScreen`, and the `Nav` case in
   `SegmentScreen`, `CeoOverviewTab`, `BalanceTab`, `ActionPlanTab`,
   `ScenarioCalcPanel`, `lib/model/baseline.ts`. They read resolved rows and
   care only that resolution emits one row per planning unit.
+- **The nine `unitCount` consumers listed in §2.1** — `segments.ts`,
+  `energy-balance.ts`, `suggestions.ts`, `index.ts`, `export.ts`. D8 keeps the
+  field alive on the emitted row, so not one of them is touched. Had the
+  2026-08-20 draft's deletion stood, every one would have needed respecifying.
 
 **Changed:**
 
 - `resolveAssets` reads `e.equipment` + `e.allocations` instead of a registry
   argument, and takes no registry parameter. A resolved row inherits the
   source's `fuelType`, `unit`, `year`, `bu`, `site` and its volume share of
-  `opex`; it takes `name`, `remainingLife` and `endUse` from the equipment.
+  `opex`; it takes `name`, `remainingLife`, `endUse` and `unitCount` from the
+  equipment.
+- **The `opex` bug at `resolve.ts:71` is fixed** (§2.2): an allocated row takes
+  `share * e.opex`, not the whole figure. This is the one behavioural change to
+  the resolution pipeline that is not a straight port — everything else in this
+  section is a re-pointing. Invariant 6 is its test.
 - `copyCombustion` (`lib/store.tsx:243`) already deep-`clone`s the entry list,
   so nested equipment carries to the next year with stable ids for free. It
   must additionally seed `byAsset` defaults for **equipment** ids, not entry
@@ -319,18 +462,26 @@ On load, for each combustion entry in each year:
    - `id` = **the entry's own id** — this is what preserves existing
      `settings.byAsset` lever keys with no rewrite
    - `name` = entry name; `remainingLife` = `entry.remainingLife ?? 10`;
-     `endUse` = `entry.endUse`; `capacity`/`operatingHours` absent
+     `endUse` = `entry.endUse`; `unitCount` = `entry.unitCount ?? 1`;
+     `capacity`/`operatingHours` absent, and the source's `capacityUnit` absent
    - `allocations = { [entry.id]: entry.annualVolume }`
-3. Drop `allocationMode`, `assetAllocations`, `weightAttribute`, `unitCount`.
+3. Drop `allocationMode`, `assetAllocations`, `weightAttribute`.
    Any allocation the shipped port wrote is **discarded, not translated** — it
    points at company-wide asset ids that no longer exist, and translating a
    diesel-allocated-to-Coal split would carry the §1 defect forward.
 4. Drop the persisted `assets` registry key entirely.
 
-`unitCount` is not preserved. A source recorded as "30 units" becomes one
-equipment; the user splits it into real machines when they want per-machine
-planning. Carrying the number forward would imply a fidelity the data does not
-have — thirty gensets were never thirty identities, just a count.
+`unitCount` **is** preserved, on the minted equipment (D8). A source recorded as
+"30 units" becomes one equipment carrying 30, so every scenario that reads a
+unit count — and every `unitsToConvert` a user has already saved against it —
+keeps the meaning it had before the migration. The user splits it into real
+machines when they want per-machine planning; until then nothing about their
+numbers moves.
+
+*(The 2026-08-20 draft discarded the count here, on the D4 reading D8 reversed.
+The argument it gave — "thirty gensets were never thirty identities, just a
+count" — is true and is exactly why the count belongs on one equipment rather
+than becoming thirty of them.)*
 
 ## 8. Testing
 
@@ -343,12 +494,22 @@ have — thirty gensets were never thirty identities, just a count.
 - New coverage:
   - migration: idempotence; lever-key preservation; discarding a shipped
     `assetAllocations` map; a source that already has equipment
-  - each basis, including a disabled basis with its stated reason
+  - migration preserves `unitCount` — a 30-unit source yields one equipment
+    carrying 30, and a saved `unitsToConvert: 2` still means two of five (D8)
+  - each basis, including a disabled basis with its stated reason, and the
+    `units` basis weighting by `unitCount` (D10)
   - `explainAllocation` agrees with `computeAllocation` on the same input
     (the §4.3 single-source-of-truth requirement, asserted not assumed)
   - equipment cannot be deleted to zero
   - emissions invariance: split vs unsplit totals equal (invariant 4)
+  - **spend invariance: emitted rows' `opex` sums to the source's `opex`**
+    (invariant 6). Write this one against the *shipped* `resolve.ts` first and
+    watch it fail — §2.2 is a live defect, and a test that passes before the
+    fix is testing the wrong thing.
   - a lever on one equipment leaves its siblings unabated (D3)
+- **No test asserts a capacity-unit mismatch**, because D9 makes one
+  unrepresentable. If you find yourself writing that test, the model drifted
+  back to per-equipment units.
 - **Run it in a browser before claiming completion.** This spec exists because
   600 passing tests, a clean build and clean typecheck did not surface a defect
   that thirty seconds of clicking did.
@@ -365,28 +526,51 @@ have — thirty gensets were never thirty identities, just a count.
 ## 10. Sequencing
 
 1. Types + migration + `lib/equipment/allocate.ts` — with tests, no UI.
-2. `resolveAssets` rework against the new model; downstream consumers verified
-   unchanged.
+   `unitCount` moves onto `Equipment` here (D8) and `capacityUnit` onto the
+   source (D9); the `units` basis (D10) lands with the other bases.
+2. `resolveAssets` rework against the new model, **including the `resolve.ts:71`
+   spend fix** (§2.2) behind its failing invariant-6 test; downstream consumers
+   verified unchanged — the nine `unitCount` readers should need no edit at all,
+   and if one does, D8 was implemented wrongly.
 3. Delete the global layer (§6) — provider, registry screen, minting, nav.
 4. Add-source form: five fields to four (D6).
 5. Entry-screen equipment section (§5.2) including the explainer.
 6. Scenario-modeller equipment rows; remove Task 9's split-entry branches.
+   The unit-total display (invariant 7) belongs with step 5's equipment
+   section.
 7. Browser verification of the whole flow, then a preview deploy.
 
 Steps 1–3 are the risky half and land behind tests before any UI moves.
 
-## 11. Open questions
+## 11. Resolved questions
 
-1. **§2.1 — every source always has one equipment.** This resolves the conflict
-   between "attributes move down" (D4) and "splitting is optional" (D1), but it
-   was not itself approved in brainstorming. If it is wrong, the alternative is
-   to keep `remainingLife`/`endUse` on the source as defaults that equipment
-   overrides — which is the option rejected during brainstorming, so the
-   conflict would need a different resolution.
-2. **D5 vs the mockup.** The chosen option's text said all four attributes move
-   down; the mockup shown alongside it kept **Annual spend** on the source.
-   This spec follows the mockup. Confirm.
-3. **Capacity units across a split.** Mixing `tph` and `kW` within one source
-   makes a capacity-weighted split meaningless. Proposal: the load and capacity
-   bases require all equipment in a source to share one capacity unit, and are
-   disabled with that reason otherwise. Not yet confirmed.
+All three were closed by the owner on 2026-08-24. Recorded here so they are not
+reopened from the 2026-08-20 text.
+
+1. **Does every source always hold one equipment?** *(→ D8.)* **Yes**, and
+   `unitCount` moves down onto the equipment rather than being deleted. The
+   §2.1 proposal was accepted; the "one equipment *is* one unit" corollary the
+   draft attached to it was rejected once its nine consumers were traced. The
+   rejected alternative — equipment optional, with `remainingLife`/`endUse`
+   staying on the source as overridable defaults — would have left two places
+   to read every attribute and defeated D4.
+2. **Where does annual spend live?** *(→ D5, unchanged; §2.2 added.)* On the
+   **source**, apportioned by volume share. The mockup was right and the
+   option text was wrong. Separately, D5's justification was false: the shipped
+   code does not apportion, it inflates. Per-equipment spend was rejected —
+   nothing would reconcile the typed figures against the invoice, and the same
+   fuel would show different unit prices per machine.
+3. **How are capacity units handled across a split?** *(→ D9.)* The unit is
+   declared **once on the source**; equipment carry bare numbers. Mixing
+   becomes unrepresentable rather than validated against, which removes the
+   check, the disabled-basis reason and its test. The spec's original proposal
+   (per-equipment units, bases disabled on mismatch) was rejected as reporting
+   an error the model can simply forbid — the units are not inter-convertible
+   in general anyway: TR→kW is a fixed 3.517, but kVA→kW needs a power factor
+   and tph is a steam mass flow needing enthalpy.
+
+**One consequence worth carrying into the plan.** D8 keeps every `unitCount`
+consumer untouched, but §4.2 invariant 7 is new UI work: the entry screen must
+show the running unit total, or a user splitting a five-van fleet into two
+five-unit equipment silently doubles `segments.ts:75`'s mobile capex with
+nothing on screen to contradict them.
