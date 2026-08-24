@@ -22,18 +22,25 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Split `total` across `weights` proportionally. The last element absorbs the
  *  rounding remainder so the returned array sums to `total` rounded to 2 decimal
- *  places - EXCEPT when earlier elements rounded up past the total, which would
+ *  places — EXCEPT when earlier elements rounded up past the total, which would
  *  make that remainder negative; in that case the last element is clamped to 0
- *  instead, so a negative allocation is never returned. */
+ *  instead, so a negative allocation is never returned. When that clamp fires,
+ *  the array no longer sums exactly to `total` — the sum can be off by a cent
+ *  or two (more with many near-zero weights) because the rounding drift that
+ *  would have been absorbed by the last element is left standing instead.
+ *  All allocations are cent-precision. */
 export function distribute(total: number, weights: number[]): number[] {
+  // Coerce total to a finite non-negative number to prevent NaN/negative propagation
   const n = Number(total);
   const safeTotal = Number.isFinite(n) && n >= 0 ? n : 0;
   const roundedTotal = round2(safeTotal);
+  // Coerce weights to finite non-negative numbers to prevent NaN propagation
   const coercedWeights = weights.map((w) => {
     const v = Number(w) || 0;
     return Number.isFinite(v) && v >= 0 ? v : 0;
   });
   const sum = coercedWeights.reduce((a, b) => a + b, 0);
+  // Guard against zero, negative, or non-finite sum
   if (!Number.isFinite(sum) || sum <= 0) return coercedWeights.map(() => 0);
   const out: number[] = [];
   let acc = 0;
