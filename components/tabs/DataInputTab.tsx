@@ -404,8 +404,10 @@ function LabeledNum({ label, hint, value, suffix, onChange, footer }: {
 
 /** The machine a source's `unitCount` / `remainingLife` live on under D4.
  *  A RAW entry carries neither flat - migrateEquipment moves them down onto
- *  equipment[0] and strips the flat copies - so a control reading `a.unitCount`
- *  renders blank on every migrated source. */
+ *  equipment[0] and strips the flat copies, the seeded inventory and every
+ *  creation path mint straight onto the equipment - so a control reading
+ *  `a.unitCount` renders blank on every source in the app. Only rows emitted by
+ *  resolveEquipment() carry the flat copies, and this screen holds raw entries. */
 function firstEquipment(a: CombustionAsset): Equipment | undefined {
   return a.equipment?.[0];
 }
@@ -414,9 +416,11 @@ function firstEquipment(a: CombustionAsset): Equipment | undefined {
  *  resolveEquipment stamps them from the equipment and ignores anything on the
  *  entry, so a flat write moves the input and not the model.
  *
- *  When a pre-D8 source has no equipment at all - which is every source
- *  SourceListScreen creates until Task 5 mints one there - the write delegates
- *  to mintFirstEquipment(), the single shared mint in lib/equipment/migrate.ts.
+ *  When a source has no equipment at all the write delegates to
+ *  mintFirstEquipment(), the single shared mint in lib/equipment/migrate.ts.
+ *  Every write point now mints, so this branch is unreachable defence rather
+ *  than a live path — kept because D8 is a runtime invariant the compiler
+ *  cannot hold (Ruling K).
  *  Delegating rather than rebuilding the literal is the point: the hand-written
  *  copy this replaced dropped the entry's `endUse`, and resolveEquipment then
  *  stamped `undefined` over the flat copy, silently degrading that source's

@@ -24,7 +24,7 @@
 
 import { useState } from "react";
 import { Info, Plus, RotateCcw, X } from "lucide-react";
-import { basisAvailability, clampAllocation, computeAllocation, explainAllocation, unallocated } from "@/lib/equipment/allocate";
+import { basisAvailability, clampAllocation, computeAllocation, defaultBasis, explainAllocation, unallocated } from "@/lib/equipment/allocate";
 import { mintFirstEquipment } from "@/lib/equipment/migrate";
 import type { AllocationBasis, CapacityUnit, Equipment } from "@/lib/equipment/types";
 import type { CombustionAsset } from "@/lib/model/types";
@@ -78,7 +78,14 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
   // Ruling K: `equipment` is optional on the type — D8 is a runtime invariant
   // enforced at the write points, so this reader must tolerate absence.
   const equipment: Equipment[] = entry.equipment ?? [];
-  const basis: AllocationBasis = entry.allocationBasis ?? "load";
+  // Ruling W: `load` is the spec 4.1 default, but no creation path records a
+  // capacity or running hours, so on a real source its weights are all zero and
+  // the first "Add equipment" click would move the whole volume onto the inert
+  // remainder. defaultBasis() picks the first basis the recorded data can
+  // actually support, and because the picker and the explainer below both read
+  // THIS value, the user is shown the basis their numbers really came from —
+  // never a silent fallback (spec 4.1).
+  const basis: AllocationBasis = entry.allocationBasis ?? defaultBasis(equipment, previousAllocation);
   const volume = Number.isFinite(entry.annualVolume) ? entry.annualVolume : 0;
   const alloc = entry.allocations ?? {};
   const unit = unitLabel(entry.unit);

@@ -85,6 +85,17 @@ describe("migrateEquipment", () => {
     expect(out[2025][1].equipment![0].unitCount).toBe(1);
   });
 
+  it("drops a literal null in a year's array instead of throwing on it", () => {
+    // Persisted JSON is untrusted: a hand-edited blob can hold a null, and
+    // reading `.equipment` off it threw before anything could coerce it — which
+    // takes the whole app's hydrate down, not just that one source.
+    const out = migrateEquipment({
+      2025: [legacy(), null, legacy({ id: "c-2" })] as unknown as CombustionAsset[],
+    });
+    expect(out[2025]).toHaveLength(2);
+    expect(out[2025].map((e) => e.id)).toEqual(["c-1", "c-2"]);
+  });
+
   it("migrates every year independently", () => {
     const out = migrateEquipment({ 2024: [legacy()], 2025: [legacy()] });
     expect(out[2024][0].equipment![0].id).toBe("c-1");

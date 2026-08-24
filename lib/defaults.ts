@@ -12,6 +12,8 @@ import type {
   RefrigerationByYear, RefrigerationSystem,
 } from "./model/types";
 import { resolveCombustion, resolveRefrigeration } from "./yearly";
+import { mintFirstEquipment } from "./equipment/migrate";
+import { resolveEquipment } from "./equipment/resolve";
 
 export const DEFAULT_BASE_YEAR = 2025;
 
@@ -43,14 +45,22 @@ const COMBUSTION_SPECS: CombustionSpec[] = [
 
 function lineFor(s: CombustionSpec, year: number): CombustionAsset {
   const f = trend(year);
-  return {
+  const line: CombustionAsset = {
     id: s.id, name: s.name, category: s.category, fuelType: s.fuelType, unit: s.unit,
-    remainingLife: s.remainingLife, unitCount: s.units,
     annualVolume: Math.round(s.vol2025 * f), opex: Math.round(s.opex2025 * f),
-    // D8: a source always has at least one equipment, and the first one reuses
-    // the entry id so every lever key in DEFAULT_SETTINGS keeps resolving.
-    equipment: [{ id: s.id, name: s.name, unitCount: s.units, remainingLife: s.remainingLife }],
   };
+  // D8: a source always has at least one equipment, and the first one reuses
+  // the entry id so every lever key in DEFAULT_SETTINGS keeps resolving.
+  //
+  // Ruling O: minted by the ONE shared helper — this was a fifth hand-written
+  // literal. Ruling L: NO flat remainingLife / unitCount mirror is written.
+  // The spec's values are handed to the mint (which reads them off the entry it
+  // is given) and land only on the equipment, so there is nothing to go stale.
+  // The mirror was permanent — migrateEquipment's idempotence guard returns an
+  // already-equipped entry by reference and never strips it — and it is what
+  // kept the whole suite blind to lib/goals/ reading the flat fields raw.
+  const seed = { ...line, remainingLife: s.remainingLife, unitCount: s.units };
+  return { ...line, equipment: [mintFirstEquipment(seed)] };
 }
 
 const DEFAULT_COMBUSTION: CombustionByYear = {};
@@ -71,8 +81,14 @@ for (const y of FY_YEARS) {
 export const DEFAULT_COMBUSTION_BY_YEAR = DEFAULT_COMBUSTION;
 export const DEFAULT_REFRIGERATION_BY_YEAR = DEFAULT_REFRIGERATION;
 
-/** Flat base-year (2025) snapshots — used by the engine and tests. */
-export const DEFAULT_ASSETS = resolveCombustion(DEFAULT_COMBUSTION, DEFAULT_BASE_YEAR);
+/** Flat base-year (2025) snapshots — used by the engine and tests. Resolved
+ *  through resolveEquipment for the same reason the store is: with the flat
+ *  mirror dropped from lineFor, unitCount / remainingLife / endUse now come
+ *  from ONE place, the equipment, and resolution is what stamps them back onto
+ *  a row (Ruling A). Handing raw entries to the engine is exactly the defect
+ *  this branch fixed everywhere else. One equipment per default source, so the
+ *  emitted rows are one-per-source with their ids unchanged. */
+export const DEFAULT_ASSETS = resolveEquipment(resolveCombustion(DEFAULT_COMBUSTION, DEFAULT_BASE_YEAR));
 export const DEFAULT_SYSTEMS = resolveRefrigeration(DEFAULT_REFRIGERATION, DEFAULT_BASE_YEAR);
 
 export const DEFAULT_SETTINGS: LeverSettings = {

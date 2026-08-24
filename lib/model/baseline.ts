@@ -43,11 +43,11 @@ export function baselineScope1(
     name: a.name,
     co2eT: combustionCO2e(a),
     energyKJ: combustionEnergyKJ(a),
-    // `a.sourceEntryId` is only set on rows that passed through resolveAssets
-    // (Task 1). For any other row it is undefined, so falling back to the
-    // row's own id reproduces today's `.find(p => p.id === a.id)` lookup
-    // semantics exactly — this is what keeps every pre-existing caller and
-    // test correct without editing them.
+    // `a.sourceEntryId` is only set on rows that passed through
+    // resolveEquipment(). For any other row it is undefined, so falling back to
+    // the row's own id reproduces the plain `.find(p => p.id === a.id)` lookup
+    // semantics exactly — this is what keeps every caller that hands over
+    // unresolved entries correct without editing them.
     sourceEntryId: a.sourceEntryId ?? a.id,
   }));
   const perRefrigeration = systems.map((s) => ({

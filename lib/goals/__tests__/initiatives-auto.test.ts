@@ -67,6 +67,64 @@ describe("auto-initiatives", () => {
   });
 });
 
+/* lib/goals/ was the last consumer still handed RAW entries. unitCount and
+   endUse live on equipment[] and only resolveEquipment stamps them back onto a
+   row (Ruling A) — so suggestForAsset, defaultActions and capexForAsset, which
+   all read them FLAT, saw undefined on every source in the app. Nothing caught
+   it because lib/defaults.ts kept a flat mirror alongside its equipment. */
+describe("auto-initiatives read resolved rows, not raw entries", () => {
+  const fleet: Inventories = {
+    combustion: {
+      2024: [{
+        id: "c-fleet", name: "Diesel fleet", category: "mobile", fuelType: "diesel",
+        annualVolume: 120000, unit: "L", opex: 11_400_000,
+        equipment: [{ id: "c-fleet", name: "Diesel fleet", unitCount: 5, remainingLife: 6 }],
+        allocations: { "c-fleet": 120000 },
+      }],
+    } as unknown as CombustionByYear,
+    refrigeration: {} as RefrigerationByYear,
+    facilities: {} as FacilitiesByYear,
+  };
+
+  it("names the real fleet size instead of 'of undefined vehicles'", () => {
+    const init = autoInitiatives(goalOf("abs_sbti"), fleet).find((i) => i.sourceRef === "c-fleet")!;
+    expect(init).toBeTruthy();
+    expect(init.name).toContain("of 5 vehicles");
+    expect(init.name).not.toContain("undefined");
+    // halfUnits collapsed to 1 with unitCount undefined; five vans is three.
+    expect(init.name).toContain("electrify 3 of 5");
+  });
+
+  it("prices mobile efficiency capex at the fleet, not at one van", () => {
+    const init = autoInitiatives(goalOf("abs_sbti"), fleet).find((i) => i.sourceRef === "c-fleet")!;
+    // segments.ts defaultEfficiency: 25,000 per unit for a mobile source.
+    expect(init.budget).toBeGreaterThanOrEqual(25_000 * 5);
+  });
+
+  it("emits one initiative per EQUIPMENT and none for the remainder row", () => {
+    const split: Inventories = {
+      ...fleet,
+      combustion: {
+        2024: [{
+          id: "c-fleet", name: "Diesel fleet", category: "mobile", fuelType: "diesel",
+          annualVolume: 120000, unit: "L", opex: 11_400_000,
+          equipment: [
+            { id: "c-fleet", name: "City vans", unitCount: 3, remainingLife: 6 },
+            { id: "eq-2", name: "Highway vans", unitCount: 2, remainingLife: 6 },
+          ],
+          // Deliberately short: 20,000 L belongs to no machine, so it resolves
+          // to a `::unallocated` row that no lever can act on.
+          allocations: { "c-fleet": 60000, "eq-2": 40000 },
+        }],
+      } as unknown as CombustionByYear,
+    };
+    const refs = autoInitiatives(goalOf("abs_sbti"), split).map((i) => i.sourceRef);
+    expect(refs).toContain("c-fleet");
+    expect(refs).toContain("eq-2");
+    expect(refs.some((r) => r?.includes("::unallocated"))).toBe(false);
+  });
+});
+
 describe("catalog", () => {
   it("has 8 templates split into emissions and energy", () => {
     expect(GOAL_TEMPLATES.filter((t) => t.category === "emissions").length).toBe(4);

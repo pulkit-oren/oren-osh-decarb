@@ -16,6 +16,7 @@ import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem } from
 import { M2_PER_KW } from "@/lib/scope2/model/constants";
 import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import { resolveCombustion, resolveRefrigeration } from "@/lib/yearly";
+import { isUnallocatedId, resolveEquipment } from "@/lib/equipment/resolve";
 import { resolveFacilities } from "@/lib/scope2/store-helpers";
 import type { AssetActions, EfficiencyAction, ElectrifyAction, FuelSwitchAction, FlexFuelAction, SystemActions, GasSwitchAction, LeakFixAction } from "@/lib/model/types";
 import type { Goal, Initiative } from "./types";
@@ -106,7 +107,18 @@ export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
     });
   };
 
-  const assets = resolveCombustion(inv.combustion, goal.baseYear).filter((a) => !a.excluded);
+  // RESOLVED rows, not raw entries. suggestForAsset / defaultActions /
+  // capexForAsset all read unitCount and endUse FLAT off the row, and a raw
+  // entry carries neither — the flat fields live on equipment[] and only
+  // resolveEquipment stamps them back (Ruling A). Feeding raw entries here
+  // rendered auto-initiatives as "electrify 1 of undefined vehicles" and priced
+  // a five-van fleet's efficiency capex at one van. Levers are keyed by
+  // equipment id (spec 3.3), so the per-row ids these push are the right
+  // sourceRef. The remainder row is dropped: it is a bookkeeping row for volume
+  // no machine owns, and no lever can act on it.
+  const assets = resolveEquipment(
+    resolveCombustion(inv.combustion, goal.baseYear).filter((a) => !a.excluded),
+  ).filter((a) => !isUnallocatedId(a.id));
   const systems = resolveRefrigeration(inv.refrigeration, goal.baseYear).filter((s) => !s.excluded);
   const facilities = resolveFacilities(inv.facilities, goal.baseYear).filter((f) => !f.excluded);
   const totalLoad = facilities.reduce((s, f) => s + f.annualLoadKwh, 0);

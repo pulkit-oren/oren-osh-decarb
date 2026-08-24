@@ -118,6 +118,47 @@ export function basisAvailability(
   };
 }
 
+/** The order a source falls back through when NO basis has been chosen yet:
+ *  the richest weighting the recorded data can actually support. */
+const DEFAULT_BASIS_ORDER = ["load", "capacity", "units"] as const;
+
+/** Ruling W: the basis a source starts on. `load` is the spec 4.1 default, but
+ *  no creation path records a capacity or running hours, so on a real source
+ *  its weights are all zero — and a computed basis with zero weights sends the
+ *  whole volume to the lever-inert remainder on the user's first split.
+ *
+ *  This is a DEFAULT, deliberately not a compute-time fallback: spec 4.1 is
+ *  explicit that "silently falling back to `even` is how the shipped version
+ *  made a wrong split look computed". The picker and explainAllocation() both
+ *  read the basis this returns, so the user reads "Units" and "in proportion to
+ *  number of units" — the basis the numbers really came from.
+ *
+ *  `units` is the honest floor: unitCount is always >= 1 (D10), so it can never
+ *  itself produce the zero-weight case this exists to avoid. */
+export function defaultBasis(
+  equipment: Equipment[],
+  previous?: Record<string, number>,
+): AllocationBasis {
+  const avail = basisAvailability(equipment, previous);
+  return DEFAULT_BASIS_ORDER.find((b) => avail[b] == null) ?? "units";
+}
+
+/** Ruling V: allocations are a FUNCTION of volume and basis, so they have to be
+ *  recomputed when the volume moves. Nothing owned that — a source created with
+ *  `annualVolume: 0` kept its `{ [id]: 0 }` map after the real volume was typed,
+ *  and 100% of it resolved onto the remainder row, which no lever can act on.
+ *
+ *  Under `manual` the map is the user's own arithmetic, so it is scaled rather
+ *  than recomputed — exactly what clampAllocation already does: an overshoot is
+ *  scaled back proportionally, an under-allocation (invariant 2's deliberate
+ *  remainder) is left standing. Their relative intent survives either way. */
+export function reallocateForVolume(input: AllocationInput): Record<string, number> {
+  const { entryVolume, basis, equipment, previous, existing } = input;
+  if (equipment.length === 0) return {};
+  if (basis === "manual") return clampAllocation(entryVolume, existing ?? {});
+  return computeAllocation({ entryVolume, basis, equipment, previous });
+}
+
 const FORMULA: Partial<Record<AllocationBasis, string>> = {
   load: "capacity × running hours",
   capacity: "rated capacity",

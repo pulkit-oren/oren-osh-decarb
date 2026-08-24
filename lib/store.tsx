@@ -27,6 +27,7 @@ import { resolveCombustion, resolveRefrigeration } from "./yearly";
 import { allIds, migrateRefrigeration, migrateSettings, uniqueId } from "./store-helpers";
 import { resolveEquipment } from "./equipment/resolve";
 import { migrateEquipment, mintFirstEquipment } from "./equipment/migrate";
+import { defaultBasis, reallocateForVolume } from "./equipment/allocate";
 
 interface StoreShape {
   combustion: CombustionByYear;
@@ -201,13 +202,59 @@ export function ScenarioProvider({
     });
   };
   const addCombustionAsset = (year: number, asset: CombustionAsset) => {
-    setCombustion((prev) => ({ ...prev, [year]: [...(prev[year] ?? []), asset] }));
-    setSettingsState((p) => (p.byAsset[asset.id] ? p : { ...p, byAsset: { ...p.byAsset, [asset.id]: defaultActions(asset) } }));
+    // D8 (Ruling P): this is a public store API that persists an ARBITRARY
+    // source. Its one production caller mints, but the guard belongs here, at
+    // the write point, because D8 is a runtime invariant the compiler cannot
+    // hold (Ruling K). Mint through the one shared helper (Ruling O).
+    const line: CombustionAsset = asset.equipment?.length
+      ? asset
+      : { ...asset, equipment: [mintFirstEquipment(asset)] };
+    setCombustion((prev) => ({ ...prev, [year]: [...(prev[year] ?? []), line] }));
+    setSettingsState((p) => (p.byAsset[line.id] ? p : { ...p, byAsset: { ...p.byAsset, [line.id]: defaultActions(line) } }));
   };
   const delCombustion = (year: number, id: string) =>
     setCombustion((prev) => ({ ...prev, [year]: (prev[year] ?? []).filter((a) => a.id !== id) }));
+  /** Ruling V: `allocations` is a FUNCTION of `annualVolume` and the basis, and
+   *  until now nothing owned keeping the two consistent. A source is created at
+   *  volume 0 with a matching `{ [id]: 0 }` map; the user then types the real
+   *  volume through one of three writers (this list's inline input, the entry
+   *  screen's hero field, the data-input table) and none of them touched the
+   *  map. resolveEquipment then read a present-but-zero allocation, put 100% of
+   *  the volume on the `::unallocated` remainder row — which no lever can act
+   *  on — and left the source permanently unplannable, with the totals still
+   *  correct so nothing complained.
+   *
+   *  Recomputing here rather than in each writer is the point: this is the one
+   *  funnel all three go through. An explicit `allocations` in the patch always
+   *  wins — that is EquipmentSection writing a hand-made split. */
   const updateCombustion = (year: number, id: string, patch: Partial<CombustionAsset>) =>
-    setCombustion((prev) => ({ ...prev, [year]: (prev[year] ?? []).map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
+    setCombustion((prev) => {
+      // Prior-year volumes for the carryForward basis, matched on the entry id
+      // (ids persist across years) — the same lookup ActivityDataTab threads
+      // into EquipmentSection, so both recompute from identical weights.
+      const previous = (prev[year - 1] ?? []).find((e) => e.id === id)?.allocations;
+      return {
+        ...prev,
+        [year]: (prev[year] ?? []).map((a) => {
+          if (a.id !== id) return a;
+          const next = { ...a, ...patch };
+          if (!("annualVolume" in patch) || patch.allocations !== undefined) return next;
+          const equipment = next.equipment ?? [];
+          if (equipment.length === 0) return next;
+          const entryVolume = Number.isFinite(next.annualVolume) ? next.annualVolume : 0;
+          return {
+            ...next,
+            allocations: reallocateForVolume({
+              entryVolume,
+              basis: next.allocationBasis ?? defaultBasis(equipment, previous),
+              equipment,
+              previous,
+              existing: next.allocations ?? {},
+            }),
+          };
+        }),
+      };
+    });
   const copyCombustion = (fromYear: number, toYear: number) => {
     const src = clone(combustion[fromYear] ?? []);
     setCombustion((prev) => ({ ...prev, [toYear]: src }));

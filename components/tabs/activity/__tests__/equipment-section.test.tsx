@@ -30,6 +30,17 @@ const fleet = entry({
   allocationBasis: "units",
 });
 
+/** The shape mintFirstEquipment actually produces, and the ONE fixture the old
+ *  suite never had: one machine, no capacity, no running hours, and no basis
+ *  ever chosen. Every source in the app looks like this until the user records
+ *  a capacity — the richer fixtures above are what hid C2. */
+const unrecorded = entry({
+  capacityUnit: undefined,
+  equipment: [{ id: "e1", name: "Genset 1", unitCount: 1, remainingLife: 10 }],
+  allocations: { e1: 188000 },
+  allocationBasis: undefined,
+});
+
 describe("EquipmentSection", () => {
   it("lists every equipment with its volume", () => {
     render(<EquipmentSection entry={entry()} onChange={() => {}} />);
@@ -44,7 +55,15 @@ describe("EquipmentSection", () => {
     render(<EquipmentSection entry={entry()} onChange={() => {}} />);
     const selector = screen.getByLabelText(/capacity measured in/i);
     expect((selector as HTMLSelectElement).value).toBe("tph");
-    expect(screen.queryAllByText(/2\.0\s*tph/)).toHaveLength(0);
+    // The unit is declared once on the source and echoed once in the column
+    // header. The negative half used to be queryAllByText(/2\.0\s*tph/), which
+    // could never match whatever the component did: capacities render as input
+    // VALUES, never text nodes, and 2.0 serialises as "2". Ask the question the
+    // test's own name asks instead — is the unit repeated on any ROW?
+    expect(screen.getByText(/^Capacity \(tph\)$/)).toBeTruthy();
+    for (const id of ["e1", "e2"]) {
+      expect(within(screen.getByTestId(`equipment-row-${id}`)).queryByText(/tph/i)).toBeNull();
+    }
   });
 
   it("shows the running unit total (invariant 7)", () => {
@@ -74,11 +93,53 @@ describe("EquipmentSection", () => {
     expect(patch.equipment[0].remainingLife).toBe(9);
   });
 
-  it("adds equipment", () => {
+  it("adds equipment and splits the volume onto it, with no capacity recorded (C2)", () => {
     const onChange = vi.fn();
-    render(<EquipmentSection entry={entry()} onChange={onChange} />);
+    render(<EquipmentSection entry={unrecorded} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: /add equipment/i }));
-    expect(onChange.mock.calls[0][0].equipment).toHaveLength(3);
+    const patch = onChange.mock.calls[0][0];
+    expect(patch.equipment).toHaveLength(2);
+    // The row count was all this test used to assert, which is why it passed
+    // while the very same patch zeroed the split. A default of `load` has no
+    // weights at all here, so every allocation came back 0 and the whole volume
+    // moved to the lever-inert remainder on the user's FIRST split.
+    expect(patch.allocations).toEqual({ e1: 94000, [patch.equipment[1].id]: 94000 });
+    expect(Object.values(patch.allocations as Record<string, number>)
+      .reduce((a, b) => a + b, 0)).toBe(188000);
+  });
+
+  it("defaults to the first AVAILABLE basis, and shows the one in use (Ruling W)", () => {
+    render(<EquipmentSection entry={unrecorded} onChange={() => {}} />);
+    // `units` is the honest floor — unitCount is always >= 1 (D10). Spec 4.1
+    // forbids a silent fallback, so the picker and the explainer must BOTH
+    // name the basis the numbers were actually computed from.
+    expect((screen.getByLabelText(/split by/i) as HTMLSelectElement).value).toBe("units");
+    expect(screen.getByText(/in proportion to/i).textContent)
+      .toContain("in proportion to number of units");
+  });
+
+  it("still defaults to load when every machine has a capacity and hours", () => {
+    render(<EquipmentSection entry={entry({ allocationBasis: undefined })} onChange={() => {}} />);
+    expect((screen.getByLabelText(/split by/i) as HTMLSelectElement).value).toBe("load");
+  });
+
+  it("defaults to capacity when hours alone are missing", () => {
+    const noHours = entry({
+      allocationBasis: undefined,
+      equipment: [
+        { id: "e1", name: "B1", capacity: 2, unitCount: 1, remainingLife: 10 },
+        { id: "e2", name: "B2", capacity: 1, unitCount: 1, remainingLife: 10 },
+      ],
+    });
+    render(<EquipmentSection entry={noHours} onChange={() => {}} />);
+    expect((screen.getByLabelText(/split by/i) as HTMLSelectElement).value).toBe("capacity");
+  });
+
+  it("Redistribute recovers a split rather than zeroing it (C2)", () => {
+    const onChange = vi.fn();
+    render(<EquipmentSection entry={unrecorded} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /redistribute/i }));
+    expect(onChange.mock.calls[0][0].allocations).toEqual({ e1: 188000 });
   });
 
   it("blocks deleting the last equipment (D8)", () => {

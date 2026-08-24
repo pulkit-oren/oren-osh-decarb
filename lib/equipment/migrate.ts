@@ -16,11 +16,14 @@ function num(raw: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-/** The ONE definition of a source's first equipment. Every mint site goes
- *  through this: migrateEquipment below, DataInputTab's write-path fallback,
- *  and (Task 5) the source-creation site in SourceListScreen. It is a function
- *  rather than a documented convention because two hand-written copies of it
- *  diverged on `endUse` inside a single fix round.
+/** The ONE definition of a source's first equipment (Ruling O). Every mint site
+ *  goes through this: migrateEquipment below, the seeded inventory in
+ *  lib/defaults.ts, addCombustion / importCombustion / addCombustionAsset in
+ *  lib/store.tsx, DataInputTab's write-path fallback, and the source-creation
+ *  site in SourceListScreen. It is a function rather than a documented
+ *  convention because two hand-written copies of it diverged on `endUse` inside
+ *  a single fix round, and a fifth survived in lib/defaults.ts to the end of the
+ *  branch, carrying a flat mirror of its own fields with it.
  *
  *  Reuses the entry's OWN id, which is what keeps a saved lever resolving:
  *  LeverSettings is keyed by equipment id, and a pre-equipment lever was keyed
@@ -44,30 +47,38 @@ export function migrateEquipment(
   const out: Record<number, CombustionAsset[]> = {};
 
   for (const [year, entries] of Object.entries(byYear ?? {})) {
-    out[Number(year)] = (entries ?? []).map((entry) => {
-      const e = entry as unknown as Record<string, unknown>;
+    out[Number(year)] = (entries ?? [])
+      // Persisted JSON is untrusted (see num() above): a hand-edited blob can
+      // hold a literal null in a year's array, and reading `.equipment` off it
+      // throws before any of the coercion below gets a chance to run. A null
+      // carries no source to migrate, so it is dropped rather than minted into
+      // an empty shell that would then need a name, a fuel and an id.
+      .filter((entry): entry is CombustionAsset => entry != null && typeof entry === "object")
+      .map((entry) => {
+        const e = entry as unknown as Record<string, unknown>;
 
-      if (Array.isArray(e.equipment) && e.equipment.length > 0) return entry;
+        if (Array.isArray(e.equipment) && e.equipment.length > 0) return entry;
 
-      const equipment: Equipment = mintFirstEquipment(entry);
+        const equipment: Equipment = mintFirstEquipment(entry);
 
-      const volume = num(e.annualVolume, 0);
+        const volume = num(e.annualVolume, 0);
 
-      // Drop, never translate: a shipped allocation points at company-wide
-      // asset ids that no longer exist, and translating a
-      // diesel-allocated-to-Coal split would carry the section 1 defect forward.
-      const {
-        remainingLife: _rl, unitCount: _uc, endUse: _eu,
-        allocationMode: _am, assetAllocations: _aa, weightAttribute: _wa,
-        ...rest
-      } = e;
+        // Drop, never translate: a shipped allocation points at company-wide
+        // asset ids that no longer exist, and translating a
+        // diesel-allocated-to-Coal split would carry the section 1 defect
+        // forward.
+        const {
+          remainingLife: _rl, unitCount: _uc, endUse: _eu,
+          allocationMode: _am, assetAllocations: _aa, weightAttribute: _wa,
+          ...rest
+        } = e;
 
-      return {
-        ...rest,
-        equipment: [equipment],
-        allocations: { [equipment.id]: volume },
-      } as unknown as CombustionAsset;
-    });
+        return {
+          ...rest,
+          equipment: [equipment],
+          allocations: { [equipment.id]: volume },
+        } as unknown as CombustionAsset;
+      });
   }
 
   return out;

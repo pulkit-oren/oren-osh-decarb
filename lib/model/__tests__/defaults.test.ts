@@ -1,6 +1,38 @@
 import { describe, it, expect } from "vitest";
 import { compute } from "..";
-import { DEFAULT_ASSETS, DEFAULT_SETTINGS, DEFAULT_SYSTEMS } from "../../defaults";
+import { DEFAULT_ASSETS, DEFAULT_COMBUSTION_BY_YEAR, DEFAULT_SETTINGS, DEFAULT_SYSTEMS } from "../../defaults";
+import { migrateEquipment } from "@/lib/equipment/migrate";
+
+describe("the seeded inventory keeps no flat mirror (Ruling L)", () => {
+  const seeded = Object.values(DEFAULT_COMBUSTION_BY_YEAR).flat();
+
+  it("puts unitCount and remainingLife ONLY on the equipment", () => {
+    // A source carrying both a flat copy and an equipment copy has two sources
+    // of truth for one number, and every edit goes to the equipment — so the
+    // flat copy goes stale the first time a user touches the source and the
+    // flat-first readers (export.ts, validate.ts, end-use.ts) then serve it.
+    for (const e of seeded) {
+      expect(e.unitCount, e.id).toBeUndefined();
+      expect(e.remainingLife, e.id).toBeUndefined();
+      expect(e.equipment, e.id).toHaveLength(1);
+      expect(e.equipment![0].unitCount, e.id).toBeGreaterThanOrEqual(1);
+      expect(e.equipment![0].remainingLife, e.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("cannot be stripped later, which is why it had to never be written", () => {
+    // migrateEquipment's idempotence guard returns an already-equipped entry BY
+    // REFERENCE, so a mirror written at seed time would be permanent.
+    const before = DEFAULT_COMBUSTION_BY_YEAR[2025][0];
+    expect(migrateEquipment({ 2025: [before] })[2025][0]).toBe(before);
+  });
+
+  it("still reaches the engine with those values, stamped by resolution", () => {
+    const genset = DEFAULT_ASSETS.find((a) => a.id === "genset")!;
+    expect(genset.unitCount).toBe(2);
+    expect(genset.remainingLife).toBe(9);
+  });
+});
 
 describe("default scenario", () => {
   const r = compute(DEFAULT_ASSETS, DEFAULT_SYSTEMS, DEFAULT_SETTINGS, 2025);
