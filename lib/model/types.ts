@@ -157,9 +157,14 @@ export interface CombustionAsset {
   endUse?: import("./end-use").EndUseId;
   /** FY this snapshot is for — selects the DEFRA factor year. */
   year?: number;
-  /** This source's equipment. Always >=1 (D8). Order is display order. A
-   *  RESOLVED row emitted by resolveEquipment() carries the single equipment
-   *  it descends from, so a consumer reading a resolved row sees one machine. */
+  /** This source's equipment. Order is display order. D8 (at least one) is a
+   *  RUNTIME invariant enforced at the write points - migrateEquipment on
+   *  hydrate, addCombustion / importCombustion, and source creation - not a
+   *  type invariant: the field is optional because a frozen pre-equipment test
+   *  fixture and a zero-error typecheck cannot both hold otherwise (Ruling K).
+   *  Readers must therefore tolerate absence; resolveEquipment degrades by
+   *  passing the entry through unexpanded. A RESOLVED row carries the single
+   *  equipment it descends from, so a consumer reading one sees one machine. */
   equipment?: Equipment[];
   /** Per-equipment volume, keyed by Equipment.id. Sums to <= annualVolume. */
   allocations?: Record<string, number>;
@@ -169,7 +174,7 @@ export interface CombustionAsset {
   capacityUnit?: CapacityUnit;
   /** How `allocations` should be (re)computed. Absent => "load". */
   allocationBasis?: AllocationBasis;
-  /** Set on rows emitted by resolveAssets() — the id of the entry a resolved row descends from. */
+  /** Set on rows emitted by resolveEquipment() — the id of the entry a resolved row descends from. */
   sourceEntryId?: string;
 }
 

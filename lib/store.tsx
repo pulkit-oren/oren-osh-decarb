@@ -202,7 +202,7 @@ export function ScenarioProvider({
       const byAsset = { ...p.byAsset };
       for (const a of src) {
         for (const unit of a.equipment ?? []) {
-          if (!byAsset[unit.id]) byAsset[unit.id] = defaultActions({ ...a, equipment: [unit] });
+          if (!byAsset[unit.id]) byAsset[unit.id] = defaultActions({ ...a, ...unit, equipment: [unit] });
         }
       }
       return { ...p, byAsset };

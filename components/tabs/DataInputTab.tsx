@@ -10,6 +10,7 @@ import {
   FY_YEARS, fyLabel,
   type CombustionAsset, type FuelId, type RefrigerantId, type RefrigerationSystem,
 } from "@/lib/model/types";
+import type { Equipment } from "@/lib/equipment/types";
 import { cn, fmt, fmtMoney, fmtNum } from "@/lib/utils";
 import { combustionGrade, refrigerantGrade, confidenceOf } from "@/lib/data-quality";
 import { siteList, filterBySite } from "@/lib/sites";
@@ -172,7 +173,7 @@ export function DataInputTab() {
                         updateCombustion(selectedYear, a.id, patch);
                       }} options={[["stationary", "Stationary"], ["mobile", "Mobile"]]} label={`${a.name} category`} /></td>
                       <td className="py-1.5 px-2"><FuelSelect category={a.category} value={a.fuelType} onChange={(v) => updateCombustion(selectedYear, a.id, { fuelType: v, unit: FUELS[v].unit })} label={`${a.name} fuel type`} /></td>
-                      <td className="py-1.5 px-2"><NumCell value={a.unitCount ?? a.equipment?.[0]?.unitCount ?? 1} onChange={(v) => updateCombustion(selectedYear, a.id, { unitCount: Math.max(1, Math.round(v)) })} label={`${a.name} unit count`} /></td>
+                      <td className="py-1.5 px-2"><NumCell value={firstEquipment(a)?.unitCount ?? 1} onChange={(v) => updateCombustion(selectedYear, a.id, equipmentPatch(a, { unitCount: Math.max(1, Math.round(v)) }))} label={`${a.name} unit count`} /></td>
                       <td className="py-1.5 px-2">
                         <div className="flex items-center gap-1.5">
                           <NumCell value={a.annualVolume} onChange={(v) => updateCombustion(selectedYear, a.id, { annualVolume: v })} label={`${a.name} annual volume`} />
@@ -400,6 +401,28 @@ function LabeledNum({ label, hint, value, suffix, onChange, footer }: {
   );
 }
 
+/** The machine a source's `unitCount` / `remainingLife` live on under D4.
+ *  A RAW entry carries neither flat - migrateEquipment moves them down onto
+ *  equipment[0] and strips the flat copies - so a control reading `a.unitCount`
+ *  renders blank on every migrated source. */
+function firstEquipment(a: CombustionAsset): Equipment | undefined {
+  return a.equipment?.[0];
+}
+
+/** Patch for the FIRST equipment. Writing these two flat is silently discarded:
+ *  resolveEquipment stamps them from the equipment and ignores anything on the
+ *  entry, so a flat write moves the input and not the model. Mints the
+ *  equipment (reusing the entry id, exactly as migrateEquipment does, so lever
+ *  keys keep resolving) when a pre-D8 source has none - otherwise the control
+ *  would be inert rather than merely ignored. */
+function equipmentPatch(a: CombustionAsset, patch: Partial<Equipment>): Partial<CombustionAsset> {
+  const eq = a.equipment ?? [];
+  if (eq.length === 0) {
+    return { equipment: [{ id: a.id, name: a.name, unitCount: 1, remainingLife: 10, ...patch }] };
+  }
+  return { equipment: [{ ...eq[0], ...patch }, ...eq.slice(1)] };
+}
+
 export function CombustionDetails({ a, year, showCalc = true, showSource = true, showFuel = true, modellerOnly = false }: { a: CombustionAsset; year: number; showCalc?: boolean; showSource?: boolean; showFuel?: boolean; modellerOnly?: boolean }) {
   const { updateCombustion } = useScenario();
   const price = FUELS[a.fuelType].typicalPricePerUnit ?? 0;
@@ -422,8 +445,8 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true,
           <span className="mt-1 flex items-center gap-1.5">
             <input
               type="number"
-              value={a.unitCount}
-              onChange={(e) => updateCombustion(year, a.id, { unitCount: Math.max(1, Math.round(Number(e.target.value))) })}
+              value={firstEquipment(a)?.unitCount ?? 1}
+              onChange={(e) => updateCombustion(year, a.id, equipmentPatch(a, { unitCount: Math.max(1, Math.round(Number(e.target.value))) }))}
               className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400 text-right tabular-nums"
               aria-label="Number of units"
             />
@@ -431,7 +454,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true,
         </label>
         <LabeledNum
           label="Remaining life (yrs)" hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset."
-          value={a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? 10} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
+          value={firstEquipment(a)?.remainingLife ?? 10} suffix="years" onChange={(v) => updateCombustion(year, a.id, equipmentPatch(a, { remainingLife: Math.max(0, Math.round(v)) }))}
         />
       </div>
     );
@@ -523,7 +546,7 @@ export function CombustionDetails({ a, year, showCalc = true, showSource = true,
           />
           <LabeledNum
             label="Remaining life (yrs)" hint="Remaining useful life of the equipment. Guards against retrofits that would outlive the asset."
-            value={a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? 10} suffix="years" onChange={(v) => updateCombustion(year, a.id, { remainingLife: Math.max(0, Math.round(v)) })}
+            value={firstEquipment(a)?.remainingLife ?? 10} suffix="years" onChange={(v) => updateCombustion(year, a.id, equipmentPatch(a, { remainingLife: Math.max(0, Math.round(v)) }))}
           />
         </div>
       </div>

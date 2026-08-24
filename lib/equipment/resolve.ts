@@ -28,13 +28,15 @@ export function resolveEquipment(entries: CombustionAsset[]): CombustionAsset[] 
   for (const e of entries) {
     const equipment = Array.isArray(e.equipment) ? e.equipment : [];
 
-    // A source with no equipment cannot happen under D8, but persisted state
-    // predates the guarantee - pass it through rather than dropping it.
+    // D8 (at least one equipment) is enforced at the WRITE points - the
+    // hydrate-time migration, addCombustion / importCombustion, source
+    // creation - and is deliberately NOT a type invariant (`equipment?:`,
+    // Ruling K), so this reader cannot assume it. Degrade by passing the entry
+    // through unexpanded rather than dropping it: its volume and opex still
+    // reach the engine as one row keyed to the entry id.
     if (equipment.length === 0) {
       // Cleared for the same reason every other emitted row clears it: a
-      // resolved row is never itself re-splittable. Under D8 a source always
-      // has equipment, so this branch only fires for persisted state that
-      // predates the guarantee.
+      // resolved row is never itself re-splittable.
       out.push({ ...e, allocations: undefined });
       continue;
     }

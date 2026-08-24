@@ -614,7 +614,11 @@ const MATURITY_CLS: Record<EquipmentAlternative["maturity"], string> = {
 };
 
 function AlternativesPanel({ asset }: { asset: CombustionAsset }) {
-  const alts = alternativesFor(asset.endUse);
+  // Through the equipment: a RAW baseAssets entry has no flat endUse (D4
+  // moved it onto equipment[0]), so alternativesFor() returned [] and this
+  // whole panel silently vanished for every migrated source. Task 7 rebinds
+  // this component to the resolved rows and deletes the fallback.
+  const alts = alternativesFor(asset.endUse ?? asset.equipment?.[0]?.endUse);
   if (alts.length === 0) return null;
   const label = endUseProfile(asset)?.label ?? "this equipment";
   return (
@@ -1240,7 +1244,18 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
   const asset = kind === "asset" ? baseAssets.find((a) => a.id === id) : undefined;
   const system = kind === "system" ? baseSystems.find((s) => s.id === id) : undefined;
   if (!asset && !system) return null;
-  const sug: Suggestion = asset ? suggestForAsset(asset) : suggestForSystem(system!);
+  // Same D4 read-through as AlternativesPanel. Without it suggestForAsset sees
+  // no endUse (generic efficiency hint, no end-use-aware electrify cop/capex)
+  // and no unitCount, which segments.ts masks as `?? 1` - collapsing a migrated
+  // 30-vehicle fleet's suggested unitsToConvert to 1. Also feeds defaultActions
+  // below, whose mobile efficiency capex scales with unitCount. Task 7 rebinds
+  // this component to the resolved rows and deletes it.
+  const forLevers = asset && {
+    ...asset,
+    endUse: asset.endUse ?? asset.equipment?.[0]?.endUse,
+    unitCount: asset.unitCount ?? asset.equipment?.[0]?.unitCount ?? 1,
+  };
+  const sug: Suggestion = forLevers ? suggestForAsset(forLevers) : suggestForSystem(system!);
   // A split entry has no lever key of its own — applying here would write a
   // dead settings.byAsset entry under the entry's id (zero effect on
   // computed abatement, no error shown). Disable rather than offer a
@@ -1250,7 +1265,7 @@ function SuggestionCard({ kind, id }: { kind: "asset" | "system"; id: string }) 
   const apply = (actions: SuggestedAction[]) => {
     setSettings((p) => {
       if (asset) {
-        const cur = p.byAsset[asset.id] ?? defaultActions(asset);
+        const cur = p.byAsset[asset.id] ?? defaultActions(forLevers!);
         const next: typeof cur = { ...cur };
         for (const a of actions) (next as unknown as Record<string, unknown>)[a.lever] = { ...(next as unknown as Record<string, Record<string, unknown>>)[a.lever], ...a.patch };
         return { ...p, byAsset: { ...p.byAsset, [asset.id]: next } };
