@@ -291,7 +291,7 @@ row with real numbers:
 ⓘ How this is split
   Each equipment gets a share of 1,88,000 SCM in proportion to
   capacity × running hours.
-  Boiler 1 = 2.0 × 6,000 = 12,000 of 23,000 total → 42.6% → 98,087 SCM
+  Boiler 1 = 2.0 × 6,000 = 12,000 of 23,000 total → 52.2% → 98,087 SCM
 ```
 
 **Requirement: the explainer must not re-derive the arithmetic.** A single
@@ -303,6 +303,12 @@ is worse than no explainer.
 (The mockup shown during brainstorming had inconsistent arithmetic — a 28,200
 weight total that should have been 23,000, and a leftover shown under a
 computed basis, which invariant 2 forbids. Corrected here.)
+
+*(Amended 2026-08-24: the correction above fixed the weight total but not the
+percentage derived from it — 12,000/28,200 is 42.6%, 12,000/23,000 is 52.2%.
+Found during implementation by an agent that refused to reproduce the printed
+figure, on the grounds that matching it would mean re-deriving the arithmetic
+this very section forbids. The implementation prints the computed 52.2%.)*
 
 ## 5. UI
 
