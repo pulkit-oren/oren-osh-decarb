@@ -26,7 +26,7 @@ import {
 import { resolveCombustion, resolveRefrigeration } from "./yearly";
 import { allIds, migrateRefrigeration, migrateSettings, uniqueId } from "./store-helpers";
 import { resolveEquipment } from "./equipment/resolve";
-import { migrateEquipment } from "./equipment/migrate";
+import { migrateEquipment, mintFirstEquipment } from "./equipment/migrate";
 
 interface StoreShape {
   combustion: CombustionByYear;
@@ -146,10 +146,15 @@ export function ScenarioProvider({
       const id = uniqueId("c", allIds(prev));
       const annualVolume = 10000;
       const opex = Math.round(annualVolume * (FUELS.diesel.typicalPricePerUnit ?? 0));
-      const line: CombustionAsset = {
+      const base: CombustionAsset = {
         id, name: "New fuel", category: "stationary", fuelType: "diesel", unit: "L",
         annualVolume, opex,
-        equipment: [{ id, name: "New fuel", unitCount: 1, remainingLife: 10 }],
+      };
+      const line: CombustionAsset = {
+        ...base,
+        // D8 (Ruling O): mint through the one shared helper so this can't
+        // silently diverge from the source-creation and import paths.
+        equipment: [mintFirstEquipment(base)],
         allocations: { [id]: annualVolume },
       };
       pendingAssetRef.current = line;
@@ -168,15 +173,23 @@ export function ScenarioProvider({
       const lines = rows.map((r) => {
         const id = uniqueId("c", ids);
         ids.push(id);
+        const entry = { ...r, id } as CombustionAsset;
         // D8 again: the single minted equipment reuses the entry id, so the
         // byAsset seeding below (keyed on the entry id) is already the
-        // equipment's lever key.
+        // equipment's lever key. Mint through the shared helper (Ruling O) —
+        // never a fresh literal — and drop the flat fields it shadows so an
+        // imported row doesn't carry stale remainingLife/unitCount/endUse
+        // alongside the equipment array (Ruling P).
+        const equipment = entry.equipment?.length ? entry.equipment : [mintFirstEquipment(entry)];
+        const kept = { ...entry } as unknown as Record<string, unknown>;
+        delete kept.remainingLife;
+        delete kept.unitCount;
+        delete kept.endUse;
         return {
-          ...r, id,
-          equipment: r.equipment?.length
-            ? r.equipment
-            : [{ id, name: r.name, unitCount: r.unitCount ?? 1, remainingLife: r.remainingLife ?? 10 }],
-        } as CombustionAsset;
+          ...kept,
+          equipment,
+          allocations: entry.allocations ?? { [id]: entry.annualVolume ?? 0 },
+        } as unknown as CombustionAsset;
       });
       pendingImportRef.current = lines;
       return { ...prev, [year]: [...(prev[year] ?? []), ...lines] };

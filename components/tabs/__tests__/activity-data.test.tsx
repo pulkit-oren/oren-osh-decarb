@@ -454,27 +454,6 @@ describe("ActivityDataTab — SourceListScreen (Task 1)", () => {
   });
 });
 
-// ── End-use resets on type change ───────────────────────────────────────────
-
-describe("ActivityDataTab — end-use resets on type change", () => {
-  beforeEach(() => { window.localStorage.clear(); });
-
-  it("clears the end-use when the stationary/mobile type changes", async () => {
-    renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
-    fireEvent.click(await screen.findByText("Fuels – Liquid"));
-    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
-    // switch to mobile, choose Truck
-    fireEvent.click(screen.getByRole("button", { name: /^mobile$/i }));
-    const sel = document.getElementById("src-enduse") as HTMLSelectElement;
-    const truck = Array.from(sel.querySelectorAll("option")).find((o) => /Truck/.test(o.textContent || ""));
-    fireEvent.change(sel, { target: { value: truck!.value } });
-    expect(sel.value).not.toBe("");
-    // switch back to stationary → end-use must reset
-    fireEvent.click(screen.getByRole("button", { name: /^stationary$/i }));
-    expect((document.getElementById("src-enduse") as HTMLSelectElement).value).toBe("");
-  });
-});
-
 // ── End-use selector (combustion) ───────────────────────────────────────────
 describe("ActivityDataTab — end-use selector", () => {
   beforeEach(() => { window.localStorage.clear(); });

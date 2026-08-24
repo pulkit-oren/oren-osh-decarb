@@ -9,8 +9,8 @@ import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { fromRef, toRef } from "@/lib/unit-convert";
 import { fmt, cn } from "@/lib/utils";
 import type { CombustionAsset, FuelId, FuelUnit, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
-import { endUsesFor, type EndUseId } from "@/lib/model/end-use";
 import { refrigClassesFor, type RefrigClassId } from "@/lib/model/refrigerant-class";
+import { mintFirstEquipment } from "@/lib/equipment/migrate";
 
 type BuUnit = { name: string; aggregate: boolean };
 
@@ -53,7 +53,6 @@ export function SourceListScreen({
   const [selectedGas, setSelectedGas] = useState<RefrigerantId | "">("");
   const [systemType, setSystemType] = useState<SystemType>("commercialHVAC");
   const [selectedBu, setSelectedBu] = useState("");
-  const [endUse, setEndUse] = useState<EndUseId | "">("");
   const [equipmentClass, setEquipmentClass] = useState<RefrigClassId | "">("");
 
   const CatIcon = CAT_ICON[def.meta];
@@ -79,7 +78,6 @@ export function SourceListScreen({
     setSelectedGas(gases[0]?.id ?? "");
     setSystemType("commercialHVAC");
     setSelectedBu("");
-    setEndUse("");
     setEquipmentClass("");
     setShowForm(true);
   };
@@ -91,7 +89,6 @@ export function SourceListScreen({
       FUELS_BY_CATEGORY[t].includes(f.id)
     );
     setSelectedFuel(fuels[0]?.id ?? "");
-    setEndUse("");
   };
 
   // Sources for this category — use shared fuelFamily helper
@@ -122,19 +119,28 @@ export function SourceListScreen({
     } else {
       if (!selectedFuel) return;
       const fuelId = selectedFuel as FuelId;
-      addCombustionAsset(year, {
-        id: newId("c"),
+      const id = newId("c");
+      const base: CombustionAsset = {
+        id,
         name: sourceName.trim(),
         category: fuelType,
         fuelType: fuelId,
         unit: FUELS[fuelId].unit,
         annualVolume: 0,
         opex: 0,
-        remainingLife: 10,
-        unitCount: 1,
         bu: selectedBu || undefined,
-        endUse: endUse || undefined,
         excluded: false,
+      };
+      addCombustionAsset(year, {
+        ...base,
+        // D8: a source is never without equipment. Reusing the source id here
+        // is what keeps a lever keyed to this source valid if it is later
+        // split. Mint through the one shared helper (Ruling O) — never a
+        // fresh equipment literal.
+        equipment: [mintFirstEquipment(base)],
+        allocations: { [id]: 0 },
+        // capacityUnit stays unset — the user picks it the first time they
+        // record a capacity (Task 6).
       });
     }
     setShowForm(false);
@@ -373,18 +379,6 @@ export function SourceListScreen({
                   {availableGases.map((g) => (
                     <option key={g.id} value={g.id}>{g.label}</option>
                   ))}
-                </select>
-              </div>
-            )}
-
-            {/* End-use */}
-            {!isRefrigerant && (
-              <div className="flex flex-col gap-1">
-                <label htmlFor="src-enduse" className="text-[11px] font-semibold text-ink-soft">End-use</label>
-                <select id="src-enduse" value={endUse} onChange={(e) => setEndUse(e.target.value as EndUseId | "")}
-                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400">
-                  <option value="">Unspecified</option>
-                  {endUsesFor(fuelType).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
               </div>
             )}

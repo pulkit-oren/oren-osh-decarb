@@ -40,8 +40,11 @@ export function parseCombustionRows(text: string): ParsedRow[] {
         unit: FUELS[fuelId].unit,
         annualVolume: amount,
         opex: Math.round(amount * (FUELS[fuelId].typicalPricePerUnit ?? 0)),
-        remainingLife: 10,
-        unitCount: 1,
+        // D8: no equipment can be minted here — the entry has no id yet.
+        // The importCombustion call site (lib/store.tsx) mints the first
+        // equipment via mintFirstEquipment once an id is assigned, so this
+        // asset must not pre-empt it with flat remainingLife/unitCount
+        // (Ruling P — those would be shadowed leftovers, not merged).
       },
       matched: matchedId != null,
     });
