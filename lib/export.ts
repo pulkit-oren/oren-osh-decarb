@@ -6,7 +6,7 @@
    ============================================================ */
 
 import { ALT_FUELS, DEFRA_YEARS, FUELS, REFRIGERANTS } from "./model/factors";
-import { CAPEX_LIFETIME } from "./model";
+import { financeAssumptionsFrom, resolvePrice, S1_LIFETIME_YEARS } from "@/lib/finance";
 import { rampFraction } from "./model/trajectory";
 import { FY_YEARS, fyLabel } from "./model/types";
 import type {
@@ -28,13 +28,22 @@ export function inputsSheet(
   const rows: (string | number)[][] = [[
     "FY", "Kind", "Name", "Category / system", "Fuel / refrigerant", "Unit",
     "Annual volume / topped-up kg", "—", "OPEX / gas cost per kg", "Remaining life (yrs)", "Unit count",
+    // Which price every money figure for this source rests on. "reference"
+    // means the engine used a published typical price because no spend was
+    // entered — the figures are still real, but they are an estimate, and an
+    // assurance reader is entitled to see which.
+    "Price basis", "Price per unit",
   ]];
   for (const y of FY_YEARS) {
     for (const a of combustion[y] ?? []) {
-      rows.push([fyLabel(y), "Combustion", a.name, a.category, FUELS[a.fuelType].label, a.unit, a.annualVolume, "", a.opex, a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? "", a.unitCount ?? a.equipment?.[0]?.unitCount ?? ""]);
+      const p = resolvePrice(a);
+      rows.push([fyLabel(y), "Combustion", a.name, a.category, FUELS[a.fuelType]?.label ?? a.fuelType, a.unit, a.annualVolume, "", a.opex, a.remainingLife ?? a.equipment?.[0]?.remainingLife ?? "", a.unitCount ?? a.equipment?.[0]?.unitCount ?? "", p.basis, round1(p.pricePerUnit)]);
     }
     for (const s of refrigeration[y] ?? []) {
-      rows.push([fyLabel(y), "Refrigeration", s.name, s.systemType, REFRIGERANTS[s.refrigerant].label, "kg", s.toppedUpKg, "", s.gasCostPerKg, "", ""]);
+      // A refrigerant charge is priced per kg directly, so there is no
+      // measured/reference resolution to report — say so rather than leaving
+      // the cell blank, which reads as "not checked".
+      rows.push([fyLabel(y), "Refrigeration", s.name, s.systemType, REFRIGERANTS[s.refrigerant]?.label ?? s.refrigerant, "kg", s.toppedUpKg, "", s.gasCostPerKg, "", "", "n/a", s.gasCostPerKg]);
     }
   }
   return { name: "Inputs", rows };
@@ -66,7 +75,26 @@ export function factorsSheet(settings: LeverSettings): SheetSpec {
   rows.push(["Assumption", "REC cost", "Value", g.recCostPerTonne, "per tCO2e"]);
   rows.push(["Assumption", "Carbon price", "Value", g.carbonPricePerTonne, "per tCO2e"]);
   rows.push(["Assumption", "Infrastructure CAPEX", "Value", g.infraCapex, "currency"]);
-  rows.push(["Assumption", "CAPEX annualization", "Value", CAPEX_LIFETIME, "years"]);
+
+  // The finance assumptions are OPTIONAL on GlobalAssumptions, so they must be
+  // printed through the resolver rather than read raw off `g`: an omitted field
+  // is blank there while the engine ran on a default. Printing an assumption
+  // the engine does not use is exactly the defect this replaces (F7) — the old
+  // row claimed a flat 10-year CAPEX annualization while the engine used the
+  // per-lever lives and a discount rate below, so no reader could reconcile the
+  // currency-per-tonne figures by hand.
+  const fa = financeAssumptionsFrom(g);
+  rows.push(["Assumption", "Discount rate (WACC)", "Value", fa.discountRatePct, "%/yr"]);
+  rows.push(["Assumption", "Fuel escalation", "Value", fa.fuelEscalationPct, "%/yr"]);
+  rows.push(["Assumption", "Electricity escalation", "Value", fa.elecEscalationPct, "%/yr"]);
+  rows.push(["Assumption", "Other escalation", "Value", fa.otherEscalationPct, "%/yr"]);
+  rows.push(["Assumption", "Maintenance share of spend", "Value", fa.maintenanceShareOfSpendPct, "%"]);
+  rows.push(["Assumption", "EV maintenance retained", "Value", fa.evMaintenanceRatioPct, "%"]);
+  rows.push(["Assumption", "Heat-pump maintenance retained", "Value", fa.heatPumpMaintenanceRatioPct, "%"]);
+  for (const [family, years] of Object.entries(S1_LIFETIME_YEARS)) {
+    rows.push(["Assumption", `Asset life - ${family}`, "Value", years, "years"]);
+  }
+  rows.push(["Assumption", "Cost basis", "Value", "levelised cost of abatement over each lever's asset life, discounted", ""]);
   return { name: "Factors", rows };
 }
 
