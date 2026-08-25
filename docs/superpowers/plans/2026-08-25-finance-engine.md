@@ -1181,17 +1181,31 @@ describe("Scope 1 on the seeded company, priced by reference", () => {
   });
 
   it("F4 fixed: capex on a zero-abatement lever still reaches totalCapex", () => {
-    const { combustion, systems, settings, baseYear } = seedScope1();
-    const dead = {
-      ...settings,
-      byAsset: { ...settings.byAsset, "c-6": { ...settings.byAsset["c-6"], efficiency: { enabled: true, savingPct: 0, capex: 1_000_000, startYear: 2026, targetYear: 2028 } } },
+    // MUST mirror Task 1's rebuilt F4 witness exactly. An earlier draft used the
+    // seeded company with `efficiency: { savingPct: 0, capex: 1_000_000 }`, which
+    // does NOT work: lib/model/index.ts:122 guards capex accrual behind
+    // `r.effFraction > 0`, so at savingPct 0 the 1,000,000 never enters effCapex
+    // and the test measures nothing. Use a single synthetic stationary asset with
+    // zero volume and an electrify lever instead — stationary electrifyCapexFor
+    // returns assetCapex unconditionally, and capacityPct/100 = 0.5 clears the
+    // `> 0` guard, so the capex genuinely accrues while abatement stays 0.
+    const asset: CombustionAsset = {
+      id: "z-0", name: "Idle boiler", category: "stationary", fuelType: "png",
+      unit: "m3", annualVolume: 0, opex: 0, unitCount: 1, remainingLife: 10,
     };
-    // A bare `toBeGreaterThanOrEqual(1_000_000)` would pass on the seeded
-    // company's existing electrify capex alone. Compare with-vs-without so the
-    // assertion can only pass if the dead lever's own 1,000,000 arrived.
-    const before = compute(combustion, systems, settings, baseYear).kpis.totalCapex;
-    const after = compute(combustion, systems, dead, baseYear).kpis.totalCapex;
-    expect(after - before).toBeCloseTo(1_000_000, 6);
+    const settings: LeverSettings = {
+      byAsset: { "z-0": { ...defaultActions(asset), electrify: { ...defaultActions(asset).electrify, enabled: true, capacityPct: 50, assetCapex: 1_000_000 } } },
+      bySystem: {},
+      // infraCapex MUST be 0 — index.ts:236 otherwise adds it on top and the
+      // assertion stops measuring one clean number.
+      assumptions: { ...DEFAULT_SETTINGS.assumptions, infraCapex: 0 },
+    };
+    const r = compute([asset], [], settings, 2025);
+    const el = r.levers.find((l) => l.id === "electrification")!;
+
+    expect(el.abatementT).toBe(0);           // no volume, so no tonnes
+    expect(el.capex).toBeCloseTo(1_000_000, 6); // but the capex is real
+    expect(r.kpis.totalCapex).toBeCloseTo(1_000_000, 6); // and it survives the roll-up now
   });
 
   it("every lever reports the price basis it was costed on", () => {
