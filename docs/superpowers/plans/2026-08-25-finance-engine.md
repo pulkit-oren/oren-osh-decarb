@@ -1334,11 +1334,23 @@ and in the returned `kpis`:
       priceBasisSummary: basisTally,
 ```
 
-Add the matching fields to `ComputeResult["kpis"]` and `LeverSummary` in `lib/model/index.ts`, and re-export `OpexPart` from `@/lib/finance` so existing importers are unaffected:
+Add the matching fields to `ComputeResult["kpis"]` and `LeverSummary` in `lib/model/index.ts`.
+
+Then re-point `OpexPart` at the finance module. **You must DELETE the local
+definition first** — `lib/model/index.ts:37` currently declares
+`export interface OpexPart { ... }`, and adding a re-export beside it is a
+duplicate identifier that fails `tsc`. Delete lines 37-41 (the interface and its
+doc comment), then add:
 
 ```ts
 export type { OpexPart } from "@/lib/finance";
 ```
+
+Task 2 deliberately left the duplicate in place rather than reaching into a file
+it did not own, so resolving it is this task's job. Every existing importer of
+`OpexPart` from `@/lib/model` keeps working, because the re-export preserves the
+name — verify with `npx tsc --noEmit`, which is the whole point of doing it this
+way rather than updating each importer.
 
 - [ ] **Step 6: Stop USING the superseded helpers — do not delete them yet**
 
