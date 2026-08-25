@@ -1326,11 +1326,21 @@ Add the matching fields to `ComputeResult["kpis"]` and `LeverSummary` in `lib/mo
 export type { OpexPart } from "@/lib/finance";
 ```
 
-- [ ] **Step 6: Delete the superseded helpers**
+- [ ] **Step 6: Stop USING the superseded helpers — do not delete them yet**
 
-From `lib/model/finance.ts` delete `weightedCostPerTonne`, `simplePayback` and `annualizedCapex`. Keep `crf`, `annuity`, `yearsToTarget`. Delete `CAPEX_LIFETIME` from `lib/model/index.ts`.
+> **Ruling B (controller, pre-flight).** An earlier draft of this step deleted
+> `weightedCostPerTonne`, `simplePayback`, `annualizedCapex` and
+> `CAPEX_LIFETIME` here. That is impossible: `lib/scope2/model/index.ts:9`
+> imports the first two until Task 7, `lib/goals/initiatives-auto.ts:14`
+> imports `simplePayback` until Task 8, and `lib/export.ts:9` imports
+> `CAPEX_LIFETIME` until Task 9. Deleting them now makes **this task's own
+> mandatory `npx tsc --noEmit` gate fail**. The deletions move to Task 10
+> Step 4, which already greps to prove they are gone.
 
-`lib/model/__tests__/finance.test.ts` will have tests for the deleted functions — delete exactly those cases, leave the rest untouched. Do **not** rewrite assertions for the kept functions.
+In this task, `lib/model/index.ts` must simply stop *calling*
+`weightedCostPerTonne` and `simplePayback` — the engine supplies both now.
+Leave all four symbols exported and leave `lib/model/__tests__/finance.test.ts`
+entirely untouched; Task 10 removes both together.
 
 - [ ] **Step 7: Flip the defect witnesses**
 
@@ -1409,13 +1419,13 @@ const levers = (over: Partial<Scope2Levers> = {}): Scope2Levers => ({
 
 describe("Scope 2 finance", () => {
   it("F8: the user's discount rate now reaches Scope 2 — it was a module constant", () => {
-    const at = (pct: number) => computeScope2([facility()], levers(), 2025, { discountRatePct: pct } as never)
+    const at = (pct: number) => computeScope2([facility()], levers(), 2025, { discountRatePct: pct })
       .levers.find((l) => l.id === "efficiency")!.levelisedCostPerTonne;
     expect(at(0)).not.toBeCloseTo(at(25), 3);
   });
 
   it("reports levelised cost and a payback kind, like Scope 1", () => {
-    const r = computeScope2([facility()], levers(), 2025, { discountRatePct: 10 } as never);
+    const r = computeScope2([facility()], levers(), 2025, { discountRatePct: 10 });
     const eff = r.levers.find((l) => l.id === "efficiency")!;
     expect(Number.isFinite(eff.levelisedCostPerTonne)).toBe(true);
     expect(["discounted", "never", "no-capital"]).toContain(eff.paybackKind);
@@ -1426,23 +1436,80 @@ describe("Scope 2 finance", () => {
       ...levers().byFacility["f-0"],
       generation: { ...levers().byFacility["f-0"].generation, enabled: true, solarKwp: 300 },
     } } });
-    const r = computeScope2([facility()], withGen, 2025, { discountRatePct: 10 } as never);
+    const r = computeScope2([facility()], withGen, 2025, { discountRatePct: 10 });
     const gen = r.levers.find((l) => l.id === "generation")!;
     expect(gen.series[gen.series.length - 1].year - gen.series[0].year + 1).toBeGreaterThanOrEqual(25);
   });
 });
 ```
 
-The executor must first read `computeScope2`'s real signature and adjust the assumption argument to match — the `as never` casts above are placeholders for whatever that parameter's type is, and must be replaced with the true type, not left cast.
+These calls pass a 4th argument that does not exist yet — Step 3 adds it. That is why this test fails before Step 3 and not merely after.
 
 - [ ] **Step 2: Run it and watch it fail**
 
 Run: `npx vitest run lib/finance/__tests__/scope2-wiring.test.ts`
 Expected: FAIL — `levelisedCostPerTonne` undefined; the discount-rate test shows no change.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Add the missing assumptions parameter (Ruling D)**
 
-Delete `CAPEX_LIFETIME`, `DISCOUNT_RATE_PCT` and the local `S2_LIFETIME_YEARS` from `lib/scope2/model/index.ts`. Import `S2_LIFETIME_YEARS`, `buildLeverSeries`, `leverMetrics`, `programmeMetrics`, `financeAssumptionsFrom` from `@/lib/finance`. Rebuild `mk` exactly as Task 6 Step 4 does, substituting `S2_LIFETIME_YEARS` and `scope: 2`, and take the discount rate from the resolved assumptions rather than a constant. Replace the roll-up as in Task 6 Step 5.
+> **Ruling D (controller, pre-flight).** `computeScope2(facilities, levers, baseYear)`
+> has **no assumptions parameter**, and `lib/scope2/model/index.ts` never
+> references `assumptions` or `GlobalAssumptions` anywhere. That is *why*
+> `DISCOUNT_RATE_PCT` is a module constant: the user's discount rate is
+> structurally unreachable from Scope 2, not merely ignored. F8 cannot be fixed
+> here without a signature change.
+
+Add a fourth, **optional** parameter so every existing caller keeps compiling:
+
+```ts
+export function computeScope2(
+  facilities: Facility[],
+  levers: Scope2Levers,
+  baseYear: number,
+  assumptions?: Partial<GlobalAssumptions>,
+): Scope2ComputeResult {
+  const fa = financeAssumptionsFrom(assumptions);
+  // …
+```
+
+Then update these three production callers to pass the assumptions they already hold:
+- `lib/combined-balance.ts:69`
+- `lib/scope2/model/energy-balance.ts:82`
+- `lib/scope2/model/pathways.ts:53`
+
+Existing Scope 2 tests call the 3-arg form and must keep working untouched — that is what `?` buys.
+
+- [ ] **Step 4: Extract the shared summariser instead of duplicating it (Ruling C)**
+
+> **Ruling C (controller, pre-flight).** An earlier draft said "rebuild `mk`
+> exactly as Task 6 Step 4 does" — i.e. it mandated a verbatim second copy of
+> the cost-assembly block. Two hand-synchronised copies of the cost assembly is
+> precisely the drift this whole change exists to end, and spec §3's stated goal
+> is "one place to audit". The spec is the binding authority, so: extract, do
+> not duplicate.
+
+Add to `lib/finance/metrics.ts`:
+
+```ts
+/** Assemble one lever's money summary. Shared by both scopes: they differ only
+ *  in their lifetime table and their scope literal, so the assembly itself has
+ *  exactly one implementation. */
+export function summariseLever(input: LeverInput, baseYear: number, a: FinanceAssumptions): {
+  series: SeriesRow[];
+  metrics: LeverMetrics;
+} {
+  const series = buildLeverSeries(input, baseYear, a);
+  return { series, metrics: leverMetrics(series, input.capex) };
+}
+```
+
+Refactor Task 6's `mk` in `lib/model/index.ts` to call it, then write Scope 2's
+`mk` as a second caller. Scope 2 supplies `S2_LIFETIME_YEARS[id]` for
+`assetLifeYears` and `scope: 2`; everything else comes from the shared helper.
+Replace Scope 2's roll-up with `programmeMetrics` as in Task 6 Step 5.
+
+Leave `CAPEX_LIFETIME`, `DISCOUNT_RATE_PCT` and the local `S2_LIFETIME_YEARS`
+**exported but unused** — Task 10 Step 4 deletes them, per Ruling B.
 
 - [ ] **Step 4: Run the test, then the suite**
 
@@ -1475,52 +1542,85 @@ ignored here, so the two scopes priced capital differently."
 
 **Interfaces:**
 - Consumes: `resolveFuelSpend`, `resolvePrice`, `financeAssumptionsFrom` from `@/lib/finance`.
-- Produces: no signature change; `paybackYears` may now be `undefined` where it was `0`.
+- Produces: `autoInitiatives` gains an optional 3rd parameter
+  `assumptions?: Partial<GlobalAssumptions>`; `paybackYears` may now be
+  `undefined` where it was `0`.
 
-Three duplications die here: the price divide at `:65`, and the literals `0.2 * 0.65` at `:62` — which are `maintenanceShareOfSpendPct` and `evMaintenanceRatioPct` hardcoded, so a user editing either had no effect on this file.
+> **Ruling E (controller, pre-flight).** The plan originally called a function
+> named `autoInitiativesFor(assets, settings)`. It does not exist — I invented
+> it while writing the plan. The real export is
+> `autoInitiatives(goal: Goal, inv: Inventories): Initiative[]`, and
+> `assetOpexDelta` is module-private, so the tests must assert through the
+> returned `Initiative[]`.
+>
+> **Ruling E (extended).** `lib/goals/initiatives-auto.ts:29` holds
+> `const ASSUMPTIONS = DEFAULT_SETTINGS.assumptions` — a module constant. Like
+> Scope 2 before Ruling D, this layer cannot see the user's assumptions at all,
+> which is *why* line 62 could hardcode `0.2 * 0.65` without anyone noticing.
+> Fixing F11 properly therefore needs the same optional-parameter treatment:
+> add `assumptions?: Partial<GlobalAssumptions>` as a 3rd parameter, resolve it
+> with `financeAssumptionsFrom`, and keep `ASSUMPTIONS` only for whatever
+> non-finance defaults still need it. Every existing caller passes two
+> arguments and must keep compiling — that is what `?` buys.
+
+Three duplications die here: the price divide at `:65`, and the literals
+`0.2 * 0.65` at `:62` — which are `maintenanceShareOfSpendPct` and
+`evMaintenanceRatioPct` inlined, so a user editing either had no effect.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
 // lib/finance/__tests__/goals-wiring.test.ts
 import { describe, expect, it } from "vitest";
-import { seedScope1, sourceNamed } from "./seed-fixture";
+import { autoInitiatives } from "@/lib/goals/initiatives-auto";
+import type { Inventories } from "@/lib/goals/select";
+import type { Goal } from "@/lib/goals/types";
+import { seedScope1 } from "./seed-fixture";
 
-// The executor must import the real exported name from lib/goals/initiatives-auto
-// (read the file first) and drive it with the seeded settings below.
-import { autoInitiativesFor } from "@/lib/goals/initiatives-auto";
+/** The executor must read lib/goals/types.ts and lib/goals/__tests__/initiatives-auto.test.ts
+ *  for the exact Goal shape, and reuse that file's existing `goalOf(...)` helper
+ *  pattern rather than inventing a new fixture. */
+const invFrom = (rows: ReturnType<typeof seedScope1>): Inventories => ({
+  combustion: { [rows.baseYear]: rows.raw },
+  refrigeration: { [rows.baseYear]: rows.systems },
+  facilities: {},
+});
 
 describe("auto initiatives price fuel through the shared engine", () => {
-  it("F11: a zero-spend source no longer produces a fuel-switch cost with no offset", () => {
-    const { combustion, settings } = seedScope1();
-    const dg = sourceNamed(combustion, "DG Set");
-    const deltas = autoInitiativesFor([dg], settings as never);
-    const fuelish = deltas.filter((d) => /fuel|blend|bio/i.test(d.name));
-    expect(fuelish.length).toBeGreaterThan(0);
-    for (const d of fuelish) {
-      expect(d.annualOpexDelta).toBeDefined();
-      expect(d.annualOpexDelta!).toBeLessThan(0);   // biodiesel at 78 beats diesel at 92
-    }
+  it("F11: a zero-spend source no longer yields a fuel-switch cost with no offset", () => {
+    const rows = seedScope1();
+    const goal: Goal = /* an s1 reduce-goal on the seeded base year — see goalOf() */ null as never;
+    const inits = autoInitiatives(goal, invFrom(rows));
+    const withDelta = inits.filter((i) => i.annualOpexDelta != null && i.annualOpexDelta !== 0);
+    expect(withDelta.length).toBeGreaterThan(0);
+    // At least one initiative must now show a RUNNING SAVING. With a zero fuel
+    // price every one of them was a cost, because nothing was displaced.
+    expect(withDelta.some((i) => i.annualOpexDelta! < 0)).toBe(true);
   });
 
-  it("the hardcoded 0.2 × 0.65 is gone — changing the assumptions moves the number", () => {
-    const { combustion, settings } = seedScope1();
-    const veh = sourceNamed(combustion, "Company Owned Vehicles Diesel");
+  it("the hardcoded 0.2 x 0.65 is gone — moving the assumption moves the number", () => {
+    const rows = seedScope1();
+    const goal: Goal = null as never; // same goal as above
     const run = (evRatio: number) =>
-      autoInitiativesFor([veh], { ...settings, assumptions: { ...settings.assumptions, evMaintenanceRatioPct: evRatio } } as never)
-        .find((d) => /electr/i.test(d.name))?.annualOpexDelta;
-    expect(run(0)).not.toBe(run(100));
+      autoInitiatives(goal, invFrom(rows), { evMaintenanceRatioPct: evRatio })
+        .reduce((s, i) => s + (i.annualOpexDelta ?? 0), 0);
+    expect(run(0)).not.toBeCloseTo(run(100), 3);
   });
 
   it("no capital at risk yields an undefined payback, never 0", () => {
-    const { combustion, settings } = seedScope1();
-    const dg = sourceNamed(combustion, "DG Set");
-    for (const d of autoInitiativesFor([dg], settings as never)) {
-      if (d.budget === 0) expect(d.paybackYears).toBeUndefined();
+    const rows = seedScope1();
+    const goal: Goal = null as never; // same goal as above
+    for (const i of autoInitiatives(goal, invFrom(rows))) {
+      if (i.budget === 0) expect(i.paybackYears).toBeUndefined();
     }
   });
 });
 ```
+
+**The three `null as never` goal placeholders must be replaced** with a real
+`Goal` built the way `lib/goals/__tests__/initiatives-auto.test.ts` already
+builds one (it has a `goalOf(...)` helper — reuse its shape). A test committed
+with `null as never` in it fails this task.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -1529,7 +1629,9 @@ Expected: FAIL — `annualOpexDelta` positive (a cost), and the EV-ratio test sh
 
 - [ ] **Step 3: Implement**
 
-Replace lines 55-70's body:
+Add the optional parameter per Ruling E, resolve it once
+(`const fa = financeAssumptionsFrom(assumptions)`), thread `fa` down to
+`assetOpexDelta`, and replace lines 55-70's body:
 
 ```ts
   const fa = financeAssumptionsFrom(settings.assumptions);
@@ -1585,7 +1687,7 @@ as literals — so editing either assumption had no effect here."
 ## Task 9: Export the assumptions actually used, and the price basis
 
 **Files:**
-- Modify: `lib/export.ts:9` (import), `:69` (the assumption row), plus the per-source sheet
+- Modify: `lib/export.ts:9` (import) and `:69` (the stale assumption row, inside `factorsSheet`), plus `inputsSheet` / `scenarioSheet` for the price-basis column
 - Test: `lib/finance/__tests__/export-assumptions.test.ts`
 
 **Interfaces:**
@@ -1597,7 +1699,7 @@ as literals — so editing either assumption had no effect here."
 ```ts
 // lib/finance/__tests__/export-assumptions.test.ts
 import { describe, expect, it } from "vitest";
-import { buildExportRows } from "@/lib/export";   // executor: use the real exported name
+import { factorsSheet, inputsSheet, scenarioSheet } from "@/lib/export";
 import { seedScope1 } from "./seed-fixture";
 
 const flat = (rows: unknown[][]) => rows.map((r) => r.join("|")).join("\n");
@@ -1605,13 +1707,13 @@ const flat = (rows: unknown[][]) => rows.map((r) => r.join("|")).join("\n");
 describe("export states the assumptions the engine actually used", () => {
   it("F7: the stale flat-10-year CAPEX annualization row is gone", () => {
     const { combustion, systems, settings, baseYear } = seedScope1();
-    const text = flat(buildExportRows(combustion, systems, settings, baseYear) as unknown[][]);
+    const text = flat(factorsSheet(settings).rows);
     expect(text).not.toMatch(/CAPEX annualization\|.*\|10\|years/);
   });
 
   it("prints the discount rate, every escalation rate and the per-lever lifetimes", () => {
     const { combustion, systems, settings, baseYear } = seedScope1();
-    const text = flat(buildExportRows(combustion, systems, settings, baseYear) as unknown[][]);
+    const text = flat(factorsSheet(settings).rows);
     for (const label of ["Discount rate", "Fuel escalation", "Electricity escalation", "Maintenance share"]) {
       expect(text).toContain(label);
     }
@@ -1622,7 +1724,10 @@ describe("export states the assumptions the engine actually used", () => {
 
   it("names every source priced by assumption rather than by measurement", () => {
     const { combustion, systems, settings, baseYear } = seedScope1();
-    const text = flat(buildExportRows(combustion, systems, settings, baseYear) as unknown[][]);
+    // The per-source price basis belongs on a SOURCE sheet, not the factors
+    // sheet. Read lib/export.ts to see which of inputsSheet / scenarioSheet
+    // carries one row per combustion source, and put the column there.
+    const text = flat(scenarioSheet(settings, combustion, systems).rows);
     expect(text).toContain("reference");   // all seven seeded sources
     expect(text).toContain("DG Set");
   });
@@ -1682,7 +1787,7 @@ assumption."
 - Test: `lib/finance/__tests__/reconciliation.test.ts`
 
 **Interfaces:**
-- Consumes: `compute`, `computeScope2`, `autoInitiativesFor`, `@/lib/finance`.
+- Consumes: `compute`, `computeScope2`, `autoInitiatives`, `@/lib/finance`.
 - Produces: nothing. This task makes the plan's central claim falsifiable.
 
 - [ ] **Step 1: Confirm the pre-change snapshot exists and is not zero**
@@ -1753,14 +1858,37 @@ stop-and-report, not an expectation to update.
 Run: `npx vitest run lib/finance/__tests__/reconciliation.test.ts`
 Expected: PASS, 3 tests. If the first two fail, a consumer is still doing its own arithmetic — find it rather than loosening the tolerance.
 
-- [ ] **Step 4: Delete the old cashflow module**
+- [ ] **Step 4: Delete the superseded helpers and the old cashflow module**
+
+Per **Ruling B**, the four deletions deferred from Task 6 Step 6 happen here,
+now that Tasks 6-9 have removed every caller:
+
+- from `lib/model/finance.ts`: `weightedCostPerTonne`, `simplePayback`, `annualizedCapex` (keep `crf`, `annuity`, `yearsToTarget`)
+- from `lib/model/index.ts`: `CAPEX_LIFETIME`
+- from `lib/scope2/model/index.ts`: `CAPEX_LIFETIME`, `DISCOUNT_RATE_PCT` and the local `S2_LIFETIME_YEARS`, if Task 7 left any behind
+
+In `lib/model/__tests__/finance.test.ts`, delete exactly the cases covering the
+three removed functions. Leave every case for `crf`, `annuity` and
+`yearsToTarget` untouched — do not rewrite their assertions.
+
+Then the cashflow module:
 
 ```bash
 git rm lib/model/cashflow.ts lib/model/__tests__/cashflow.test.ts
 grep -rn "cashflow" --include=*.ts --include=*.tsx lib/ components/ | grep -v lib/finance
 ```
 
-Every hit must be rewired to `buildLeverSeries` / `leverMetrics`. If a UI component consumed `buildCashflow`, point it at `result.levers[].series` and `kpis.npv` / `kpis.peakFunding`.
+**There is a real consumer:** `components/tabs/CfoFinanceTab.tsx` imports
+`buildCashflow` and `DEFAULT_CASHFLOW_ASSUMPTIONS` at line 6, calls
+`buildCashflow(active, baseYear, 2040, {...})` at line 20, and prints the
+escalation rates in a subtitle at line 90. Rewire it:
+
+- the per-lever series is already on the compute result — use `result.levers[].series`
+- programme NPV and funding come from `kpis.npv` / `kpis.peakFunding`
+- the subtitle's rates come from `financeAssumptionsFrom(settings.assumptions)`, so the tab now prints the rates actually in force rather than module defaults
+
+This tab is the one screen whose whole purpose is the money view; treat a
+regression here as Critical, not cosmetic.
 
 - [ ] **Step 5: Prove the duplication is gone**
 
