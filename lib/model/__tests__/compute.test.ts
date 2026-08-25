@@ -28,14 +28,32 @@ describe("compute — opex parts and payback", () => {
     }
   });
 
-  it("fuel switch to a free fuel pays back: 1M capex ÷ 500k/yr saving = 2 yrs", () => {
-    // Displaced fossil spend = 10,000 L × 50% × (1,000,000 ÷ 10,000)/L = 500,000/yr.
+  it("fuel switch to a free fuel: 400k/yr displaced, discounted payback in 2029", () => {
+    // BOTH numbers moved in the finance-engine rework, each for a stated reason.
+    //
+    // 1. Displaced spend 500,000 -> 400,000. The ₹100/L this fixture implies
+    //    (1,000,000 ÷ 10,000 L) is a BLENDED rate: `opex` is documented as fuel
+    //    plus related maintenance. A blend switch changes what goes in the tank
+    //    and leaves the engine's maintenance alone, so only the fuel half is
+    //    displaced. At the default 20% maintenance share the fuel-only rate is
+    //    ₹80/L, and 10,000 L × 50% blend × ₹80 = 400,000/yr.
+    //
+    // 2. Payback 2 -> 3, because it is now discounted and read off the same
+    //    phased series as the cost, not capex ÷ saving. Capex spreads over the
+    //    2026-2030 ramp at 200,000/yr while the saving builds with it and
+    //    escalates 5%/yr, so the cumulative position is:
+    //      2026  +200,000 - 400,000×(1/5)×1.05  = +116,000   cum  +116,000
+    //      2027  +200,000 - 400,000×(2/5)×1.05² = + 23,600   cum  +139,600
+    //      2028  +200,000 - 400,000×(3/5)×1.05³ = - 77,830   cum  + 61,770
+    //      2029  +200,000 - 400,000×(4/5)×1.05⁴ = -188,962   cum  -127,192  <- crosses
+    //    Paid back during 2029, i.e. 3 years after the series opens in 2026.
     const r = compute([asset], [], settings, 2025);
     const fuel = r.levers.find((l) => l.id === "fuelSwitch");
     expect(fuel).toBeDefined();
-    expect(fuel!.annualOpexDelta).toBeCloseTo(-500_000, 0);
-    expect(fuel!.paybackYears).toBeCloseTo(2, 3);
-    expect(r.kpis.paybackYears).toBeCloseTo(2, 3); // only active lever
+    expect(fuel!.annualOpexDelta).toBeCloseTo(-400_000, 0);
+    expect(fuel!.paybackYears).toBe(3);
+    expect(fuel!.paybackKind).toBe("discounted");
+    expect(r.kpis.paybackYears).toBe(3); // only active lever
   });
 
   it("payback is null when opex increases", () => {

@@ -105,3 +105,66 @@ describe("Scope 1 on the seeded company, priced by reference", () => {
     expect(r.levers.reduce((s, l) => s + l.abatementT, 0)).toBeGreaterThan(0);
   });
 });
+
+// Every test above runs on the seeded company, where every source has opex: 0
+// and therefore resolves on the REFERENCE basis. On that basis
+// `spend.fuel === annualVolume * pricePerUnit`, so a formula written in unit
+// prices and one written in the fuel half of the bill give the same answer —
+// which is exactly why a whole-bill error in either survives all seven.
+// These cases put a real measured opex on the asset, where the two diverge.
+describe("Scope 1 on a MEASURED-basis source, where the fuel/maintenance split bites", () => {
+  // 1000 L at a ₹115,000 bill = ₹115/L blended. At a 20% maintenance share:
+  // fuel ₹92,000 (₹92/L), maintenance ₹23,000.
+  const measured: CombustionAsset = {
+    id: "m-1", name: "Measured genset", category: "stationary", fuelType: "diesel",
+    unit: "L", annualVolume: 1000, opex: 115_000, unitCount: 1, remainingLife: 10,
+  };
+  const assumptions = { ...DEFAULT_SETTINGS.assumptions, infraCapex: 0, maintenanceShareOfSpendPct: 20 };
+
+  it("is actually on the measured basis, or the rest of this block proves nothing", () => {
+    const base = defaultActions(measured);
+    const r = compute([measured], [], { byAsset: { "m-1": base }, bySystem: {}, assumptions }, 2025);
+    expect(r.kpis.priceBasisSummary.measured).toBe(1);
+    expect(r.kpis.priceBasisSummary.reference).toBe(0);
+  });
+
+  it("F2, second branch: fuel switch displaces the FUEL half, not the whole bill", () => {
+    const base = defaultActions(measured);
+    const settings: LeverSettings = {
+      byAsset: { "m-1": { ...base, fuelSwitch: { ...base.fuelSwitch, enabled: true, blendPct: 100, altFuelPricePerUnit: 0, retrofitCapex: 0 } } },
+      bySystem: {}, assumptions,
+    };
+    const r = compute([measured], [], settings, 2025);
+    const fs = r.levers.find((l) => l.id === "fuelSwitch")!;
+    const displaced = fs.opexParts.find((p) => p.label === "Displaced fossil fuel spend")!;
+    const applied = applyAssetActions(measured, settings.byAsset["m-1"], assumptions);
+
+    // A blend switch swaps the tank contents; the engine's maintenance is
+    // unaffected, so the ₹23,000 maintenance share is NOT displaced.
+    expect(-displaced.amount).toBeCloseTo(92_000 * applied.fuelFraction, 6);
+    expect(-displaced.amount).toBeLessThan(115_000 * applied.fuelFraction); // the whole-bill answer
+  });
+
+  it("efficiency and fuel switch agree on what a litre of fuel is worth", () => {
+    const base = defaultActions(measured);
+    const eff = compute([measured], [], {
+      byAsset: { "m-1": { ...base, efficiency: { enabled: true, savingPct: 100, capex: 0, startYear: 2026, targetYear: 2026 } } },
+      bySystem: {}, assumptions,
+    }, 2025).levers.find((l) => l.id === "efficiency")!;
+    const fs = compute([measured], [], {
+      byAsset: { "m-1": { ...base, fuelSwitch: { ...base.fuelSwitch, enabled: true, blendPct: 100, altFuelPricePerUnit: 0, retrofitCapex: 0 } } },
+      bySystem: {}, assumptions,
+    }, 2025).levers.find((l) => l.id === "fuelSwitch")!;
+
+    const effSaving = -eff.opexParts.find((p) => p.kind === "fuel")!.amount;
+    const fsDisplaced = -fs.opexParts.find((p) => p.label === "Displaced fossil fuel spend")!.amount;
+    const applied = applyAssetActions(measured, {
+      ...base, fuelSwitch: { ...base.fuelSwitch, enabled: true, blendPct: 100, altFuelPricePerUnit: 0, retrofitCapex: 0 },
+    }, assumptions);
+
+    // Eliminating 100% of the fuel and displacing fraction f of it must value
+    // that fuel identically — otherwise two levers price the same litre
+    // differently, which is the drift this engine exists to end.
+    expect(fsDisplaced).toBeCloseTo(effSaving * applied.fuelFraction, 6);
+  });
+});

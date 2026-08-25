@@ -13,7 +13,6 @@ import {
   leverMetrics,
   programmeMetrics,
   resolveFuelSpend,
-  resolvePrice,
   S1_LIFETIME_YEARS,
 } from "@/lib/finance";
 import type { LeverMetrics, OpexPart, PriceBasis, SeriesRow } from "@/lib/finance";
@@ -193,7 +192,14 @@ export function compute(
         fuelEnd = Math.max(fuelEnd, acts.flexFuel!.targetYear);
       }
       const postEffVolume = a.annualVolume * (1 - r.effFraction);
-      fuelDispSpend += postEffVolume * r.fuelFraction * resolvePrice(a).pricePerUnit;
+      // The FUEL half only. A blend switch swaps what goes in the tank; the
+      // same engine still needs the same maintenance, so no maintenance is
+      // displaced. Crediting `resolvePrice().pricePerUnit` here credited the
+      // whole bill on any MEASURED source, because that price is opex/volume
+      // — fuel AND maintenance — while `altFuelPricePerUnit` is a pump price.
+      // Same defect as F2, second branch. Invisible on the seeded company,
+      // where every source is reference-priced and the two forms coincide.
+      fuelDispSpend += spend.fuel * (1 - r.effFraction) * r.fuelFraction;
       fuelNewSpend += postEffVolume * r.fuelFraction * acts.fuelSwitch.altFuelPricePerUnit;
       fuelCapex += (fuelOn ? acts.fuelSwitch.retrofitCapex : 0)
         + (flexOn ? acts.flexFuel!.unitsToConvert * acts.flexFuel!.vehicleCapex : 0);
