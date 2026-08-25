@@ -1264,11 +1264,25 @@ Then the four sites change as follows. **Efficiency** (was `effOpexSaving += a.o
       elecMaintAddBack += spend.maintenance * (1 - r.effFraction) * r.elecFraction * retainRatio;
 ```
 
-**Fuel switch** — delete the inline divide entirely:
+**Fuel switch** — delete the inline divide entirely, and credit the FUEL half:
+
+> **Ruling P (controller, found during Task 6 verification).** An earlier draft
+> of this step read
+> `fuelDispSpend += postEffVolume * r.fuelFraction * resolvePrice(a).pricePerUnit`.
+> That is F2 again, in a second branch. On a MEASURED source
+> `resolvePrice().pricePerUnit` is `opex / annualVolume`, and `opex` is
+> documented as fuel PLUS maintenance, so the line credits the whole bill and
+> then compares it against `altFuelPricePerUnit`, a pure pump price. A blend
+> switch leaves the engine's maintenance alone, so the saving was overstated by
+> `1/(1-m)` — 25% at the 20% default, biased one way. It was invisible to all
+> seven of this task's tests because the seeded company is entirely
+> reference-priced, and on that basis `spend.fuel === annualVolume *
+> pricePerUnit` makes the two forms algebraically identical. Use `spend.fuel`,
+> which is parallel to the efficiency and electrification lines above.
 
 ```ts
       const postEffVolume = a.annualVolume * (1 - r.effFraction);
-      fuelDispSpend += postEffVolume * r.fuelFraction * resolvePrice(a).pricePerUnit;
+      fuelDispSpend += spend.fuel * (1 - r.effFraction) * r.fuelFraction;
       fuelNewSpend += postEffVolume * r.fuelFraction * acts.fuelSwitch.altFuelPricePerUnit;
 ```
 
@@ -1409,6 +1423,14 @@ tonnes stay in the totals; and levelised cost replaces the annuity."
 ---
 
 ## Task 7: Wire the Scope 2 model
+
+> **Ruling P consequence — read before writing this task's tests.** Task 6
+> shipped a 25% error that seven tests could not see, because every fixture was
+> reference-priced and on that basis two different formulas give the same
+> answer. A fixture on which the right and wrong implementations coincide
+> cannot discriminate between them, however strong its assertions look. Assert
+> this task's price basis EXPLICITLY, and carry at least one measured-basis
+> case, or state in the report why none is reachable.
 
 **Files:**
 - Modify: `lib/scope2/model/index.ts:23-28` (constants), `:165-180` (the `mk` factory), and its roll-up
@@ -1561,6 +1583,9 @@ ignored here, so the two scopes priced capital differently."
 ---
 
 ## Task 8: Wire the goals initiatives
+
+> **Ruling P consequence.** Same warning as Task 7: assert the price basis
+> explicitly and carry a measured-basis case, or say why none is reachable.
 
 **Files:**
 - Modify: `lib/goals/initiatives-auto.ts:55-70` (the opex delta), `:95-110` (the payback)
