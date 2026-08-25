@@ -1882,7 +1882,36 @@ Delete the `CAPEX_LIFETIME` import and its row. Add:
   rows.push(["Assumption", "Cost basis", "Value", "levelised cost of abatement over each lever's asset life", ""]);
 ```
 
-Add a `Price basis` column to the per-source rows, from `resolvePrice(a).basis`, so a reader can see which figures rest on an assumed price.
+> **Ruling U (controller, found while implementing Task 9).** The price basis
+> goes in **`inputsSheet`**, which carries one row per source. Step 1's example
+> test above reads `scenarioSheet`, which is long-format — one row per
+> asset x lever x field, columns `["Asset", "Lever", "Field", "Value"]` — with no
+> per-source row to hang a basis column on. The instruction ("whichever of
+> inputsSheet / scenarioSheet carries one row per combustion source") is right
+> and the example contradicts it; follow the instruction. `resolvePrice` needs no
+> assumptions, so `inputsSheet` requires no signature change.
+>
+> Two further notes for the implementer. (1) Print the seven finance assumptions
+> through `financeAssumptionsFrom(g)`, never raw off `settings.assumptions` —
+> they are OPTIONAL fields, so an omitted one is blank while the engine ran on a
+> default, which is F7's defect restated rather than fixed. The seeded fixture
+> omits `discountRatePct`, so this is the live case, not a hypothetical.
+> (2) The `"unavailable"` basis is UNREACHABLE through `inputsSheet` until a
+> separate crash is fixed: it reads `FUELS[a.fuelType].label` unguarded, so a
+> retired or renamed fuel id throws and takes the whole export down.
+> `scenarioSheet` already guards the identical lookup. Guard it, or the new
+> column ships with a value that can never appear.
+>
+> Do NOT assert these rows with regexes built in template literals. A draft used
+> ``new RegExp(`Discount rate[^
+]*\|${x}\|`)``; one backslash level was lost
+> writing the file, the pipes became alternation with an empty branch, and the
+> assertion matched every possible string — passing against a sheet that
+> contained none of the rows it named. Address cells directly.
+
+Add a `Price basis` column to the per-source rows of `inputsSheet`, from
+`resolvePrice(a).basis`, so a reader can see which figures rest on an assumed
+price.
 
 - [ ] **Step 4: Run the test, then the suite**
 
