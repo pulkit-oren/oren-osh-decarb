@@ -1992,6 +1992,25 @@ test asserting the F4 construction yields a non-finite `costPerTonne` so the
 contract is pinned, and confirm in Task 11's browser walk that a money-only
 lever shows its capex in the totals while its ₹/t cell reads "—".
 
+**Same pass, second finding: `paybackKind` is threaded to the public types and
+nothing reads it.** `LeverSummary.paybackKind` and `kpis.paybackKind` reach the
+UI and no component consumes either; the plan schedules no use. That leaves F9
+half-fixed. F9 was "a zero-capex lever renders 0.0 yr as if it were a result",
+and returning `paybackYears: null` does stop that — but `"never"` returns null
+too, so all six render sites (`ActionPlanTab.tsx:151`, `:311`, `:367`,
+`CfoFinanceTab.tsx:32`, `:78`, `BalanceTab.tsx:396`) now print the same `"—"`
+for two OPPOSITE facts:
+
+| kind | means | deserves to read |
+|---|---|---|
+| `"no-capital"` | nothing to recover — the lever saves money with no capex | "no capital" / "n/a" |
+| `"never"` | the capital is never recovered at this discount rate | "never" |
+| `"discounted"` | genuinely computed | the number |
+
+Before Task 6, no-capital showed a wrong-but-distinguishable `0.0 yr`; now it is
+indistinguishable from the worst outcome in the table. Render off `paybackKind`
+at all six sites — that is what the field was added for.
+
 - [ ] **Step 6: Full gates from clean**
 
 ```bash
