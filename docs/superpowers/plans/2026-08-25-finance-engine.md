@@ -1746,7 +1746,8 @@ Add the optional parameter per Ruling E, resolve it once
   }
   if ((acts.fuelSwitch.enabled || acts.flexFuel?.enabled) && r.fuelFraction > 0) {
     const vol = asset.annualVolume * (1 - r.effFraction) * r.fuelFraction;
-    d += vol * acts.fuelSwitch.altFuelPricePerUnit - vol * resolvePrice(asset).pricePerUnit;
+    d += vol * acts.fuelSwitch.altFuelPricePerUnit;
+    d -= spend.fuel * (1 - r.effFraction) * r.fuelFraction;   // Ruling T
   }
 ```
 
@@ -1760,6 +1761,29 @@ Replace the payback at `:103` — `simplePayback` no longer exists:
           ).paybackYears ?? undefined)
         : undefined,
 ```
+
+> **Ruling T (controller, found while implementing Task 8).** The line above
+> originally read `- vol * resolvePrice(asset).pricePerUnit`. That is Ruling P's
+> defect for the THIRD time: on a measured source `pricePerUnit` is
+> `opex / annualVolume`, a blended fuel-and-maintenance rate, compared against
+> `altFuelPricePerUnit`, a pure pump price. Ruling P fixed it in `lib/model` and
+> the plan then prescribed it again here. Use the fuel half.
+>
+> Two further corrections to the snippet above, both scope errors: it opened
+> with `financeAssumptionsFrom(settings.assumptions)`, but there is no
+> `settings` in `assetOpexDelta`'s scope — Ruling E's instruction to thread `fa`
+> down as a parameter is what to follow. And the payback snippet resolved
+> `financeAssumptionsFrom(undefined)`, which discards the very assumptions
+> Ruling E exists to make reachable; use the resolved `fa`.
+>
+> **Reaching the fuel-switch branch at all requires care.** `suggestForAsset`
+> only enables `fuelSwitch` where electrification is NOT feasible, so on an
+> ordinary diesel asset the suggested plan is `[efficiency, electrify]` and the
+> branch never executes. Restoring the defect against such a fixture fails
+> nothing. Use an end-use with `electrify.feasible` of `"hard"` or `"no"` —
+> `heavyEquip` works — and assert the EXACT value: asserting only that the total
+> moves when `maintenanceShareOfSpendPct` moves does NOT discriminate, because
+> the efficiency term is m-dependent too and moves either way.
 
 - [ ] **Step 4: Run the test, then the suite**
 
