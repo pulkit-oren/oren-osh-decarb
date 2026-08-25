@@ -1559,6 +1559,55 @@ Replace Scope 2's roll-up with `programmeMetrics` as in Task 6 Step 5.
 Leave `CAPEX_LIFETIME`, `DISCOUNT_RATE_PCT` and the local `S2_LIFETIME_YEARS`
 **exported but unused** — Task 10 Step 4 deletes them, per Ruling B.
 
+- [ ] **Step 4b: Re-point Scope 2's `OpexPart` and TAG EVERY PART'S `kind` (Ruling R)**
+
+> **Ruling R (controller, found before writing Task 7).** `lib/scope2/model/index.ts:30`
+> declares its OWN `OpexPart` with only `{ label, amount }` — **no `kind`
+> field**. The engine escalates by kind (`series.ts:12-15`) and falls through to
+> `otherEscalationPct`, which defaults to **0%**. Every one of Scope 2's five
+> parts is an electricity flow: "Avoided grid electricity" (×2), "Export
+> credits", "PPA strike delta", "Green tariff premium", "Unbundled RECs". Wire
+> Scope 2 to `buildLeverSeries` without adding `kind` and all five escalate at
+> 0% instead of `elecEscalationPct` (3%) — while Scope 1's electrification lever
+> tags "New electricity cost" as `"elec"` and gets 3%. The same kilowatt-hour
+> would then escalate at two different rates depending on which scope is looking
+> at it, which is the Ruling P defect class exactly.
+>
+> It matters most where the window is longest: generation is levelised over 25
+> years, and `1.03^25 = 2.094`, so solar's final-year avoided-electricity saving
+> would be understated by about **52%**. Understating the saving on the one
+> lever the tool exists to justify is not a rounding error.
+>
+> Task 7's text above never mentions `kind`, so following it verbatim ships this.
+
+Delete the local `OpexPart` interface and re-export the engine's, exactly as
+Task 6 did for `lib/model`:
+
+```ts
+export type { OpexPart } from "@/lib/finance";
+```
+
+Then tag every part at its construction site. All five are electricity:
+
+```ts
+  { label: "Avoided grid electricity", amount: -effSaving, kind: "elec" },
+  { label: "Avoided grid electricity", amount: -genOnSiteSaving, kind: "elec" },
+  { label: "Export credits", amount: -genExportSaving, kind: "elec" },
+  { label: "PPA strike delta", amount: proc.costParts.ppa, kind: "elec" },
+  { label: "Green tariff premium", amount: proc.costParts.greenTariff, kind: "elec" },
+  { label: "Unbundled RECs", amount: proc.costParts.rec, kind: "elec" },
+```
+
+RECs are arguably not a tariff-linked flow and could be `"other"`. They are
+tagged `"elec"` here because a REC price tracks the renewable electricity market
+it settles against, and because a silent 0% is the thing this ruling exists to
+prevent — if that is wrong it should be wrong VISIBLY, as a tag someone can
+argue with, rather than as an absent field defaulting to no escalation.
+
+Add a test that a Scope 2 lever's series escalates: with `elecEscalationPct` set
+to a large value, the final year's `opexDelta` must exceed the first full-ramp
+year's by the compounded factor. That test fails if any part is left untagged.
+
 - [ ] **Step 4: Run the test, then the suite**
 
 Run: `npx vitest run lib/finance/__tests__/scope2-wiring.test.ts` → PASS, 3 tests.
