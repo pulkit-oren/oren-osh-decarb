@@ -300,6 +300,16 @@ export interface GlobalAssumptions {
   maintenanceShareOfSpendPct?: number;
   /** EV maintenance as a share of the ICE maintenance it replaces. Defaults 65. */
   evMaintenanceRatioPct?: number;
+  /** Heat-pump / electric-boiler maintenance as a share of the plant it
+   *  replaces. Defaults 70. */
+  heatPumpMaintenanceRatioPct?: number;
+  /** Fuel price growth per year. Was hardcoded in the old cashflow module,
+   *  which made it invisible to the export. Defaults 5. */
+  fuelEscalationPct?: number;
+  /** Grid tariff growth per year. Defaults 3. */
+  elecEscalationPct?: number;
+  /** Growth for everything else (RECs, maintenance). Defaults 0. */
+  otherEscalationPct?: number;
 }
 
 export interface LeverSettings {
