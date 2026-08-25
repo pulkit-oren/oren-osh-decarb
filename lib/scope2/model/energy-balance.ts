@@ -4,6 +4,7 @@ import { applyGeneration } from "./generation";
 import { defaultFacilityActions } from "../defaults";
 import { roofCapKwp } from "./suggestions";
 import type { Facility, Scope2Levers } from "./types";
+import type { GlobalAssumptions } from "@/lib/model/types";
 
 export interface BalanceDials2 { efficiencyPct: number; solarPct: number; procurementPct: number; }
 const TARGET_YEAR = 2030;
@@ -77,9 +78,15 @@ export function energyMix2(facilities: Facility[], levers: Scope2Levers): { grid
 }
 
 /** Stepwise heuristic: efficiency → solar → procurement until 2030 reduction ≥ target, via pure compute. */
-export function suggestMix2(facilities: Facility[], base: Scope2Levers, target: number, baseYear: number): BalanceDials2 {
+export function suggestMix2(
+  facilities: Facility[], base: Scope2Levers, target: number, baseYear: number,
+  // Optional. This function reads only `reduction2030`, which is a tonnage
+  // metric and discount-independent today — threaded anyway so the premise
+  // stops being an unstated assumption.
+  assumptions?: Partial<GlobalAssumptions>,
+): BalanceDials2 {
   const dials: BalanceDials2 = { efficiencyPct: 0, solarPct: 0, procurementPct: 0 };
-  const reductionFor = (d: BalanceDials2) => computeScope2(facilities, applyDials2(facilities, base, d), baseYear).kpis.reduction2030;
+  const reductionFor = (d: BalanceDials2) => computeScope2(facilities, applyDials2(facilities, base, d), baseYear, assumptions).kpis.reduction2030;
   if (reductionFor(dials) >= target) return dials;
   const order: (keyof BalanceDials2)[] = ["efficiencyPct", "solarPct", "procurementPct"];
   for (const key of order) {

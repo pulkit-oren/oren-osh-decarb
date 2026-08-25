@@ -1,4 +1,6 @@
-import type { LeverMetrics, SeriesRow } from "./types";
+import { buildLeverSeries } from "./series";
+import type { FinanceAssumptions } from "./assumptions";
+import type { LeverInput, LeverMetrics, SeriesRow } from "./types";
 
 const sum = (rows: SeriesRow[], f: (r: SeriesRow) => number) => rows.reduce((s, r) => s + f(r), 0);
 
@@ -73,4 +75,18 @@ export function programmeMetrics(series: SeriesRow[][]): LeverMetrics {
   const m = leverMetrics(all, capex);
   const pbSource = leverMetrics(merged, capex);
   return { ...m, totalCapex: capex, paybackYears: pbSource.paybackYears, paybackKind: pbSource.paybackKind, peakFunding: pbSource.peakFunding };
+}
+
+/** Assemble one lever's money summary: build the series, then read the metrics
+ *  off it. Shared by both scopes — they differ only in their lifetime table and
+ *  their `scope` literal, so the assembly itself has exactly ONE
+ *  implementation. Two hand-synchronised copies of this is the drift the whole
+ *  finance module exists to end. */
+export function summariseLever(
+  input: LeverInput,
+  baseYear: number,
+  a: FinanceAssumptions,
+): { series: SeriesRow[]; metrics: LeverMetrics } {
+  const series = buildLeverSeries(input, baseYear, a);
+  return { series, metrics: leverMetrics(series, input.capex) };
 }

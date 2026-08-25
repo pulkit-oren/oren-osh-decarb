@@ -6,9 +6,16 @@
    market-based Scope 2. Pure: same inputs → same output.
    ============================================================ */
 
-import { annuity, simplePayback, weightedCostPerTonne } from "@/lib/model/finance";
+import {
+  financeAssumptionsFrom,
+  programmeMetrics,
+  S2_LIFETIME_YEARS as S2_ENGINE_LIFETIMES,
+  summariseLever,
+} from "@/lib/finance";
+import type { LeverMetrics, OpexPart as FinanceOpexPart, SeriesRow } from "@/lib/finance";
+import { annuity } from "@/lib/model/finance";
 import { buildTrajectory, targetLine } from "@/lib/model/trajectory";
-import type { TrajectoryRow, Wedge } from "@/lib/model/types";
+import type { GlobalAssumptions, TrajectoryRow, Wedge } from "@/lib/model/types";
 import { defaultFacilityActions } from "../defaults";
 import { baselineScope2, existingCoveredKwh, type Scope2Baseline } from "./baseline";
 import { contractCoverageByFacility, isContractRecord } from "./instruments";
@@ -21,16 +28,23 @@ import { validateScope2 } from "./validate";
 export const END_YEAR = 2050;
 export const BAU_GROWTH = 0.01;
 export const CAPEX_LIFETIME = 10; // legacy default; per-lever lifetimes below drive the annuity
-const DISCOUNT_RATE_PCT = 10;
-/** Asset life per lever family — solar panels outlive LED retrofits. */
-const S2_LIFETIME_YEARS: Record<"efficiency" | "generation" | "procurement", number> = {
-  efficiency: 8, generation: 25, procurement: 10,
-};
+// DISCOUNT_RATE_PCT and the local S2_LIFETIME_YEARS table are GONE. Both were
+// module-private with no external reference, so unlike the four symbols Ruling B
+// defers to Task 10, deleting them here cannot break another task — and left in
+// place they are unused private consts, i.e. two new lint warnings. The engine's
+// S2_LIFETIME_YEARS (lib/finance/lifetimes.ts) is now the only copy, and the
+// discount rate arrives through the assumptions parameter (F8).
 
-export interface OpexPart {
-  label: string;
-  amount: number; // positive = cost, negative = saving
-}
+/** One named running-cost component — owned by `@/lib/finance`, which escalates
+ *  it by `kind`. Re-exported under the same name so every existing
+ *  `import { OpexPart } from "@/lib/scope2/model"` keeps resolving.
+ *
+ *  The local copy had NO `kind` field, and the engine falls through to
+ *  `otherEscalationPct` (0%) when it is absent — so every Scope 2 part would
+ *  silently stop escalating while the identical kWh in Scope 1's
+ *  electrification lever escalates at `elecEscalationPct`. Worst on generation,
+ *  whose window is 25 years. */
+export type { OpexPart } from "@/lib/finance";
 
 export interface Scope2LeverSummary {
   id: "efficiency" | "generation" | "procurement";
@@ -41,10 +55,18 @@ export interface Scope2LeverSummary {
   abatementT: number; // full-ramp tonnes/yr (procurement: market-based only)
   capex: number;
   annualOpexDelta: number; // positive = cost, negative = saving
-  annualCost: number;
+  annualCost: number; // annualized capex + opex delta — DISPLAY ONLY
+  /** Σ discounted net cash ÷ Σ discounted tonnes over the lever's own life.
+   *  The decision number; `costPerTonne` is an alias during the UI transition. */
+  levelisedCostPerTonne: number;
   costPerTonne: number;
-  opexParts: OpexPart[];
-  paybackYears: number | null;
+  opexParts: FinanceOpexPart[];
+  paybackYears: number | null; // discounted, off the series; null when none
+  /** Why `paybackYears` is what it is. "no-capital" must never render as 0.0 yr. */
+  paybackKind: LeverMetrics["paybackKind"];
+  npv: number;
+  /** The year-by-year cashflow every metric above is read off. */
+  series: SeriesRow[];
   /** Deployment ramp — drives the trajectory wedge AND the cashflow phasing. */
   startYear: number;
   rampYears: number;
@@ -72,6 +94,10 @@ export interface Scope2ComputeResult {
     totalCapex: number;
     annualOpexDelta: number;
     paybackYears: number | null;
+    paybackKind: LeverMetrics["paybackKind"];
+    npv: number;
+    /** Worst cumulative undiscounted cash position — the money that must exist. */
+    peakFunding: number;
     costPerTonne: number;
     coveragePct: number; // procurement coverage of addressable load
     footnote: boolean; // RE100 exclusion footnote active
@@ -84,7 +110,13 @@ export function computeScope2(
   facilities: Facility[],
   levers: Scope2Levers,
   baseYear: number,
+  // OPTIONAL so every existing 3-arg caller keeps compiling. Before this
+  // parameter existed the user's discount rate was structurally unreachable
+  // from Scope 2 — which is WHY DISCOUNT_RATE_PCT was a module constant (F8),
+  // not merely an oversight.
+  assumptions?: Partial<GlobalAssumptions>,
 ): Scope2ComputeResult {
+  const fa = financeAssumptionsFrom(assumptions);
   const baseline = baselineScope2(facilities);
   // VPPA / I-REC kWh entered in Data input, allocated to each BU's grid records.
   const contractCov = contractCoverageByFacility(facilities);
@@ -165,31 +197,48 @@ export function computeScope2(
   const mk = (
     id: Scope2LeverSummary["id"], label: string, colorIdx: number, abatementT: number,
     capex: number, opexDelta: number, ramp: { startYear: number; rampYears: number },
-    opexParts: OpexPart[],
-  ): Scope2LeverSummary & { startYear: number; rampYears: number } => {
-    const annualCost = annuity(capex, S2_LIFETIME_YEARS[id], DISCOUNT_RATE_PCT) + opexDelta;
+    opexParts: FinanceOpexPart[],
+  ): Scope2LeverSummary & { startYear: number; rampYears: number; series: SeriesRow[] } => {
+    // The SAME assembly Scope 1 uses. The two scopes differ only in their
+    // lifetime table and their `scope` literal; the cost assembly itself has
+    // exactly one implementation, so the two can no longer drift apart.
+    const { series, metrics: m } = summariseLever(
+      { id, capex, opexParts, fullAbatementT: Math.max(0, abatementT), assetLifeYears: S2_ENGINE_LIFETIMES[id], ...ramp },
+      baseYear, fa,
+    );
     return {
-      id, label, colorIdx, scope: 2, enabled: abatementT > 0,
-      abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta, annualCost,
-      costPerTonne: abatementT > 0 ? annualCost / abatementT : 0,
+      id, label, colorIdx, scope: 2,
+      // A lever that spends money is enabled even at zero tonnes — dropping it
+      // is how its capex used to vanish from the KPIs (F4).
+      enabled: abatementT > 0 || capex > 0 || opexParts.some((p) => p.amount !== 0),
+      abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta,
+      annualCost: annuity(capex, S2_ENGINE_LIFETIMES[id], fa.discountRatePct) + opexDelta, // display only
+      levelisedCostPerTonne: m.levelisedCostPerTonne,
+      costPerTonne: m.levelisedCostPerTonne,   // one number, two names, during the UI transition
       opexParts,
-      paybackYears: simplePayback(capex, -opexDelta),
+      paybackYears: m.paybackYears,
+      paybackKind: m.paybackKind,
+      npv: m.npv,
+      series,
       ...ramp,
     };
   };
 
   const leverRows = [
     mk("efficiency", "Energy efficiency", 4, effAbateT, effCapex, -effSaving, effR, [
-      { label: "Avoided grid electricity", amount: -effSaving },
+      { label: "Avoided grid electricity", amount: -effSaving, kind: "elec" },
     ]),
     mk("generation", "On-site generation", 0, genAbateT, genCapex, -(genOnSiteSaving + genExportSaving), genR, [
-      { label: "Avoided grid electricity", amount: -genOnSiteSaving },
-      { label: "Export credits", amount: -genExportSaving },
+      { label: "Avoided grid electricity", amount: -genOnSiteSaving, kind: "elec" },
+      { label: "Export credits", amount: -genExportSaving, kind: "elec" },
     ]),
     mk("procurement", "Renewable procurement", 3, procAbateT, 0, proc.annualCost, procR, [
-      { label: "PPA strike delta", amount: proc.costParts.ppa },
-      { label: "Green tariff premium", amount: proc.costParts.greenTariff },
-      { label: "Unbundled RECs", amount: proc.costParts.rec },
+      { label: "PPA strike delta", amount: proc.costParts.ppa, kind: "elec" },
+      { label: "Green tariff premium", amount: proc.costParts.greenTariff, kind: "elec" },
+      // A REC price tracks the renewable electricity market it settles against.
+      // Tagged "elec" rather than left to default: an absent kind means 0%
+      // escalation silently, and a tag someone can argue with beats that.
+      { label: "Unbundled RECs", amount: proc.costParts.rec, kind: "elec" },
     ]),
   ];
 
@@ -214,9 +263,11 @@ export function computeScope2(
 
   const at = (rows: TrajectoryRow[], y: number) => rows.find((r) => r.year === y) ?? rows[rows.length - 1];
   const m2030 = at(trajectoryMarket, 2030);
-  const activeLevers = leverRows.filter((l) => l.abatementT > 0);
-  const totalCapex = activeLevers.reduce((s, l) => s + l.capex, 0);
-  const totalOpexDelta = activeLevers.reduce((s, l) => s + l.annualOpexDelta, 0);
+  // ALL levers with money attached, not just those with tonnes (F4).
+  const costedLevers = leverRows.filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
+  const programme = programmeMetrics(costedLevers.map((l) => l.series));
+  const totalCapex = programme.totalCapex;
+  const totalOpexDelta = costedLevers.reduce((s, l) => s + l.annualOpexDelta, 0);
 
   return {
     baseline,
@@ -239,8 +290,11 @@ export function computeScope2(
       reduction2030: baseTotalT > 0 ? (m2030.bau - m2030.net) / baseTotalT : 0,
       totalCapex,
       annualOpexDelta: totalOpexDelta,
-      paybackYears: simplePayback(totalCapex, -totalOpexDelta),
-      costPerTonne: weightedCostPerTonne(activeLevers.map((l) => ({ annualCost: l.annualCost, tonnes: l.abatementT }))),
+      paybackYears: programme.paybackYears,
+      paybackKind: programme.paybackKind,
+      npv: programme.npv,
+      peakFunding: programme.peakFunding,
+      costPerTonne: programme.levelisedCostPerTonne,
       coveragePct: proc.coveragePct,
       footnote: proc.footnote,
       target2030: targetLine(baseTotalT, 2030),

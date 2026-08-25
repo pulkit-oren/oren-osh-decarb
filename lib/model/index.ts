@@ -8,12 +8,11 @@
 import { baselineScope1, refrigerantCO2e } from "./baseline";
 import { FAMILY_COLORS, getRefrigerant, refrigerantPricePerKg } from "./factors";
 import {
-  buildLeverSeries,
   financeAssumptionsFrom,
-  leverMetrics,
   programmeMetrics,
   resolveFuelSpend,
   S1_LIFETIME_YEARS,
+  summariseLever,
 } from "@/lib/finance";
 import type { LeverMetrics, OpexPart, PriceBasis, SeriesRow } from "@/lib/finance";
 import { yearsToTarget, annuity } from "./finance";
@@ -291,11 +290,12 @@ export function compute(
     capex: number, opexDelta: number, ramp: { startYear: number; rampYears: number },
     opexParts: OpexPart[],
   ): LeverSummary & { startYear: number; rampYears: number; series: SeriesRow[] } => {
-    const series = buildLeverSeries(
+    // Shared with Scope 2 — the cost assembly has one implementation, and the
+    // two scopes differ only in the lifetime table and the `scope` literal.
+    const { series, metrics: m } = summariseLever(
       { id, capex, opexParts, fullAbatementT: Math.max(0, abatementT), assetLifeYears: S1_LIFETIME_YEARS[id], ...ramp },
       baseYear, fa,
     );
-    const m = leverMetrics(series, capex);
     return {
       id, label, colorIdx, scope: 1,
       // A lever that spends money is enabled even at zero tonnes — dropping it

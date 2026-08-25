@@ -9,6 +9,7 @@
 import { computeScope2 } from "./index";
 import { suggestAllScope2 } from "./suggest-all";
 import type { Facility, Scope2Levers } from "./types";
+import type { GlobalAssumptions } from "@/lib/model/types";
 
 export interface Scope2PathwayKpis {
   reduction2030: number;
@@ -31,6 +32,11 @@ export function buildScope2Pathways(
   facilities: Facility[],
   current: Scope2Levers,
   baseYear: number,
+  // Optional, so no existing caller changes. Threaded because the KPIs below
+  // include capex and opex: leaving it unwired would silently reprice this
+  // screen on a default discount rate the moment any of them becomes
+  // discount-sensitive.
+  assumptions?: Partial<GlobalAssumptions>,
 ): Scope2Pathway[] {
   const fac = facilities.filter((f) => !f.excluded);
   const balanced = suggestAllScope2(fac, current);
@@ -50,7 +56,7 @@ export function buildScope2Pathways(
   };
 
   const mk = (id: Scope2Pathway["id"], name: string, blurb: string, levers: Scope2Levers): Scope2Pathway => {
-    const r = computeScope2(fac, levers, baseYear);
+    const r = computeScope2(fac, levers, baseYear, assumptions);
     return {
       id, name, blurb, levers,
       kpis: {

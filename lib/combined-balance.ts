@@ -66,7 +66,14 @@ function results(inp: CombinedInputs, d: CombinedDials, leakFixes: boolean) {
   let s1Settings = applyDials(inp.assets, inp.systems, inp.s1Base, d.s1);
   if (leakFixes) s1Settings = withLeakFixes(s1Settings, inp.systems);
   const r1 = compute(inp.assets, inp.systems, s1Settings, inp.baseYear);
-  const r2 = computeScope2(inp.facilities, applyDials2(inp.facilities, inp.s2Base, d.s2), inp.baseYear);
+  // Same assumptions the Scope 1 call above just used. Before computeScope2
+  // took this argument the two scopes priced capital differently — Scope 1 on
+  // the user's discount rate, Scope 2 on a hardcoded 10% (F8) — and this
+  // combined view is exactly where that discrepancy was on display.
+  const r2 = computeScope2(
+    inp.facilities, applyDials2(inp.facilities, inp.s2Base, d.s2), inp.baseYear,
+    s1Settings.assumptions,
+  );
   return { r1, r2 };
 }
 
