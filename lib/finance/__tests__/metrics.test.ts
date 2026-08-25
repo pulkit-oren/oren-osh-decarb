@@ -90,4 +90,13 @@ describe("programmeMetrics", () => {
     const live = buildLeverSeries(lever({ id: "l", capex: 1000, fullAbatementT: 10, opexParts: [] }), 2026, flat);
     expect(programmeMetrics([dead, live]).totalCapex).toBeCloseTo(3000, 6);
   });
+
+  it("throws when levers were built against different baseYears — mismatched discount factors on a shared year", () => {
+    const discounted = { ...flat, discountRatePct: 10 };
+    const seriesA = buildLeverSeries(lever({ id: "a" }), 2026, discounted);
+    const seriesB = buildLeverSeries(lever({ id: "b" }), 2020, discounted); // different baseYear
+    expect(() => programmeMetrics([seriesA, seriesB])).toThrow(
+      /different discount factors/
+    );
+  });
 });

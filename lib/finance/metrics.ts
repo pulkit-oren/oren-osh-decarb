@@ -47,14 +47,28 @@ export function programmeMetrics(series: SeriesRow[][]): LeverMetrics {
   const all = series.flat();
   const capex = all.reduce((s, r) => s + r.capex, 0);
 
-  const byYear = new Map<number, number>();
-  for (const r of all) byYear.set(r.year, (byYear.get(r.year) ?? 0) + r.net);
+  const byYear = new Map<number, { net: number; discount: number }>();
+  for (const r of all) {
+    const existing = byYear.get(r.year);
+    if (existing === undefined) {
+      byYear.set(r.year, { net: r.net, discount: r.discount });
+    } else {
+      // The merged row can only carry ONE discount factor per year. That is
+      // only valid while every lever shares a baseYear and discountRatePct —
+      // if it isn't, silently picking one row's factor makes peakFunding and
+      // payback order-dependent, which is exactly the bug the two-call design
+      // exists to prevent. No current caller can trigger this; keep it that way.
+      if (Math.abs(existing.discount - r.discount) > 1e-12) {
+        throw new Error(
+          `programmeMetrics: rows for year ${r.year} carry different discount factors; every lever must be built with the same baseYear and discountRatePct`
+        );
+      }
+      existing.net += r.net;
+    }
+  }
   const merged: SeriesRow[] = [...byYear.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([year, net]) => {
-      const anyRow = all.find((r) => r.year === year)!;
-      return { year, capex: 0, opexDelta: 0, net, tonnes: 0, discount: anyRow.discount };
-    });
+    .map(([year, { net, discount }]) => ({ year, capex: 0, opexDelta: 0, net, tonnes: 0, discount }));
 
   const m = leverMetrics(all, capex);
   const pbSource = leverMetrics(merged, capex);
