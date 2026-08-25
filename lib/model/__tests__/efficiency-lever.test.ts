@@ -57,8 +57,21 @@ describe("efficiency stacking (step 0)", () => {
     const eff = r.levers.find((l) => l.id === "efficiency")!;
     expect(eff.abatementT).toBeCloseTo(0.1 * E0, 6);
     expect(eff.capex).toBe(400_000);
-    expect(eff.annualOpexDelta).toBeCloseTo(-0.1 * asset.opex, 6); // avoided spend
-    expect(eff.paybackYears).toBeCloseTo(400_000 / 800_000, 5); // ~half a year
+    // Efficiency cuts VOLUME, so it credits the FUEL half of the bill only —
+    // was -0.1 * asset.opex (-800,000), which charged efficiency with
+    // maintenance it never touched (F2). This fixture has a real measured
+    // opex, so the number moved for a real reason:
+    //   8,000,000 x (1 - 20% maintenance share) x 10% saving = 640,000
+    const fuelHalf = asset.opex * (1 - 0.2);
+    expect(eff.annualOpexDelta).toBeCloseTo(-0.1 * fuelHalf, 6); // avoided FUEL spend
+    // Was simplePayback(400,000, 800,000) = 0.5. Payback is now discounted and
+    // read off the same series as the cost, and the ramp phases capex with the
+    // saving: year one carries 400,000/3 = 133,333 of capex against
+    // 640,000 x (1/3) x 1.05 = 224,000 of saving, so the lever is already cash
+    // positive in its first year -> 0 whole years, and genuinely computed
+    // ("discounted"), not the no-capital placeholder F9 was about.
+    expect(eff.paybackKind).toBe("discounted");
+    expect(eff.paybackYears).toBe(0);
     expect(r.segments.some((s) => s.key === "eff-stationary")).toBe(true);
   });
 });

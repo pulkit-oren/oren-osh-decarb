@@ -7,7 +7,17 @@
 
 import { baselineScope1, refrigerantCO2e } from "./baseline";
 import { FAMILY_COLORS, getRefrigerant, refrigerantPricePerKg } from "./factors";
-import { weightedCostPerTonne, yearsToTarget, annuity, simplePayback } from "./finance";
+import {
+  buildLeverSeries,
+  financeAssumptionsFrom,
+  leverMetrics,
+  programmeMetrics,
+  resolveFuelSpend,
+  resolvePrice,
+  S1_LIFETIME_YEARS,
+} from "@/lib/finance";
+import type { LeverMetrics, OpexPart, PriceBasis, SeriesRow } from "@/lib/finance";
+import { yearsToTarget, annuity } from "./finance";
 import { applyRefrigerant } from "./levers";
 import { applyAssetActions, electrifyCapexFor } from "./segments";
 import { buildTrajectory, targetLine } from "./trajectory";
@@ -31,14 +41,10 @@ export const LEVER_LIFETIME_YEARS: Record<"efficiency" | "electrification" | "fu
   refrigerant: 12,     // retrofit ↔ system replacement blend
 };
 
-/** One named running-cost component. Positive = cost, negative = saving.
- *  `kind` drives price escalation in the cashflow view (fuel escalates faster
- *  than grid tariffs — often the argument for electrification). */
-export interface OpexPart {
-  label: string;
-  amount: number;
-  kind?: "fuel" | "elec" | "other";
-}
+/** One named running-cost component — now owned by `@/lib/finance`, which is
+ *  what builds the cashflow series from it. Re-exported under the same name so
+ *  every existing `import { OpexPart } from "@/lib/model"` keeps resolving. */
+export type { OpexPart } from "@/lib/finance";
 
 export interface LeverSummary {
   id: "efficiency" | "electrification" | "fuelSwitch" | "refrigerant";
@@ -49,12 +55,20 @@ export interface LeverSummary {
   abatementT: number; // full-ramp Scope 1 tonnes/yr
   capex: number;
   annualOpexDelta: number;
-  annualCost: number; // annualized capex + opex delta
+  annualCost: number; // annualized capex + opex delta — DISPLAY ONLY
+  /** Σ discounted net cash ÷ Σ discounted tonnes over the lever's own life.
+   *  The decision number; `costPerTonne` is an alias during the UI transition. */
+  levelisedCostPerTonne: number;
   costPerTonne: number;
   /** ₹/t with the internal carbon price credited — the risk-adjusted view, applied uniformly. */
   costPerTonneWithCarbon: number;
   opexParts: OpexPart[]; // components summing to annualOpexDelta; all zero when lever is disabled
-  paybackYears: number | null; // capex ÷ annual saving, null if never
+  paybackYears: number | null; // discounted, off the series; null when none
+  /** Why `paybackYears` is what it is. "no-capital" must never render as 0.0 yr. */
+  paybackKind: LeverMetrics["paybackKind"];
+  npv: number;
+  /** The year-by-year cashflow every metric above is read off. */
+  series: SeriesRow[];
   /** Deployment ramp — drives the trajectory wedge AND the cashflow phasing. */
   startYear: number;
   rampYears: number;
@@ -88,6 +102,12 @@ export interface ComputeResult {
     target2030: number;
     onTrack2030: boolean;
     paybackYears: number | null;
+    paybackKind: LeverMetrics["paybackKind"];
+    npv: number;
+    /** Worst cumulative undiscounted cash position — the money that must exist. */
+    peakFunding: number;
+    /** How many sources were costed on each price basis. Sums to assets.length. */
+    priceBasisSummary: Record<PriceBasis, number>;
   };
 }
 
@@ -107,14 +127,21 @@ export function compute(
   let elecMobile = 0, elecStationary = 0, fuelMobile = 0, fuelStationary = 0;
   let scope2SpillFullT = 0, biogenicT = 0;
   let elecEnergyCost = 0, elecDispOpex = 0, elecCapex = 0, elecMaintAddBack = 0;
-  const maintShare = (g.maintenanceShareOfSpendPct ?? 20) / 100;
-  const evMaintRatio = (g.evMaintenanceRatioPct ?? 65) / 100;
+  const fa = financeAssumptionsFrom(g);
+  // Which basis each source was priced on. Reported so the UI can mark
+  // estimates instead of presenting a reference price as a measured one.
+  const basisTally: Record<PriceBasis, number> = { measured: 0, reference: 0, unavailable: 0 };
   let fuelNewSpend = 0, fuelDispSpend = 0, fuelCapex = 0;
   let anyElec = false;
   let elecStart = Infinity, elecEnd = -Infinity, fuelStart = Infinity, fuelEnd = -Infinity;
 
   for (const a of assets) {
     const acts = s.byAsset[a.id];
+    // Resolve the annual bill ONCE per source, through the engine. Every
+    // money figure below reads this split; nothing divides opex inline any
+    // more, which is what made the seeded company cost zero (F1).
+    const spend = resolveFuelSpend(a, fa);
+    basisTally[spend.basis] += 1;
     if (!acts) continue;
     const r = applyAssetActions(a, acts, g);
 
@@ -123,7 +150,9 @@ export function compute(
       if (a.category === "mobile") effMobileT += r.efficiencyAbatementT;
       else effStationaryT += r.efficiencyAbatementT;
       effCapex += acts.efficiency.capex;
-      effOpexSaving += a.opex * r.effFraction;
+      // Efficiency cuts VOLUME, so it saves the fuel half only. Crediting the
+      // whole bill charged it with maintenance it never touched (F2).
+      effOpexSaving += spend.fuel * r.effFraction;
       effStart = Math.min(effStart, acts.efficiency.startYear);
       effEnd = Math.max(effEnd, acts.efficiency.targetYear);
     }
@@ -137,12 +166,13 @@ export function compute(
       elecEnd = Math.max(elecEnd, acts.electrify.targetYear);
       elecEnergyCost += r.kWh * acts.electrify.tariffPerKwh;
       // Displaced spend comes off the post-efficiency remainder (step 0 already saved its share).
-      elecDispOpex += a.opex * (1 - r.effFraction) * r.elecFraction;
-      // EVs still have maintenance (~65% of ICE) — add that share of the
-      // displaced maintenance back so the saving isn't overstated.
-      if (a.category === "mobile") {
-        elecMaintAddBack += a.opex * (1 - r.effFraction) * r.elecFraction * maintShare * evMaintRatio;
-      }
+      elecDispOpex += (spend.fuel + spend.maintenance) * (1 - r.effFraction) * r.elecFraction;
+      // The replacement plant still needs maintaining. Mobile was already
+      // handled; stationary was implicitly assumed maintenance-free (F3).
+      const retainRatio = a.category === "mobile"
+        ? fa.evMaintenanceRatioPct / 100
+        : fa.heatPumpMaintenanceRatioPct / 100;
+      elecMaintAddBack += spend.maintenance * (1 - r.effFraction) * r.elecFraction * retainRatio;
       elecCapex += electrifyCapexFor(a, acts.electrify);
     }
 
@@ -162,9 +192,8 @@ export function compute(
         fuelStart = Math.min(fuelStart, acts.flexFuel!.startYear);
         fuelEnd = Math.max(fuelEnd, acts.flexFuel!.targetYear);
       }
-      const fossilUnitPrice = a.annualVolume > 0 ? a.opex / a.annualVolume : 0;
       const postEffVolume = a.annualVolume * (1 - r.effFraction);
-      fuelDispSpend += postEffVolume * r.fuelFraction * fossilUnitPrice;
+      fuelDispSpend += postEffVolume * r.fuelFraction * resolvePrice(a).pricePerUnit;
       fuelNewSpend += postEffVolume * r.fuelFraction * acts.fuelSwitch.altFuelPricePerUnit;
       fuelCapex += (fuelOn ? acts.fuelSwitch.retrofitCapex : 0)
         + (flexOn ? acts.flexFuel!.unitsToConvert * acts.flexFuel!.vehicleCapex : 0);
@@ -228,7 +257,7 @@ export function compute(
   const elecAbate = elecMobile + elecStationary;
   const fuelAbate = fuelMobile + fuelStationary;
   const effParts: OpexPart[] = [
-    { label: "Avoided fuel & maintenance spend", amount: -effOpexSaving, kind: "fuel" },
+    { label: "Avoided fuel spend", amount: -effOpexSaving, kind: "fuel" },
   ];
 
   const elecOpexDelta = elecEnergyCost + elecMaintAddBack + scope2SpillFullT * g.recCostPerTonne - elecDispOpex;
@@ -237,7 +266,7 @@ export function compute(
 
   const elecParts: OpexPart[] = [
     { label: "New electricity cost", amount: elecEnergyCost, kind: "elec" },
-    { label: "EV maintenance (retained)", amount: elecMaintAddBack, kind: "other" },
+    { label: "Retained maintenance on replacement plant", amount: elecMaintAddBack, kind: "other" },
     { label: "REC cost on added Scope 2", amount: scope2SpillFullT * g.recCostPerTonne, kind: "other" },
     { label: "Displaced fuel & maintenance", amount: -elecDispOpex, kind: "fuel" },
   ];
@@ -251,24 +280,33 @@ export function compute(
     { label: "Displaced base-gas top-ups", amount: -refBaseGasDisp, kind: "other" },
   ];
 
-  const discountRate = g.discountRatePct ?? 10;
   const mk = (
     id: LeverSummary["id"], label: string, colorIdx: number, abatementT: number,
     capex: number, opexDelta: number, ramp: { startYear: number; rampYears: number },
     opexParts: OpexPart[],
-  ): LeverSummary & { startYear: number; rampYears: number } => {
-    // Capital recovery over the lever's OWN lifetime (not a flat 10 years).
-    const annualCost = annuity(capex, LEVER_LIFETIME_YEARS[id], discountRate) + opexDelta;
-    const costPerTonne = abatementT > 0 ? annualCost / abatementT : 0;
+  ): LeverSummary & { startYear: number; rampYears: number; series: SeriesRow[] } => {
+    const series = buildLeverSeries(
+      { id, capex, opexParts, fullAbatementT: Math.max(0, abatementT), assetLifeYears: S1_LIFETIME_YEARS[id], ...ramp },
+      baseYear, fa,
+    );
+    const m = leverMetrics(series, capex);
     return {
-      id, label, colorIdx, scope: 1, enabled: abatementT > 0,
-      abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta, annualCost,
-      costPerTonne,
+      id, label, colorIdx, scope: 1,
+      // A lever that spends money is enabled even at zero tonnes — dropping it
+      // is how its capex used to vanish from the KPIs (F4).
+      enabled: abatementT > 0 || capex > 0 || opexParts.some((p) => p.amount !== 0),
+      abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta,
+      annualCost: annuity(capex, S1_LIFETIME_YEARS[id], fa.discountRatePct) + opexDelta, // display only
+      levelisedCostPerTonne: m.levelisedCostPerTonne,
+      costPerTonne: m.levelisedCostPerTonne,   // one number, two names, during the UI transition
       // Carbon price as a SENSITIVITY, applied uniformly to every lever —
       // never mixed into the base cash view.
-      costPerTonneWithCarbon: abatementT > 0 ? costPerTonne - g.carbonPricePerTonne : 0,
+      costPerTonneWithCarbon: abatementT > 0 ? m.levelisedCostPerTonne - g.carbonPricePerTonne : 0,
       opexParts,
-      paybackYears: simplePayback(capex, -opexDelta),
+      paybackYears: m.paybackYears,
+      paybackKind: m.paybackKind,
+      npv: m.npv,
+      series,
       ...ramp,
     };
   };
@@ -303,11 +341,10 @@ export function compute(
   const at = (y: number) => trajectory.find((r) => r.year === y) ?? trajectory[trajectory.length - 1];
   const y2030 = at(2030);
   const y2050 = at(2050);
-  const activeLevers = leverRows.filter((l) => l.abatementT > 0);
-
-  const costPerTonne = weightedCostPerTonne(activeLevers.map((l) => ({ annualCost: l.annualCost, tonnes: l.abatementT })));
-  const totalCapex = activeLevers.reduce((s2, l) => s2 + l.capex, 0);
-  const totalOpexDelta = activeLevers.reduce((s2, l) => s2 + l.annualOpexDelta, 0);
+  // ALL levers with money attached, not just those with tonnes (F4).
+  const costedLevers = leverRows.filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
+  const programme = programmeMetrics(costedLevers.map((l) => l.series));
+  const totalCapex = programme.totalCapex;
 
   return {
     baseline,
@@ -321,7 +358,7 @@ export function compute(
     kpis: {
       reduction2030: baseTotalT > 0 ? (y2030.bau - y2030.net) / baseTotalT : 0,
       reduction2050: baseTotalT > 0 ? (y2050.bau - y2050.net) / baseTotalT : 0,
-      costPerTonne,
+      costPerTonne: programme.levelisedCostPerTonne,
       totalCapex,
       yearsToTarget: yearsToTarget(trajectory),
       netScope1Now: at(baseYear).net,
@@ -329,7 +366,11 @@ export function compute(
       net2030: y2030.net,
       target2030: targetLine(baseTotalT, 2030),
       onTrack2030: y2030.onTrack,
-      paybackYears: simplePayback(totalCapex, -totalOpexDelta),
+      paybackYears: programme.paybackYears,
+      paybackKind: programme.paybackKind,
+      npv: programme.npv,
+      peakFunding: programme.peakFunding,
+      priceBasisSummary: basisTally,
     },
   };
 }

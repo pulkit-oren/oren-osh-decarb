@@ -28,21 +28,23 @@ describe("defect witnesses — the seeded company, which is what users see", () 
     expect(dg.annualVolume * 92).toBeCloseTo(880_682_079.6, 1);
   });
 
-  it("F1 consequence: fuel switch reads as a COST because displaced spend is zero", () => {
+  it("F1 FIXED: fuel switch reads as a SAVING, because displaced spend is real", () => {
     const { combustion, systems, settings, baseYear } = seedScope1();
     const r = compute(combustion, systems, settings, baseYear);
     const fs = r.levers.find((l) => l.id === "fuelSwitch")!;
     expect(fs.abatementT).toBeGreaterThan(0);          // the lever is doing work
-    expect(fs.annualOpexDelta).toBeGreaterThan(0);      // and it costs money — WRONG
+    // Inverted in Task 6. Before the fix this read `toBeGreaterThan(0)` and
+    // annualOpexDelta was +181,682,788 — biodiesel at ₹78/L displacing diesel
+    // priced at ₹0/L could only ever be a cost.
+    expect(fs.annualOpexDelta).toBeLessThan(0);   // was > 0 — a cost — before the fix
     const displaced = fs.opexParts.find((p) => p.label === "Displaced fossil fuel spend")!;
-    // toBeCloseTo, not toBe: the computed amount is -0 (unary negation of the
-    // +0 that `postEffVolume * fraction * 0` produces), and toBe uses
-    // Object.is, which treats -0 !== 0. -0 === 0 under normal numeric
-    // equality — this is still the bug, exactly. See task-1-report.md.
-    expect(displaced.amount).toBeCloseTo(0);
+    // Was `toBeCloseTo(0)` — literally -0, because the inline
+    // `a.opex / a.annualVolume` divided a zero opex. The reference price now
+    // resolves, so real spend comes off.
+    expect(displaced.amount).toBeLessThan(0);      // was exactly 0
   });
 
-  it("F4: a lever with capex but no abatement is absent from totalCapex", () => {
+  it("F4 FIXED: a lever with capex but no abatement reaches totalCapex", () => {
     // Rebuilt per code review (task-1-report.md, Finding 2): the original
     // construction set efficiency.savingPct: 0, which zeroes r.effFraction
     // and skips the `acts.efficiency?.enabled && r.effFraction > 0` guard at
@@ -112,16 +114,17 @@ describe("defect witnesses — the seeded company, which is what users see", () 
 
     expect(elecLever.abatementT).toBe(0);          // zero volume → nothing abated
     expect(elecLever.capex).toBe(1_000_000);        // the 1,000,000 DID accrue …
-    // … and was then discarded by the abatementT > 0 roll-up filter —
-    // this IS the F4 mechanism, not a capex-never-accrued non-event.
-    expect(r.kpis.totalCapex).toBe(0);
+    // … and now SURVIVES the roll-up: the filter selects levers with money
+    // attached, not levers with tonnes. Inverted in Task 6.
+    expect(r.kpis.totalCapex).toBeGreaterThanOrEqual(1_000_000);  // was 0
   });
 
-  it("F9: zero-capex refrigerant lever renders payback as 0.0 years, not as 'no capital'", () => {
+  it("F9 FIXED: zero-capex refrigerant lever reports 'no-capital', not 0.0 years", () => {
     const { combustion, systems, settings, baseYear } = seedScope1();
     const r = compute(combustion, systems, settings, baseYear);
     const ref = r.levers.find((l) => l.id === "refrigerant")!;
     expect(ref.capex).toBe(0);
-    expect(ref.paybackYears).toBe(0);    // reads as a computed result; it is not
+    expect(ref.paybackKind).toBe("no-capital");    // was paybackYears === 0
+    expect(ref.paybackYears).toBeNull();           // nothing to render as a number
   });
 });
