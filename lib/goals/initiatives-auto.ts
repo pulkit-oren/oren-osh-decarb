@@ -11,7 +11,12 @@ import { combustionCO2e, combustionEnergyKJ } from "@/lib/model/baseline";
 import { applyAssetActions, defaultActions, defaultSystemActions, type AssetActionResult } from "@/lib/model/segments";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { getRefrigerant, refrigerantPricePerKg } from "@/lib/model/factors";
-import { simplePayback } from "@/lib/model/finance";
+import {
+  financeAssumptionsFrom,
+  resolveFuelSpend,
+  summariseLever,
+  type FinanceAssumptions,
+} from "@/lib/finance";
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem } from "@/lib/model/suggestions";
 import { M2_PER_KW } from "@/lib/scope2/model/constants";
 import { DEFAULT_SETTINGS } from "@/lib/defaults";
@@ -19,6 +24,7 @@ import { resolveCombustion, resolveRefrigeration } from "@/lib/yearly";
 import { isUnallocatedId, resolveEquipment } from "@/lib/equipment/resolve";
 import { resolveFacilities } from "@/lib/scope2/store-helpers";
 import type { AssetActions, EfficiencyAction, ElectrifyAction, FuelSwitchAction, FlexFuelAction, SystemActions, GasSwitchAction, LeakFixAction } from "@/lib/model/types";
+import type { GlobalAssumptions } from "@/lib/model/types";
 import type { Goal, Initiative } from "./types";
 import type { Inventories } from "./select";
 
@@ -52,19 +58,46 @@ const scopeIncludesS1 = (g: Goal) => g.scope === "s1" || g.scope === "s1s2";
 const scopeIncludesS2 = (g: Goal) => g.scope === "s2" || g.scope === "s1s2";
 
 /** Per-asset running-cost delta for a suggested plan — mirrors the compute()
- *  opex logic so the goal's P&L view matches the modeller. */
-function assetOpexDelta(asset: Parameters<typeof suggestForAsset>[0], acts: AssetActions, r: AssetActionResult): number {
+ *  opex logic so the goal's P&L view matches the modeller. Every money decision
+ *  now comes from `@/lib/finance`, so "mirrors" is structural rather than a
+ *  promise: this was the THIRD copy of `asset.opex / asset.annualVolume` (F11),
+ *  and it read zero on any source with no typed spend just like the other two.
+ *  `fa` is threaded in rather than read from a module constant, because the
+ *  whole point of Ruling E is that this layer could not see the user's
+ *  assumptions at all. */
+function assetOpexDelta(
+  asset: Parameters<typeof suggestForAsset>[0], acts: AssetActions, r: AssetActionResult,
+  fa: FinanceAssumptions,
+): number {
   let d = 0;
-  if (acts.efficiency?.enabled) d -= asset.opex * r.effFraction;
+  const spend = resolveFuelSpend(asset, fa);
+
+  // Efficiency cuts VOLUME, so it saves the fuel half only (F2).
+  if (acts.efficiency?.enabled) d -= spend.fuel * r.effFraction;
+
   if (acts.electrify.enabled && r.elecFraction > 0) {
     d += r.kWh * acts.electrify.tariffPerKwh;
-    d -= asset.opex * (1 - r.effFraction) * r.elecFraction;
-    if (asset.category === "mobile") d += asset.opex * (1 - r.effFraction) * r.elecFraction * 0.2 * 0.65; // EV maintenance retained
+    // The whole bill goes away when the plant is replaced...
+    d -= (spend.fuel + spend.maintenance) * (1 - r.effFraction) * r.elecFraction;
+    // ...and the replacement still needs maintaining. Was `0.2 * 0.65` inline —
+    // maintenanceShareOfSpendPct and evMaintenanceRatioPct as literals, so a
+    // user editing either had no effect here (F11). Stationary was omitted
+    // entirely, the same F3 gap lib/model had.
+    const retain = asset.category === "mobile"
+      ? fa.evMaintenanceRatioPct / 100
+      : fa.heatPumpMaintenanceRatioPct / 100;
+    d += spend.maintenance * (1 - r.effFraction) * r.elecFraction * retain;
   }
+
   if ((acts.fuelSwitch.enabled || acts.flexFuel?.enabled) && r.fuelFraction > 0) {
-    const unitPrice = asset.annualVolume > 0 ? asset.opex / asset.annualVolume : 0;
     const vol = asset.annualVolume * (1 - r.effFraction) * r.fuelFraction;
-    d += vol * acts.fuelSwitch.altFuelPricePerUnit - vol * unitPrice;
+    d += vol * acts.fuelSwitch.altFuelPricePerUnit;
+    // The FUEL half only — see Ruling T. The plan prescribed
+    // `vol * resolvePrice(asset).pricePerUnit` here, which on a measured source
+    // is the blended fuel-and-maintenance rate compared against a pure pump
+    // price: the same defect Ruling P fixed in lib/model, prescribed a third
+    // time. A blend switch leaves the engine's maintenance alone.
+    d -= spend.fuel * (1 - r.effFraction) * r.fuelFraction;
   }
   return d;
 }
@@ -85,7 +118,15 @@ function systemOpexDelta(sys: Parameters<typeof suggestForSystem>[0], acts: Syst
 }
 
 /** Suggested initiatives for a goal, from base-year data, in the goal's metric. */
-export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
+export function autoInitiatives(
+  goal: Goal, inv: Inventories,
+  // OPTIONAL so every existing 2-arg caller keeps compiling. Before this
+  // parameter existed, ASSUMPTIONS was a module constant and the user's
+  // assumptions were structurally unreachable here — which is WHY line 62 could
+  // hardcode `0.2 * 0.65` without anyone noticing (Ruling E, extended).
+  assumptions?: Partial<GlobalAssumptions>,
+): Initiative[] {
+  const fa = financeAssumptionsFrom(assumptions);
   const out: Initiative[] = [];
   const push = (ref: string, name: string, metricImpact: number, budget: number, annualOpexDelta?: number) => {
     if (metricImpact <= 0) return;
@@ -100,7 +141,19 @@ export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
       metricImpact,
       budget: Math.round(budget),
       annualOpexDelta: annualOpexDelta != null ? Math.round(annualOpexDelta) : undefined,
-      paybackYears: annualOpexDelta != null ? simplePayback(Math.round(budget), -annualOpexDelta) : undefined,
+      // Discounted, off the same series the modeller reads (F6) — and
+      // undefined rather than 0 when there is no capital at risk (F9).
+      paybackYears: annualOpexDelta != null && budget > 0
+        ? (summariseLever(
+            {
+              id: ref ?? "initiative", capex: Math.round(budget),
+              opexParts: [{ label: "net", amount: annualOpexDelta, kind: "fuel" }],
+              fullAbatementT: 1, startYear: goal.baseYear + 1, rampYears: 1,
+              assetLifeYears: 10,
+            },
+            goal.baseYear, fa,
+          ).metrics.paybackYears ?? undefined)
+        : undefined,
       progressPct: 0,
       auto: true,
       sourceRef: ref,
@@ -130,7 +183,7 @@ export function autoInitiatives(goal: Goal, inv: Inventories): Initiative[] {
         const acts = mergeAssetSuggestion(asset);
         const r = applyAssetActions(asset, acts, ASSUMPTIONS);
         const tonnes = r.efficiencyAbatementT + r.scope1AbatementT + r.fuelAbatementT;
-        push(asset.id, suggestForAsset(asset).headline, tonnes, capexForAsset(asset, acts), assetOpexDelta(asset, acts, r));
+        push(asset.id, suggestForAsset(asset).headline, tonnes, capexForAsset(asset, acts), assetOpexDelta(asset, acts, r, fa));
       }
       for (const sys of systems) {
         const acts = mergeSystemSuggestion(sys);
