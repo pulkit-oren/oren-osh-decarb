@@ -25,3 +25,36 @@ export interface SpendSplit {
   maintenance: number;
   basis: PriceBasis;
 }
+
+export interface LeverInput {
+  id: string;
+  capex: number;
+  opexParts: OpexPart[];
+  /** Full-ramp annual tonnes. */
+  fullAbatementT: number;
+  startYear: number;
+  rampYears: number;
+  assetLifeYears: number;
+}
+
+export interface SeriesRow {
+  year: number;
+  capex: number;
+  opexDelta: number;
+  /** capex + opexDelta. Positive = cash out. */
+  net: number;
+  tonnes: number;
+  /** Discount factor to the model's base year. */
+  discount: number;
+}
+
+export interface LeverMetrics {
+  /** Σ discounted net ÷ Σ discounted tonnes. Infinity when no tonnes. */
+  levelisedCostPerTonne: number;
+  paybackYears: number | null;
+  /** Why payback is what it is. "no-capital" must never render as a number. */
+  paybackKind: "discounted" | "never" | "no-capital";
+  npv: number;
+  peakFunding: number;
+  totalCapex: number;
+}

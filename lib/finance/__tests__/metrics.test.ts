@@ -1,0 +1,93 @@
+import { describe, expect, it } from "vitest";
+import { DEFAULT_FINANCE_ASSUMPTIONS } from "@/lib/finance/assumptions";
+import { leverMetrics, programmeMetrics } from "@/lib/finance/metrics";
+import { buildLeverSeries } from "@/lib/finance/series";
+import type { LeverInput } from "@/lib/finance/types";
+
+const flat = { ...DEFAULT_FINANCE_ASSUMPTIONS, discountRatePct: 0, fuelEscalationPct: 0, elecEscalationPct: 0, otherEscalationPct: 0 };
+const lever = (over: Partial<LeverInput> = {}): LeverInput => ({
+  id: "x", capex: 1000, opexParts: [{ label: "saving", amount: -100, kind: "fuel" }],
+  fullAbatementT: 10, startYear: 2026, rampYears: 1, assetLifeYears: 5, ...over,
+});
+
+describe("leverMetrics", () => {
+  it("with no discounting, ₹/t is plain undiscounted cost ÷ tonnes — invariant 4", () => {
+    const rows = buildLeverSeries(lever(), 2026, flat);
+    const m = leverMetrics(rows, 1000);
+    const cost = rows.reduce((s, r) => s + r.net, 0);
+    const tonnes = rows.reduce((s, r) => s + r.tonnes, 0);
+    expect(m.levelisedCostPerTonne).toBeCloseTo(cost / tonnes, 9);
+  });
+
+  it("a pure saving with zero capex levelises NEGATIVE — invariant 2", () => {
+    const rows = buildLeverSeries(lever({ capex: 0 }), 2026, flat);
+    expect(leverMetrics(rows, 0).levelisedCostPerTonne).toBeLessThan(0);
+  });
+
+  it("no capital at risk reports no-capital, and payback is null not zero — F9", () => {
+    const rows = buildLeverSeries(lever({ capex: 0 }), 2026, flat);
+    const m = leverMetrics(rows, 0);
+    expect(m.paybackKind).toBe("no-capital");
+    expect(m.paybackYears).toBeNull();
+  });
+
+  it("capex recovered by savings gives a discounted payback in years from the start", () => {
+    // Window 2026..2030 (life 5, ramp 1). Cumulative, undiscounted at 0%:
+    //   2026: +1000 capex −400 saving = +600  → cum  600
+    //   2027:              −400        → cum  200
+    //   2028:              −400        → cum −200  ← first non-positive
+    // payback is measured in years FROM the first row: 2028 − 2026 = 2.
+    const rows = buildLeverSeries(lever({ capex: 1000, opexParts: [{ label: "s", amount: -400, kind: "fuel" }] }), 2026, flat);
+    const m = leverMetrics(rows, 1000);
+    expect(m.paybackKind).toBe("discounted");
+    expect(m.paybackYears).toBe(2);
+  });
+
+  it("a lever that never repays reports never, with a null payback", () => {
+    const rows = buildLeverSeries(lever({ capex: 1000, opexParts: [{ label: "c", amount: 50, kind: "fuel" }] }), 2026, flat);
+    const m = leverMetrics(rows, 1000);
+    expect(m.paybackKind).toBe("never");
+    expect(m.paybackYears).toBeNull();
+  });
+
+  it("zero abatement yields Infinity ₹/t, and the capex is still reported — F4", () => {
+    const rows = buildLeverSeries(lever({ fullAbatementT: 0, capex: 5000 }), 2026, flat);
+    const m = leverMetrics(rows, 5000);
+    expect(m.levelisedCostPerTonne).toBe(Infinity);
+    expect(m.totalCapex).toBe(5000);
+  });
+
+  it("peak funding is the worst UNdiscounted cumulative position", () => {
+    const rows = buildLeverSeries(lever({ capex: 1000, opexParts: [{ label: "s", amount: -400, kind: "fuel" }] }), 2026, flat);
+    expect(leverMetrics(rows, 1000).peakFunding).toBeCloseTo(600, 9); // 1000 spent, 400 back in year one
+  });
+
+  it("all three headline metrics move when the series moves — invariant 3", () => {
+    const base = leverMetrics(buildLeverSeries(lever(), 2026, flat), 1000);
+    const worse = leverMetrics(buildLeverSeries(lever({ capex: 4000 }), 2026, flat), 4000);
+    expect(worse.levelisedCostPerTonne).not.toBeCloseTo(base.levelisedCostPerTonne, 6);
+    expect(worse.npv).not.toBeCloseTo(base.npv, 6);
+    expect(worse.peakFunding).not.toBeCloseTo(base.peakFunding, 6);
+  });
+});
+
+describe("programmeMetrics", () => {
+  it("is Σcost ÷ Σtonnes across levers, NOT the mean of their ₹/t", () => {
+    const cheapBig = buildLeverSeries(lever({ id: "a", capex: 100, fullAbatementT: 1000, opexParts: [] }), 2026, flat);
+    const dearSmall = buildLeverSeries(lever({ id: "b", capex: 9000, fullAbatementT: 1, opexParts: [] }), 2026, flat);
+    const p = programmeMetrics([cheapBig, dearSmall]);
+
+    const cost = [...cheapBig, ...dearSmall].reduce((s, r) => s + r.net * r.discount, 0);
+    const tonnes = [...cheapBig, ...dearSmall].reduce((s, r) => s + r.tonnes * r.discount, 0);
+    expect(p.levelisedCostPerTonne).toBeCloseTo(cost / tonnes, 9);
+
+    const mean = (leverMetrics(cheapBig, 100).levelisedCostPerTonne + leverMetrics(dearSmall, 9000).levelisedCostPerTonne) / 2;
+    expect(p.levelisedCostPerTonne).not.toBeCloseTo(mean, 3); // the bug this guards
+  });
+
+  it("totals capex across every lever, including zero-abatement ones — F4", () => {
+    const dead = buildLeverSeries(lever({ id: "d", capex: 2000, fullAbatementT: 0, opexParts: [] }), 2026, flat);
+    const live = buildLeverSeries(lever({ id: "l", capex: 1000, fullAbatementT: 10, opexParts: [] }), 2026, flat);
+    expect(programmeMetrics([dead, live]).totalCapex).toBeCloseTo(3000, 6);
+  });
+});
