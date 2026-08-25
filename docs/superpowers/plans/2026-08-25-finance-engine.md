@@ -1945,10 +1945,52 @@ regression here as Critical, not cosmetic.
 
 ```bash
 grep -rn "opex / .*annualVolume\|annualVolume > 0 ? .*opex" --include=*.ts lib/ | grep -v lib/finance
-grep -rn "CAPEX_LIFETIME\|DISCOUNT_RATE_PCT\|weightedCostPerTonne\|simplePayback\|annualizedCapex" --include=*.ts --include=*.tsx lib/ components/
+grep -rn "CAPEX_LIFETIME\|DISCOUNT_RATE_PCT\|weightedCostPerTonne\|simplePayback\|annualizedCapex\|LEVER_LIFETIME_YEARS" --include=*.ts --include=*.tsx lib/ components/
 ```
 
 Both must return **nothing**. Paste the empty output into the task report — this is the evidence for the "one engine" claim.
+
+- [ ] **Step 5b: Give the zero-tonne sentinel a presentation (controller finding, Task 6)**
+
+> **Ruling Q (controller, found during Task 6 review).** Task 6's F4 fix widened
+> `LeverSummary.enabled` from `abatementT > 0` to "has tonnes OR has money".
+> That was the point — capex on a zero-abatement lever must stop vanishing. But
+> `leverMetrics` returns `levelisedCostPerTonne: Infinity` when there are no
+> discounted tonnes (`metrics.ts:32`), and two UI sites filter on `enabled`
+> ALONE before rendering that number:
+> `components/tabs/CfoFinanceTab.tsx:17` (then `:75-76`) and
+> `components/tabs/ActionPlanTab.tsx:244` (`LeverEconomics`). `MaccChart:10` and
+> `CostRanking` (`ActionPlanTab:242`) additionally filter `abatementT > 0` and
+> are safe.
+>
+> Verified end to end on the F4 construction (idle stationary asset, zero
+> volume, electrify enabled, 1,000,000 capex): the lever comes back
+> `enabled: true`, `abatementT: 0`, `capex: 1,000,000`,
+> `costPerTonne: Infinity`, and the CFO cell renders **`₹∞`**. `fmtMoney` is
+> worse — `₹Infinity Cr`. When NO lever has tonnes, `kpis.costPerTonne` is
+> Infinity too, so the portfolio ₹/t headline breaks the same way.
+>
+> Before Task 6 this was unreachable: `enabled` implied tonnes, so the empty
+> `activeLevers` case returned 0 instead. Task 6 turned a wrong-but-innocuous
+> ₹0 into visibly broken output, and F4's fix makes the case MORE likely to be
+> hit, not less, because it stopped hiding those levers.
+
+The engine's sentinel is right — `Infinity` is the honest answer to "cost per
+tonne of zero tonnes" and must not be softened to 0, which is what F4 was. The
+gap is presentational. Guard at the render site, not in `metrics.ts`:
+
+```ts
+// Cost per tonne is undefined when there are no tonnes. Say so, rather than
+// printing the sentinel or a zero that reads as "free".
+{Number.isFinite(l.costPerTonne)
+  ? `${l.costPerTonne < 0 ? "−" : ""}${CURRENCY}${fmt(Math.abs(l.costPerTonne))}`
+  : "—"}
+```
+
+Apply to both unguarded sites and to the `kpis.costPerTonne` KPI cards. Add a
+test asserting the F4 construction yields a non-finite `costPerTonne` so the
+contract is pinned, and confirm in Task 11's browser walk that a money-only
+lever shows its capex in the totals while its ₹/t cell reads "—".
 
 - [ ] **Step 6: Full gates from clean**
 
