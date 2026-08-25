@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { compute } from "@/lib/model";
 import { FUELS } from "@/lib/model/factors";
+import type { CombustionAsset, LeverSettings } from "@/lib/model/types";
 import { seedScope1, sourceNamed } from "./seed-fixture";
 
 describe("defect witnesses — the seeded company, which is what users see", () => {
@@ -42,28 +43,78 @@ describe("defect witnesses — the seeded company, which is what users see", () 
   });
 
   it("F4: a lever with capex but no abatement is absent from totalCapex", () => {
-    const { combustion, systems, settings, baseYear } = seedScope1();
-    // NOTE: the seeded company already carries electrify assetCapex 1,500,000 on
-    // two sources plus infraCapex 15,000,000, so totalCapex is never 0 and
-    // asserting a bare threshold here would pass no matter what. The only
-    // discriminating assertion is a WITH-vs-WITHOUT comparison.
-    const withDeadLever: typeof settings = {
-      ...settings,
+    // Rebuilt per code review (task-1-report.md, Finding 2): the original
+    // construction set efficiency.savingPct: 0, which zeroes r.effFraction
+    // and skips the `acts.efficiency?.enabled && r.effFraction > 0` guard at
+    // lib/model/index.ts:122 entirely — the 1,000,000 never even reached
+    // effCapex, so the witness passed for the wrong reason (capex never
+    // accrued, not "accrued then discarded by the roll-up filter").
+    //
+    // This construction isolates the actual mechanism at lib/model/index.ts's
+    // `activeLevers = leverRows.filter(l => l.abatementT > 0)` roll-up:
+    // a single synthetic STATIONARY asset, annualVolume 0, opex 0 — not the
+    // seeded company, whose own electrification abatement would keep the
+    // lever alive and mask the filter. electrify.capacityPct: 50 makes
+    // `fractionFor` (lib/model/segments.ts) return 0.5 for a stationary
+    // asset, which is > 0, so the per-asset loop body IS entered and
+    // `electrifyCapexFor` returns assetCapex unconditionally for non-mobile —
+    // the 1,000,000 genuinely accrues into elecCapexTotal. Zero volume means
+    // the electrification lever's abatementT is 0. assumptions.infraCapex: 0
+    // keeps the number clean (line ~236 would otherwise add it on top).
+    const asset: CombustionAsset = {
+      id: "f4-synthetic",
+      name: "F4 synthetic zero-volume asset",
+      category: "stationary",
+      fuelType: "diesel",
+      annualVolume: 0,
+      unit: "L",
+      opex: 0,
+    };
+    const settings: LeverSettings = {
       byAsset: {
-        ...settings.byAsset,
-        // efficiency on with capex, but zero saving → capex spent, no tonnes
-        "c-6": {
-          ...settings.byAsset["c-6"],
-          efficiency: { enabled: true, savingPct: 0, capex: 1_000_000, startYear: 2026, targetYear: 2028 },
+        "f4-synthetic": {
+          electrify: {
+            enabled: true,
+            unitsToConvert: 0,
+            capacityPct: 50,
+            cop: 3,
+            tariffPerKwh: 9,
+            assetCapex: 1_000_000,
+            purchaseTiming: "replacement",
+            replacementPremiumPct: 40,
+            startYear: 2026,
+            targetYear: 2032,
+          },
+          fuelSwitch: {
+            enabled: false,
+            altFuel: "biodiesel",
+            blendPct: 0,
+            efficiencyPenaltyPct: 0,
+            altFuelPricePerUnit: 0,
+            retrofitCapex: 0,
+            startYear: 2027,
+            targetYear: 2033,
+          },
         },
       },
+      bySystem: {},
+      assumptions: {
+        gridEf: 0,
+        renewableSourcingPct: 0,
+        recCostPerTonne: 0,
+        carbonPricePerTonne: 0,
+        infraCapex: 0,
+      },
     };
-    const before = compute(combustion, systems, settings, baseYear).kpis.totalCapex;
-    const after = compute(combustion, systems, withDeadLever, baseYear);
 
-    expect(after.levers.find((l) => l.id === "efficiency")!.abatementT).toBe(0);
-    expect(before).toBeGreaterThan(0);              // guards against a vacuous pass
-    expect(after.kpis.totalCapex).toBe(before);      // the 1,000,000 vanished — WRONG
+    const r = compute([asset], [], settings, 2025);
+    const elecLever = r.levers.find((l) => l.id === "electrification")!;
+
+    expect(elecLever.abatementT).toBe(0);          // zero volume → nothing abated
+    expect(elecLever.capex).toBe(1_000_000);        // the 1,000,000 DID accrue …
+    // … and was then discarded by the abatementT > 0 roll-up filter —
+    // this IS the F4 mechanism, not a capex-never-accrued non-event.
+    expect(r.kpis.totalCapex).toBe(0);
   });
 
   it("F9: zero-capex refrigerant lever renders payback as 0.0 years, not as 'no capital'", () => {
