@@ -84,11 +84,30 @@ describe("Scope 2 opexParts escalate as ELECTRICITY, not as untagged 'other'", (
     expect(npvAt(0)).not.toBeCloseTo(npvAt(8), 0);
   });
 
-  it("every Scope 2 opexPart carries an explicit kind", () => {
+  it("every Scope 2 opexPart is tagged ELEC, not merely tagged", () => {
+    // `toBeDefined()` was too weak by exactly the margin that matters: `kind:
+    // "other"` IS defined, and "other" means 0% escalation — the Ruling R
+    // failure mode this block exists to prevent. Retagging the efficiency part,
+    // or the Unbundled RECs part, to "other" passed the entire suite. Only the
+    // generation lever was really guarded, because both escalation tests above
+    // read generation alone.
+    //
+    // Every Scope 2 flow is electricity: avoided grid draw, export credits, a
+    // PPA strike delta, a green-tariff premium, and a REC settling against the
+    // renewable power market. So assert the value, not its presence.
     const r = computeScope2([facility()], withGeneration(), 2025, { discountRatePct: 10 });
     const parts = r.levers.flatMap((l) => l.opexParts);
     expect(parts.length).toBeGreaterThan(0);
-    for (const p of parts) expect(p.kind, `part "${p.label}" is untagged`).toBeDefined();
+    for (const p of parts) expect(p.kind, `part "${p.label}" must escalate as electricity`).toBe("elec");
+  });
+
+  it("the EFFICIENCY lever's economics move with the electricity escalation too", () => {
+    const npvAt = (elecEscalationPct: number) => computeScope2(
+      [facility()], levers(), 2025, { discountRatePct: 10, elecEscalationPct },
+    ).levers.find((l) => l.id === "efficiency")!.npv;
+    expect(Number.isFinite(npvAt(0))).toBe(true);
+    expect(Number.isFinite(npvAt(8))).toBe(true);
+    expect(npvAt(0)).not.toBeCloseTo(npvAt(8), 0);
   });
 });
 
@@ -105,5 +124,23 @@ describe("Scope 2 prices electricity from a supplied tariff, not a derived one",
       [facility({ tariffPerKwh })], levers(), 2025, { discountRatePct: 10 },
     ).levers.find((l) => l.id === "efficiency")!.annualOpexDelta;
     expect(savingAt(18) / savingAt(9)).toBeCloseTo(2, 6);
+  });
+});
+
+describe("F4 on the Scope 2 side too", () => {
+  it("capex with no tonnes survives the roll-up", () => {
+    // A REAL load (so the retrofit costs real money) on a ZERO-carbon grid (so
+    // it abates nothing). Zeroing the load instead also zeroes the capex, which
+    // makes the fixture unable to show anything — the identity-value trap.
+    const idle = facility({ annualLoadKwh: 1_000_000, roofSpaceM2: 0, gridEf: 0 });
+    const withCapex = levers({ byFacility: { "f-0": {
+      ...levers().byFacility["f-0"],
+      efficiency: { ...levers().byFacility["f-0"].efficiency, enabled: true, ledPct: 100, ledCapex: 750_000 },
+    } } });
+    const r = computeScope2([idle], withCapex, 2025, { discountRatePct: 10 });
+    const eff = r.levers.find((l) => l.id === "efficiency")!;
+    expect(eff.abatementT).toBe(0);                       // no load, so no tonnes
+    expect(eff.capex).toBeGreaterThan(0);                 // but real money
+    expect(r.kpis.totalCapex).toBeGreaterThanOrEqual(eff.capex);
   });
 });

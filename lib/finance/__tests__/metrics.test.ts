@@ -100,3 +100,68 @@ describe("programmeMetrics", () => {
     );
   });
 });
+
+// Added after a mutation review found that this file tests the plumbing at ZERO
+// PRESSURE: the `flat` fixture above sets discountRatePct: 0, so every value
+// assertion here ran where discounted and undiscounted cash are numerically
+// identical. Discounting — the thing this module is named for — was pinned only
+// in series.test.ts where the factor is PRODUCED, never here where it is
+// CONSUMED. Four mutations lived in that gap and left the whole suite green.
+const disc = { ...DEFAULT_FINANCE_ASSUMPTIONS, discountRatePct: 10, fuelEscalationPct: 0, elecEscalationPct: 0, otherEscalationPct: 0 };
+
+describe("leverMetrics under a NON-ZERO discount rate", () => {
+  it("peak funding is real cash — it must NOT be discounted", () => {
+    // baseYear must be BEFORE startYear, or the first row's factor is 1 and the
+    // distinction hides again exactly as it did before.
+    const rows = buildLeverSeries(
+      lever({ startYear: 2026, capex: 1000, opexParts: [{ label: "s", amount: -400, kind: "fuel" }] }),
+      2025, disc);
+    expect(rows[0].discount).toBeLessThan(1);          // the distinction is live
+    expect(leverMetrics(rows, 1000).peakFunding).toBeCloseTo(600, 9);
+  });
+
+  it("the levelised DENOMINATOR is discounted tonnes, not raw tonnes", () => {
+    const rows = buildLeverSeries(lever({ capex: 1000 }), 2025, disc);
+    const dCost = rows.reduce((s, r) => s + r.net * r.discount, 0);
+    const dT = rows.reduce((s, r) => s + r.tonnes * r.discount, 0);
+    const rawT = rows.reduce((s, r) => s + r.tonnes, 0);
+    expect(dT).toBeLessThan(rawT * 0.95);             // the two are far apart
+    expect(leverMetrics(rows, 1000).levelisedCostPerTonne).toBeCloseTo(dCost / dT, 9);
+  });
+
+  it("a net-cost lever has a NEGATIVE npv, and its magnitude is pinned", () => {
+    // Sign was untested anywhere: `npv: -discCost` could be flipped to
+    // `discCost` and every test still passed, because the only npv assertions
+    // were "it moved".
+    const rows = buildLeverSeries(
+      lever({ capex: 1000, opexParts: [{ label: "c", amount: 50, kind: "fuel" }] }), 2026, flat);
+    const discCost = rows.reduce((s, r) => s + r.net * r.discount, 0);
+    expect(discCost).toBeGreaterThan(0);              // it really is a net cost
+    expect(leverMetrics(rows, 1000).npv).toBeCloseTo(-discCost, 9);
+    expect(leverMetrics(rows, 1000).npv).toBeLessThan(0);
+  });
+
+  it("a pure-saving lever has a POSITIVE npv", () => {
+    const rows = buildLeverSeries(
+      lever({ capex: 0, opexParts: [{ label: "s", amount: -100, kind: "fuel" }] }), 2026, flat);
+    expect(leverMetrics(rows, 0).npv).toBeGreaterThan(0);
+  });
+});
+
+describe("programmeMetrics merges by CALENDAR YEAR, not by concatenation", () => {
+  it("peak funding sees two levers spending in the same year", () => {
+    // This is the entire reason programmeMetrics takes a second pass over a
+    // year-merged array. Replacing `pbSource` with the concatenated metrics
+    // changed nothing in the suite, so the merge and its discount guard were
+    // unobserved. Two identical levers starting together: concatenated the
+    // worst position is one lever's 2,200; by calendar year both spend at once
+    // and the real requirement is 3,400.
+    const mk = (id: string) => buildLeverSeries(
+      { id, capex: 2000, opexParts: [{ label: "s", amount: -300, kind: "fuel" }],
+        fullAbatementT: 10, startYear: 2026, rampYears: 1, assetLifeYears: 5 },
+      2026, flat);
+    const p = programmeMetrics([mk("a"), mk("b")]);
+    expect(p.peakFunding).toBeCloseTo(3400, 6);
+    expect(p.totalCapex).toBeCloseTo(4000, 6);
+  });
+});

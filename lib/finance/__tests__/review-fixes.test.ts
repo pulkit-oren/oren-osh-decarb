@@ -154,3 +154,80 @@ describe("review finding C1: no non-finite number may reach a spreadsheet cell",
     expect(String(row[6])).toContain("no capital");
   });
 });
+
+// The mutation review found these four behaviours pinned by nothing: each could
+// be broken and the entire suite stayed green.
+describe("review: behaviours the suite could not see", () => {
+  const seed = () => seedScope1();
+
+  it("the carbon price actually moves costPerTonneWithCarbon", () => {
+    // `costPerTonneWithCarbon` could be made to ignore g.carbonPricePerTonne
+    // entirely without failing anything.
+    const at = (carbonPricePerTonne: number) => {
+      const { combustion, systems, settings, baseYear } = seed();
+      const r = compute(combustion, systems, { ...settings, assumptions: { ...settings.assumptions, carbonPricePerTonne } }, baseYear);
+      return r.levers.find((l) => l.id === "fuelSwitch")!;
+    };
+    const a = at(0), b = at(3000);
+    expect(a.abatementT).toBeGreaterThan(0);
+    // Applied uniformly as a per-tonne credit, so the gap IS the carbon price.
+    expect(a.costPerTonneWithCarbon - b.costPerTonneWithCarbon).toBeCloseTo(3000, 6);
+  });
+
+  it("infraCapex reaches the electrification lever's capex", () => {
+    // Every new capex test deliberately sets infraCapex: 0 "so the number stays
+    // clean", so nothing exercised the one-off grid-upgrade cost at all.
+    const at = (infraCapex: number) => {
+      const { combustion, systems, settings, baseYear } = seed();
+      return compute(combustion, systems, { ...settings, assumptions: { ...settings.assumptions, infraCapex } }, baseYear)
+        .levers.find((l) => l.id === "electrification")!.capex;
+    };
+    expect(at(5_000_000) - at(0)).toBeCloseTo(5_000_000, 6);
+  });
+
+  it("a lever with money but no tonnes stays enabled — the other half of F4", () => {
+    // `enabled` drives kpiFinanceSheet's per-lever rows, so narrowing it back to
+    // `abatementT > 0` silently drops those rows from the export.
+    const asset: CombustionAsset = {
+      id: "z-0", name: "Idle boiler", category: "stationary", fuelType: "png",
+      unit: "m3", annualVolume: 0, opex: 0, unitCount: 1, remainingLife: 10,
+    } as CombustionAsset;
+    const base = defaultActions(asset);
+    const s: LeverSettings = {
+      byAsset: { "z-0": { ...base, electrify: { ...base.electrify, enabled: true, capacityPct: 50, assetCapex: 1_000_000 } } },
+      bySystem: {},
+      assumptions: { ...DEFAULT_SETTINGS.assumptions, infraCapex: 0 },
+    } as LeverSettings;
+    const el = compute([asset], [], s, 2025).levers.find((l) => l.id === "electrification")!;
+    expect(el.abatementT).toBe(0);
+    expect(el.capex).toBeCloseTo(1_000_000, 6);
+    expect(el.enabled).toBe(true);
+  });
+
+  it("every Scope 1 opexPart carries the kind its quantity actually escalates as", () => {
+    // Scope 1 part kinds were asserted nowhere: retagging the refrigerant parts
+    // or the retained-maintenance part broke nothing. Pin the mapping.
+    const { combustion, systems, settings, baseYear } = seed();
+    const r = compute(combustion, systems, settings, baseYear);
+    const expected: Record<string, string> = {
+      "Avoided fuel spend": "fuel",
+      "New electricity cost": "elec",
+      "Retained maintenance on replacement plant": "other",
+      "REC cost on added Scope 2": "elec",
+      "Displaced fuel": "fuel",
+      "Displaced maintenance": "other",
+      "Alt-fuel spend": "fuel",
+      "Displaced fossil fuel spend": "fuel",
+    };
+    let checked = 0;
+    for (const l of r.levers) {
+      for (const p of l.opexParts) {
+        const want = expected[p.label];
+        if (want === undefined) continue;   // refrigerant parts are a data decision
+        expect(p.kind, `part "${p.label}"`).toBe(want);
+        checked++;
+      }
+    }
+    expect(checked, "no known part was checked").toBeGreaterThan(4);
+  });
+});

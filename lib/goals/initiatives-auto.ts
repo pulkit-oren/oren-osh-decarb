@@ -35,6 +35,12 @@ const KJ_PER_KWH = 3600;
 const SOLAR_CAPEX_PER_KW = 45_000;
 const EFFICIENCY_SAVING_SHARE = 0.15; // standard LED+motor+BMS portfolio saving
 const EFFICIENCY_CAPEX_PER_KWH = 12;
+/** Non-finance defaults. The FINANCE fields now arrive through the
+ *  `assumptions` parameter; this stays only as the base the caller's overrides
+ *  are merged onto, so the user's gridEf and sourcing mix reach the PHYSICS too.
+ *  Passing this constant straight to `applyAssetActions` meant a user's grid
+ *  factor silently did not reach the goals layer — the finance half of the same
+ *  problem was fixed and the physics half was not. */
 const ASSUMPTIONS = DEFAULT_SETTINGS.assumptions;
 
 function mergeAssetSuggestion(asset: Parameters<typeof suggestForAsset>[0]): AssetActions {
@@ -130,6 +136,8 @@ export function autoInitiatives(
   assumptions?: Partial<GlobalAssumptions>,
 ): Initiative[] {
   const fa = financeAssumptionsFrom(assumptions);
+  // Merged, so the physics below sees the user's gridEf / renewable mix as well.
+  const phys = { ...ASSUMPTIONS, ...assumptions };
   const out: Initiative[] = [];
   /** How an initiative's running-cost delta behaves over time. Hardcoding one
    *  tag for all of them made a Scope 2 solar saving escalate at the FUEL rate,
@@ -200,7 +208,7 @@ export function autoInitiatives(
     if (scopeIncludesS1(goal)) {
       for (const asset of assets) {
         const acts = mergeAssetSuggestion(asset);
-        const r = applyAssetActions(asset, acts, ASSUMPTIONS);
+        const r = applyAssetActions(asset, acts, phys);
         const tonnes = r.efficiencyAbatementT + r.scope1AbatementT + r.fuelAbatementT;
         push(asset.id, suggestForAsset(asset).headline, tonnes, capexForAsset(asset, acts), assetOpexDelta(asset, acts, r, fa));
       }
@@ -233,7 +241,7 @@ export function autoInitiatives(
     if (scopeIncludesS1(goal)) {
       for (const asset of assets) {
         const acts = mergeAssetSuggestion(asset);
-        const r = applyAssetActions(asset, acts, ASSUMPTIONS);
+        const r = applyAssetActions(asset, acts, phys);
         const displacedFuelKwh = (combustionEnergyKJ(asset) / KJ_PER_KWH) * r.elecFraction;
         const energySaved = Math.max(0, displacedFuelKwh - r.kWh); // efficiency gain from electrification (COP)
         push(asset.id, suggestForAsset(asset).headline, energySaved, capexForAsset(asset, acts));
