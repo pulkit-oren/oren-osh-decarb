@@ -20,7 +20,7 @@ import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { CURRENCY } from "@/lib/defaults";
 import type { CombustionAsset, FlexFuelAction, FuelSwitchAction, RefrigerantEra, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
-import { cn, fmt, fmtK, fmtMoney, fmtNum, pct } from "@/lib/utils";
+import { cn, fmt, fmtK, fmtMoney, fmtNum, pct, fmtPerTonne } from "@/lib/utils";
 import { InfoTip } from "../ui/InfoTip";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, SelectField } from "@/components/tabs/activity/fields";
@@ -345,7 +345,7 @@ function ModellerHome({ onOpen, name, setName }: { onOpen: (s: Seg) => void; nam
           <p className="relative mt-1 text-xs text-white/70">reduction by 2030</p>
           <div className="relative mt-5 grid grid-cols-2 gap-3">
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Net 2030</p><p className="text-xl font-extrabold tabular-nums">{fmtK(k.net2030)} t</p></div>
-            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Cost / t</p><p className="text-xl font-extrabold tabular-nums">{CURRENCY}{fmt(k.costPerTonne)}</p></div>
+            <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Cost / t</p><p className="text-xl font-extrabold tabular-nums">{CURRENCY}{fmtPerTonne(k.costPerTonne)}</p></div>
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Years to target</p><p className="text-xl font-extrabold tabular-nums">{k.yearsToTarget ? String(k.yearsToTarget) : "—"}</p></div>
             <div><p className="text-[10px] uppercase tracking-wide text-white/70 font-bold">Status</p><p className="text-xl font-extrabold">{k.onTrack2030 ? "On track" : "Behind"}</p></div>
           </div>
@@ -406,7 +406,7 @@ function PathwaysPanel({ onApply }: { onApply: (s: LeverSettings) => void }) {
           <div className="flex items-center gap-5 text-right">
             <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cut by 2030</div><div className="text-sm font-extrabold tabular-nums text-brand-600">{pct(p.kpis.reduction2030)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(p.kpis.totalCapex)}</div></div>
-            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost / t</div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmt(p.kpis.costPerTonne)}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost / t</div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmtPerTonne(p.kpis.costPerTonne)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Payback</div><div className="text-sm font-extrabold tabular-nums text-ink">{p.kpis.paybackYears != null ? `${fmtNum(p.kpis.paybackYears, 1)} yr` : "—"}</div></div>
           </div>
           <button

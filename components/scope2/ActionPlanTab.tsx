@@ -3,7 +3,7 @@
 import { FileWarning, Wallet, TrendingDown, Coins } from "lucide-react";
 import { FAMILY_COLORS } from "@/lib/model/factors";
 import { useScope2 } from "@/lib/scope2/store";
-import { cn, fmt, fmtMoney, fmtNum } from "@/lib/utils";
+import { cn, fmt, fmtMoney, fmtNum, fmtPerTonne } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
 import { KpiCard } from "../ui/KpiCard";
 import { InfoTip } from "../ui/InfoTip";
@@ -19,7 +19,7 @@ export function Scope2ActionPlanTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard icon={Wallet} label="Total CAPEX" value={fmtMoney(k.totalCapex)} hint="all enabled levers, subsidy applied" />
         <KpiCard icon={Coins} label="Annual OPEX Δ" value={fmtMoney(k.annualOpexDelta)} hint={k.annualOpexDelta <= 0 ? "net saving per year" : "net cost per year"} />
-        <KpiCard emphasis icon={TrendingDown} label="Blended cost of abatement" value={fmt(k.costPerTonne)} unit="/tCO₂e" hint={k.paybackYears != null ? `portfolio payback ≈ ${fmtNum(k.paybackYears, 1)} yrs` : "no portfolio payback"} />
+        <KpiCard emphasis icon={TrendingDown} label="Blended cost of abatement" value={fmtPerTonne(k.costPerTonne)} unit="/tCO₂e" hint={k.paybackYears != null ? `portfolio payback ≈ ${fmtNum(k.paybackYears, 1)} yrs` : "no portfolio payback"} />
       </div>
 
       <Card>
@@ -62,7 +62,7 @@ export function Scope2ActionPlanTab() {
                       {fmtMoney(l.annualOpexDelta)}
                     </td>
                     <td className="py-2.5 px-2 text-right tabular-nums">{l.paybackYears != null ? fmtNum(l.paybackYears, 1) : "—"}</td>
-                    <td className="py-2.5 px-2 text-right tabular-nums">{fmt(l.costPerTonne)}</td>
+                    <td className="py-2.5 px-2 text-right tabular-nums">{fmtPerTonne(l.costPerTonne)}</td>
                     <td className="py-2.5 px-2">
                       <ul className="text-xs text-ink-soft space-y-0.5">
                         {l.opexParts.filter((part) => part.amount !== 0).map((part) => (

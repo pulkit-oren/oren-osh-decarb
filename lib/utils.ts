@@ -25,6 +25,18 @@ export function pct(fraction: number, dp = 0): string {
   return `${(fraction * 100).toFixed(dp)}%`;
 }
 
+/** Cost per tonne, which is UNDEFINED when there are no tonnes.
+ *
+ *  `leverMetrics` returns Infinity in that case, and it is right to: softening
+ *  it to 0 is precisely the F4 defect, where a lever with capex and no
+ *  abatement read as free. But Infinity must never reach a user — `fmt`
+ *  renders it "∞" and `fmtMoney` renders it "₹Infinity Cr". The case became
+ *  reachable when `enabled` widened to include levers with money but no
+ *  tonnes, so every site showing a blended or per-lever rate needs this. */
+export function fmtPerTonne(n: number): string {
+  return Number.isFinite(n) ? fmt(n) : "—";
+}
+
 /** Compact tonnes, e.g. 6300 → "6.3k". */
 export function fmtK(n: number): string {
   if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(1)}k`;

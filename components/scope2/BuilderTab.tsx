@@ -31,7 +31,7 @@ import { MiniTrajectory } from "@/components/charts/MiniTrajectory";
 import { LeverImpactList } from "@/components/ui/LeverImpactList";
 import { ScenarioList } from "@/components/ui/ScenarioList";
 import { diffFlat, diffLeverMaps, type DiffRow } from "@/lib/scenario-diff";
-import { simplePayback } from "@/lib/model/finance";
+import { financeAssumptionsFrom, programmeMetrics, S2_LIFETIME_YEARS, summariseLever } from "@/lib/finance";
 
 /* ============================================================
    Router
@@ -399,7 +399,7 @@ function Scope2SuggestionCard({ facilityId }: { facilityId: string }) {
    ============================================================ */
 
 function FacilityImpact({ facilityId }: { facilityId: string }) {
-  const { baseFacilities, levers, result } = useScope2();
+  const { baseFacilities, levers, result, baseYear } = useScope2();
   const f = baseFacilities.find((x) => x.id === facilityId);
   if (!f) return null;
   const acts = levers.byFacility[f.id] ?? defaultFacilityActions(f);
@@ -411,7 +411,34 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
   // Live running-cost picture for THIS facility's levers (efficiency + solar).
   const pf = result.perFacility[f.id];
   const annualSaving = (acts.efficiency.enabled ? pf?.eff.opexSaving ?? 0 : 0) + (acts.generation.enabled ? pf?.gen.opexSaving ?? 0 : 0);
-  const payback = simplePayback(capex, annualSaving);
+
+  // Discounted payback, off the same engine every other money figure uses.
+  // This was `simplePayback(capex, annualSaving)` — undiscounted, and shown
+  // beside discounted currency-per-tonne figures elsewhere in the app (F6).
+  // The two levers get their OWN series because their asset lives differ
+  // sharply: LED and BMS retrofits over 8 years, solar over 25. Collapsing
+  // them into one series would need an invented blended life; combining two
+  // real ones does not.
+  const fa = financeAssumptionsFrom(undefined);
+  const ramp = (a: { startYear: number; targetYear: number }) =>
+    ({ startYear: a.startYear, rampYears: Math.max(1, a.targetYear - a.startYear + 1) });
+  const series = [
+    acts.efficiency.enabled && pf
+      ? summariseLever({
+          id: "efficiency", capex: pf.eff.capex,
+          opexParts: [{ label: "Avoided grid electricity", amount: -pf.eff.opexSaving, kind: "elec" }],
+          fullAbatementT: 0, assetLifeYears: S2_LIFETIME_YEARS.efficiency, ...ramp(acts.efficiency),
+        }, baseYear, fa).series
+      : null,
+    acts.generation.enabled && pf
+      ? summariseLever({
+          id: "generation", capex: pf.gen.capex,
+          opexParts: [{ label: "Avoided grid electricity", amount: -pf.gen.opexSaving, kind: "elec" }],
+          fullAbatementT: 0, assetLifeYears: S2_LIFETIME_YEARS.generation, ...ramp(acts.generation),
+        }, baseYear, fa).series
+      : null,
+  ].filter((x): x is NonNullable<typeof x> => x !== null);
+  const payback = series.length > 0 ? programmeMetrics(series).paybackYears : null;
 
   return (
     <div className="rounded-xl3 border border-line/60 bg-surface shadow-card px-5 py-4">
@@ -440,7 +467,7 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">Payback <InfoTip text="Simple payback: CAPEX ÷ annual saving." /></p>
+          <p className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">Payback <InfoTip text="Discounted payback: the year the cumulative discounted cashflow first turns positive. Read off the same series as every other money figure." /></p>
           <p className="text-lg font-extrabold tabular-nums text-ink">{payback != null ? `${payback.toFixed(1)} yr` : "—"}</p>
         </div>
       </div>

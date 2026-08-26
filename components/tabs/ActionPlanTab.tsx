@@ -15,7 +15,7 @@ import { ALT_FUELS, FAMILY_COLORS, REFRIGERANTS } from "@/lib/model/factors";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { applyAssetActions } from "@/lib/model/segments";
 import { CURRENCY } from "@/lib/defaults";
-import { cn, fmt, fmtMoney, fmtNum, pct } from "@/lib/utils";
+import { cn, fmt, fmtMoney, fmtNum, pct, fmtPerTonne } from "@/lib/utils";
 import { groupByBu } from "@/lib/group-by-bu";
 import type { ComputeResult } from "@/lib/model";
 import { Card, CardHeader } from "../ui/Card";
@@ -262,7 +262,7 @@ export function ActionPlanTab() {
           )}
           <span className="flex items-center gap-1.5 text-ink-soft">
             Blended cost of the plan:
-            <strong className="text-ink tabular-nums">{CURRENCY}{fmt(k.costPerTonne)}/t</strong>
+            <strong className="text-ink tabular-nums">{CURRENCY}{fmtPerTonne(k.costPerTonne)}/t</strong>
             <InfoTip text="The weighted average yearly cost per tonne removed across all active actions — investment annualized over 10 years plus running-cost changes." />
           </span>
         </div>
@@ -301,7 +301,7 @@ function CostRanking({ levers }: { levers: ComputeResult["levers"] }) {
                   ["--bar-i" as string]: idx,
                 }}
               >
-                {paysForItself ? "" : `${CURRENCY}${fmt(l.costPerTonne)}/t`}
+                {paysForItself ? "" : `${CURRENCY}${fmtPerTonne(l.costPerTonne)}/t`}
               </div>
             </div>
             <span className="w-40 shrink-0 text-right">

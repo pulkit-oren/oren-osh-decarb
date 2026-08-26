@@ -27,7 +27,6 @@ import { validateScope2 } from "./validate";
 
 export const END_YEAR = 2050;
 export const BAU_GROWTH = 0.01;
-export const CAPEX_LIFETIME = 10; // legacy default; per-lever lifetimes below drive the annuity
 // DISCOUNT_RATE_PCT and the local S2_LIFETIME_YEARS table are GONE. Both were
 // module-private with no external reference, so unlike the four symbols Ruling B
 // defers to Task 10, deleting them here cannot break another task — and left in

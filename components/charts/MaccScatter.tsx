@@ -12,7 +12,7 @@ import {
   Cell,
 } from "recharts";
 import { CURRENCY } from "@/lib/defaults";
-import { fmt, fmtK } from "@/lib/utils";
+import { fmt, fmtK, fmtPerTonne } from "@/lib/utils";
 import { useMounted } from "@/lib/useMounted";
 
 export interface MaccItem {
@@ -78,7 +78,7 @@ function MaccTooltip({ active, payload }: { active?: boolean; payload?: { payloa
     <div className="bg-white rounded-xl border border-line shadow-card-lg px-3 py-2 text-xs">
       <div className="font-bold text-ink mb-1">{d.label}</div>
       <div className="text-ink-soft">Abatement: <span className="font-semibold text-ink">{fmt(d.tonnes)} t</span></div>
-      <div className="text-ink-soft">Cost/tonne: <span className="font-semibold text-ink">{CURRENCY}{fmt(d.costPerTonne)}</span></div>
+      <div className="text-ink-soft">Cost/tonne: <span className="font-semibold text-ink">{CURRENCY}{fmtPerTonne(d.costPerTonne)}</span></div>
       <div className="text-ink-soft">Ambition: <span className="font-semibold text-ink">{d.ambition}%</span></div>
     </div>
   );

@@ -30,14 +30,6 @@ import type {
 export const BASE_YEAR = 2025;
 export const END_YEAR = 2050;
 export const BAU_GROWTH = 0.01;
-export const CAPEX_LIFETIME = 10; // legacy default; per-lever lifetimes below drive the annuity
-/** Asset life per lever family — drives the capital-recovery annualization. */
-export const LEVER_LIFETIME_YEARS: Record<"efficiency" | "electrification" | "fuelSwitch" | "refrigerant", number> = {
-  efficiency: 7,       // economiser packages, telematics kit
-  electrification: 10, // blended EV (8) / heat pump & electric boiler (15)
-  fuelSwitch: 15,      // burner retrofits, conversion kit
-  refrigerant: 12,     // retrofit ↔ system replacement blend
-};
 
 /** One named running-cost component — now owned by `@/lib/finance`, which is
  *  what builds the cashflow series from it. Re-exported under the same name so

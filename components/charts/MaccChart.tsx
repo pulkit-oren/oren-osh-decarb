@@ -1,7 +1,7 @@
 "use client";
 import type { ComputeResult } from "@/lib/model";
 import { CURRENCY } from "@/lib/defaults";
-import { fmt } from "@/lib/utils";
+import { fmt, fmtPerTonne } from "@/lib/utils";
 import { maccLayout } from "@/lib/macc";
 
 const W = 600, H = 240, PAD_L = 48, PAD_B = 28, PAD_T = 12;
@@ -32,7 +32,7 @@ export function MaccChart({ levers }: { levers: ComputeResult["levers"] }) {
           const h = Math.max(1, Math.abs(yOf(b.costPerTonne) - zeroY));
           return (
             <rect key={b.id} x={x} y={yTop} width={w} height={h} fill={b.color} opacity={b.costPerTonne < 0 ? 0.85 : 0.7} rx={2}>
-              <title>{`${b.label}: ${CURRENCY}${fmt(b.costPerTonne)}/t · ${fmt(b.abatementT)} t`}</title>
+              <title>{`${b.label}: ${CURRENCY}${fmtPerTonne(b.costPerTonne)}/t · ${fmt(b.abatementT)} t`}</title>
             </rect>
           );
         })}

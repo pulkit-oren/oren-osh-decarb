@@ -10,7 +10,7 @@ import { useScenario } from "@/lib/store";
 import { compute } from "@/lib/model";
 import { CURRENCY } from "@/lib/defaults";
 import type { ComputeResult } from "@/lib/model";
-import { cn, fmt, fmtK, fmtMoney, fmtNum, pct } from "@/lib/utils";
+import { cn, fmt, fmtK, fmtMoney, fmtNum, pct, fmtPerTonne } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
 import { CombinedCompare } from "./CombinedCompare";
@@ -46,7 +46,7 @@ export function CompareTab() {
     { label: "Emissions cut by 2030", render: (c) => pct(c.result.kpis.reduction2030), best: "max" },
     { label: "Emissions cut by 2050", render: (c) => pct(c.result.kpis.reduction2050), best: "max" },
     { label: "Investment needed", render: (c) => fmtMoney(c.result.kpis.totalCapex), best: "min" },
-    { label: "Cost per tonne", render: (c) => `${CURRENCY}${fmt(c.result.kpis.costPerTonne)}`, best: "min" },
+    { label: "Cost per tonne", render: (c) => `${CURRENCY}${fmtPerTonne(c.result.kpis.costPerTonne)}`, best: "min" },
     { label: "Payback", render: (c) => (c.result.kpis.paybackYears != null ? `${fmtNum(c.result.kpis.paybackYears, 1)} yrs` : "—"), best: "min" },
     { label: "On the target line from", render: (c) => String(c.result.kpis.yearsToTarget ?? "not by 2050") },
   ];

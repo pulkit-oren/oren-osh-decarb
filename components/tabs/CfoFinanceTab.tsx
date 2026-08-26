@@ -3,7 +3,7 @@
 import { Layers, IndianRupee, Coins, Clock, TrendingUp } from "lucide-react";
 import { useScenario } from "@/lib/store";
 import { FAMILY_COLORS } from "@/lib/model/factors";
-import { buildCashflow, DEFAULT_CASHFLOW_ASSUMPTIONS } from "@/lib/model/cashflow";
+import { financeAssumptionsFrom } from "@/lib/finance";
 import { CURRENCY } from "@/lib/defaults";
 import { fmt, fmtMoney, fmtNum, cn } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
@@ -12,24 +12,48 @@ import { HowTo } from "../ui/HowTo";
 import { MaccChart } from "../charts/MaccChart";
 
 export function CfoFinanceTab() {
-  const { result, baseYear, settings } = useScenario();
+  const { result, settings } = useScenario();
   const k = result.kpis;
   const active = result.levers.filter((l) => l.enabled);
   const opexDelta = active.reduce((s, l) => s + l.annualOpexDelta, 0);
   const ranked = active.filter((l) => l.abatementT > 0).sort((a, b) => a.costPerTonne - b.costPerTonne);
-  const cf = buildCashflow(active, baseYear, 2040, {
-    ...DEFAULT_CASHFLOW_ASSUMPTIONS,
-    discountRatePct: settings.assumptions.discountRatePct ?? 10,
-  });
-  const cfRows = cf.rows.filter((r) => r.year <= 2037);
+  // The cashflow is no longer built here from a second set of assumptions —
+  // it IS the series each lever was costed on, merged by year. That is what
+  // stops this screen and the KPIs above it disagreeing (F5).
+  const fa = financeAssumptionsFrom(settings.assumptions);
+  const byYear = new Map<number, { capex: number; opexDelta: number; net: number }>();
+  for (const l of active) {
+    for (const r of l.series) {
+      const acc = byYear.get(r.year) ?? { capex: 0, opexDelta: 0, net: 0 };
+      acc.capex += r.capex; acc.opexDelta += r.opexDelta; acc.net += r.net;
+      byYear.set(r.year, acc);
+    }
+  }
+  type CfRow = { year: number; capex: number; opexDelta: number; net: number; cumulative: number };
+  const cfRows = [...byYear.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .reduce<CfRow[]>((acc, [year, v]) => {
+      const prev = acc.length > 0 ? acc[acc.length - 1].cumulative : 0;
+      acc.push({ year, ...v, cumulative: prev + v.net });
+      return acc;
+    }, [])
+    .filter((r) => r.year <= 2037);
+  // The year the cumulative position first turns non-positive — the same
+  // reading the old module's `paybackYear` gave, taken off the real series.
+  const paybackYear = cfRows.find((r) => r.cumulative <= 0)?.year ?? null;
 
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard emphasis icon={Layers} label="Capital required" value={fmtMoney(k.totalCapex)} hint="one-off CAPEX to target" />
-        <KpiCard icon={Coins} label="Blended cost / tonne" value={`${CURRENCY}${fmt(k.costPerTonne)}`} hint="weighted ₹/tCO₂e" />
+        <KpiCard icon={Coins} label="Blended cost / tonne"
+          value={Number.isFinite(k.costPerTonne) ? `${CURRENCY}${fmt(k.costPerTonne)}` : "—"}
+          hint={Number.isFinite(k.costPerTonne) ? "levelised ₹/tCO₂e" : "no abatement to divide by"} />
         <KpiCard icon={IndianRupee} label="Running-cost impact" value={`${opexDelta <= 0 ? "−" : "+"}${fmtMoney(Math.abs(opexDelta))}`} hint={opexDelta <= 0 ? "saving per year" : "cost per year"} />
-        <KpiCard icon={Clock} label="Portfolio payback" value={k.paybackYears != null ? `${fmtNum(k.paybackYears, 1)} yrs` : "—"} hint={k.paybackYears != null ? "investment recovered" : "no payback yet"} />
+        <KpiCard icon={Clock} label="Portfolio payback"
+          value={k.paybackYears != null ? `${fmtNum(k.paybackYears, 1)} yrs` : k.paybackKind === "no-capital" ? "n/a" : "never"}
+          hint={k.paybackYears != null ? "investment recovered"
+            : k.paybackKind === "no-capital" ? "no capital at risk" : "not recovered at this discount rate"} />
       </div>
 
       <Card>
@@ -75,7 +99,10 @@ export function CfoFinanceTab() {
                     <td className={cn("py-2.5 px-2 text-right tabular-nums font-semibold", l.costPerTonne < 0 && "text-brand-600")}>
                       {l.costPerTonne < 0 ? "−" : ""}{CURRENCY}{fmt(Math.abs(l.costPerTonne))}
                     </td>
-                    <td className="py-2.5 px-2 text-right tabular-nums">{l.paybackYears != null ? `${fmtNum(l.paybackYears, 1)} yrs` : "—"}</td>
+                    <td className="py-2.5 px-2 text-right tabular-nums">
+                      {l.paybackYears != null ? `${fmtNum(l.paybackYears, 1)} yrs`
+                        : l.paybackKind === "no-capital" ? "n/a" : "never"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -87,7 +114,7 @@ export function CfoFinanceTab() {
       <Card>
         <CardHeader
           title="Year-by-year cashflow"
-          subtitle={`Money follows the deployment ramp · fuel escalates ${DEFAULT_CASHFLOW_ASSUMPTIONS.fuelEscalationPct}%/yr, electricity ${DEFAULT_CASHFLOW_ASSUMPTIONS.elecEscalationPct}%/yr · discounted at ${settings.assumptions.discountRatePct ?? 10}%`}
+          subtitle={`Money follows the deployment ramp · fuel escalates ${fa.fuelEscalationPct}%/yr, electricity ${fa.elecEscalationPct}%/yr · discounted at ${fa.discountRatePct}%`}
           right={<HowTo points={[
             "CAPEX lands as each lever phases in — not all up front.",
             "OPEX Δ scales with the ramp and escalates by price line: diesel inflates faster than grid tariffs, which is often the case FOR electrification.",
@@ -100,9 +127,9 @@ export function CfoFinanceTab() {
         ) : (
           <>
             <div className="grid grid-cols-3 gap-3 mb-4">
-              <KpiCard icon={TrendingUp} label="NPV of the program" value={`${cf.npv < 0 ? "−" : "+"}${fmtMoney(Math.abs(cf.npv))}`} hint={cf.npv >= 0 ? "value-creating at WACC" : "net cost at WACC"} />
-              <KpiCard icon={Layers} label="Peak funding need" value={fmtMoney(cf.peakFunding)} hint="worst cumulative cash position" />
-              <KpiCard icon={Clock} label="Cash payback year" value={cf.paybackYear != null ? `FY ${cf.paybackYear}` : "beyond 2040"} hint="cumulative savings repay the spend" />
+              <KpiCard icon={TrendingUp} label="NPV of the program" value={`${k.npv < 0 ? "−" : "+"}${fmtMoney(Math.abs(k.npv))}`} hint={k.npv >= 0 ? "value-creating at WACC" : "net cost at WACC"} />
+              <KpiCard icon={Layers} label="Peak funding need" value={fmtMoney(k.peakFunding)} hint="worst cumulative cash position" />
+              <KpiCard icon={Clock} label="Cash payback year" value={paybackYear != null ? `FY ${paybackYear}` : "beyond 2037"} hint="cumulative savings repay the spend" />
             </div>
             <div className="overflow-x-auto -mx-1 px-1">
               <table className="w-full text-sm min-w-[640px]">

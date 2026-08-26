@@ -13,7 +13,7 @@
 import { compute } from "@/lib/model";
 import { applyDials, deriveDials, withLeakFixes, type BalanceDials } from "@/lib/model/energy-balance";
 import { combineTrajectories } from "@/lib/model/combined";
-import { simplePayback } from "@/lib/model/finance";
+import { programmeMetrics } from "@/lib/finance";
 import type { CombustionAsset, LeverSettings, RefrigerationSystem } from "@/lib/model/types";
 import { computeScope2 } from "@/lib/scope2/model";
 import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/model/energy-balance";
@@ -91,17 +91,27 @@ export function combinedReduction2030(inp: CombinedInputs, d: CombinedDials): nu
   return reductionOf(r1, r2, inp.targetYear);
 }
 
+/** Combined Scope 1 + Scope 2 money view. This function carried THREE of the
+ *  defects the finance engine exists to fix, and was named in no task: it
+ *  filtered on `abatementT > 0` so capex on a zero-tonne lever vanished (F4),
+ *  divided summed `annualCost` by summed tonnes — the annuity ratio, and a mean
+ *  weighted by whatever levers happened to be active (F5) — and reported an
+ *  UNDISCOUNTED simple payback beside it (F6).
+ *
+ *  Both scopes now expose `series`, and both are built from the same base year
+ *  and the same assumptions, so one `programmeMetrics` call over the union is
+ *  the whole answer. If that precondition ever breaks, its discount-factor
+ *  guard throws rather than quietly returning an order-dependent number. */
 function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): MixKpis {
-  const active = [...r1.levers, ...r2.levers].filter((l) => l.abatementT > 0);
-  const totalCapex = active.reduce((s, l) => s + l.capex, 0);
-  const annualOpexDelta = active.reduce((s, l) => s + l.annualOpexDelta, 0);
-  const tonnes = active.reduce((s, l) => s + l.abatementT, 0);
-  const annualCost = active.reduce((s, l) => s + l.annualCost, 0);
+  // Every lever with money attached, not just those with tonnes (F4).
+  const costed = [...r1.levers, ...r2.levers]
+    .filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
+  const programme = programmeMetrics(costed.map((l) => l.series));
   return {
-    totalCapex,
-    annualOpexDelta,
-    costPerTonne: tonnes > 0 ? annualCost / tonnes : 0,
-    paybackYears: simplePayback(totalCapex, -annualOpexDelta),
+    totalCapex: programme.totalCapex,
+    annualOpexDelta: costed.reduce((s, l) => s + l.annualOpexDelta, 0),
+    costPerTonne: programme.levelisedCostPerTonne,
+    paybackYears: programme.paybackYears,
   };
 }
 
