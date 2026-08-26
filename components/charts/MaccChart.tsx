@@ -6,11 +6,28 @@ import { maccLayout } from "@/lib/macc";
 
 const W = 600, H = 240, PAD_L = 48, PAD_B = 28, PAD_T = 12;
 
+/** Names the levers the curve cannot place. A bar needs a finite cost per tonne;
+ *  a lever whose Scope 2 spill cancels its Scope 1 abatement has none, and would
+ *  otherwise disappear from a chart the user switched it on for. */
+function UnpricedNote({ labels }: { labels: string[] }) {
+  return (
+    <p className="mt-2 text-[11px] text-ink-faint">
+      Not on the curve: {labels.join(", ")} — no net abatement to divide the cost by,
+      so there is no cost per tonne to plot. The action is still counted in CAPEX and running costs.
+    </p>
+  );
+}
+
 export function MaccChart({ levers }: { levers: ComputeResult["levers"] }) {
   const active = levers.filter((l) => l.enabled && l.abatementT > 0);
-  const { bars, totalT, maxCost, minCost } = maccLayout(active);
+  const { bars, totalT, maxCost, minCost, unpriced } = maccLayout(active);
   if (bars.length === 0) {
-    return <p className="text-sm text-ink-faint">Switch on actions in the Scenario Modeller to see the abatement cost curve.</p>;
+    return (
+      <div>
+        <p className="text-sm text-ink-faint">Switch on actions in the Scenario Modeller to see the abatement cost curve.</p>
+        {unpriced.length > 0 && <UnpricedNote labels={unpriced} />}
+      </div>
+    );
   }
   const plotW = W - PAD_L - 10;
   const plotH = H - PAD_T - PAD_B;
@@ -41,6 +58,7 @@ export function MaccChart({ levers }: { levers: ComputeResult["levers"] }) {
         <text x={W - 10} y={H - 6} fontSize="9" textAnchor="end" fill="var(--color-ink-faint)">{fmt(totalT)} tCO₂e abated</text>
         <text x={PAD_L - 6} y={PAD_T + 8} fontSize="9" textAnchor="end" fill="var(--color-ink-faint)">{CURRENCY}/t</text>
       </svg>
+      {unpriced.length > 0 && <UnpricedNote labels={unpriced} />}
     </div>
   );
 }
