@@ -380,3 +380,15 @@ export function useScenario(): StoreShape {
   if (!v) throw new Error("useScenario must be used within ScenarioProvider");
   return v;
 }
+
+/** The global assumptions if a ScenarioProvider is above us, else undefined.
+ *
+ *  Exists so the Scope 2 provider can price on the user's discount rate and
+ *  escalations instead of the module defaults, WITHOUT hard-coupling to the
+ *  Scope 1 store: Shell nests Scope2Provider inside ScenarioProvider, but some
+ *  tests mount Scope2Provider on its own, and `useScenario` throws there.
+ *  Returning undefined lets `financeAssumptionsFrom` fall back exactly as it
+ *  does for any absent field. */
+export function useOptionalAssumptions(): GlobalAssumptions | undefined {
+  return useContext(Ctx)?.settings.assumptions;
+}

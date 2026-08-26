@@ -4,6 +4,7 @@
    Activate. Activated goals are managed in the "My goals" tab. */
 
 import { useState } from "react";
+import { useOptionalAssumptions } from "@/lib/store";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import { useEsg } from "@/lib/esg/store";
@@ -25,6 +26,7 @@ export function GoalsSetup({ onActivated, initialCategory }: { onActivated: () =
   const s2 = useScope2();
   const esg = useEsg();
   const { addGoal } = useGoals();
+  const assumptions = useOptionalAssumptions();
   const inv: Inventories = { combustion: s1.combustion, refrigeration: s1.refrigeration, facilities: s2.facilities, water: esg.water, waste: esg.waste };
 
   // Deep links from the Data-input Water/Waste screens land straight on the templates.
@@ -33,7 +35,7 @@ export function GoalsSetup({ onActivated, initialCategory }: { onActivated: () =
   const [template, setTemplate] = useState<GoalTemplate | null>(null);
 
   const activate = (draft: Goal) => {
-    addGoal(draft, (goal) => autoInitiatives(goal, inv));
+    addGoal(draft, (goal) => autoInitiatives(goal, inv, assumptions));
     setStep("category");
     setTemplate(null);
     onActivated(); // jump to My goals

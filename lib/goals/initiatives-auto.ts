@@ -14,8 +14,11 @@ import { getRefrigerant, refrigerantPricePerKg } from "@/lib/model/factors";
 import {
   financeAssumptionsFrom,
   resolveFuelSpend,
+  S1_LIFETIME_YEARS,
+  S2_LIFETIME_YEARS,
   summariseLever,
   type FinanceAssumptions,
+  type OpexPart,
 } from "@/lib/finance";
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem } from "@/lib/model/suggestions";
 import { M2_PER_KW } from "@/lib/scope2/model/constants";
@@ -128,7 +131,16 @@ export function autoInitiatives(
 ): Initiative[] {
   const fa = financeAssumptionsFrom(assumptions);
   const out: Initiative[] = [];
-  const push = (ref: string, name: string, metricImpact: number, budget: number, annualOpexDelta?: number) => {
+  /** How an initiative's running-cost delta behaves over time. Hardcoding one
+   *  tag for all of them made a Scope 2 solar saving escalate at the FUEL rate,
+   *  which flipped both its NPV sign and whether it had a payback at all. */
+  type Econ = { kind: OpexPart["kind"]; assetLifeYears: number };
+  const FUEL_ECON: Econ = { kind: "fuel", assetLifeYears: S1_LIFETIME_YEARS.fuelSwitch };
+
+  const push = (
+    ref: string, name: string, metricImpact: number, budget: number, annualOpexDelta?: number,
+    econ: Econ = FUEL_ECON,
+  ) => {
     if (metricImpact <= 0) return;
     out.push({
       id: `a:${goal.id}:${ref}`,
@@ -147,9 +159,16 @@ export function autoInitiatives(
         ? (summariseLever(
             {
               id: ref ?? "initiative", capex: Math.round(budget),
-              opexParts: [{ label: "net", amount: annualOpexDelta, kind: "fuel" }],
-              fullAbatementT: 1, startYear: goal.baseYear + 1, rampYears: 1,
-              assetLifeYears: 10,
+              opexParts: [{ label: "net", amount: annualOpexDelta, kind: econ.kind }],
+              fullAbatementT: 1,
+              // The initiative's OWN ramp and life. This used to hardcode
+              // startYear + 1 / rampYears 1 / assetLifeYears 10, ignoring the
+              // startYear and targetYear set a few lines above in this same
+              // object — so the payback was computed over a window and a
+              // phasing the initiative does not have.
+              startYear: Math.min(goal.baseYear + 1, goal.targetYear),
+              rampYears: Math.max(1, goal.targetYear - Math.min(goal.baseYear + 1, goal.targetYear) + 1),
+              assetLifeYears: econ.assetLifeYears,
             },
             goal.baseYear, fa,
           ).metrics.paybackYears ?? undefined)
@@ -192,15 +211,18 @@ export function autoInitiatives(
           altRefrigerant: acts.gasSwitch.altRefrigerant,
           leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
         });
-        push(sys.id, suggestForSystem(sys).headline, r.abatementT, capexForSystem(acts), systemOpexDelta(sys, acts));
+        push(sys.id, suggestForSystem(sys).headline, r.abatementT, capexForSystem(acts), systemOpexDelta(sys, acts),
+          { kind: "other", assetLifeYears: S1_LIFETIME_YEARS.refrigerant });
       }
     }
     if (scopeIncludesS2(goal)) {
       for (const f of facilities) {
         const solar = sizeSolar(f);
-        push(`${f.id}:solar`, `Install ${Math.round(solar.kWp)} kWp solar at ${f.name}`, solar.selfConsumed * f.gridEf / 1000, solar.budget, -solar.selfConsumed * f.tariffPerKwh);
+        push(`${f.id}:solar`, `Install ${Math.round(solar.kWp)} kWp solar at ${f.name}`, solar.selfConsumed * f.gridEf / 1000, solar.budget, -solar.selfConsumed * f.tariffPerKwh,
+          { kind: "elec", assetLifeYears: S2_LIFETIME_YEARS.generation });
         const savedKwh = EFFICIENCY_SAVING_SHARE * f.annualLoadKwh;
-        push(`${f.id}:eff`, `Energy-efficiency retrofit at ${f.name}`, savedKwh * f.gridEf / 1000, savedKwh * EFFICIENCY_CAPEX_PER_KWH, -savedKwh * f.tariffPerKwh);
+        push(`${f.id}:eff`, `Energy-efficiency retrofit at ${f.name}`, savedKwh * f.gridEf / 1000, savedKwh * EFFICIENCY_CAPEX_PER_KWH, -savedKwh * f.tariffPerKwh,
+          { kind: "elec", assetLifeYears: S2_LIFETIME_YEARS.efficiency });
       }
     }
     return out;

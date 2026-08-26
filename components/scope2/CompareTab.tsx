@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useOptionalAssumptions } from "@/lib/store";
 import { Save, Trash2 } from "lucide-react";
 import { FAMILY_COLORS } from "@/lib/model/factors";
 import { computeScope2 } from "@/lib/scope2/model";
@@ -15,6 +16,7 @@ const MAX_COMPARE = 3;
 
 export function Scope2CompareTab() {
   const { baseFacilities, baseYear, result, scenarios, saveScenario, deleteScenario } = useScope2();
+  const assumptions = useOptionalAssumptions();
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
 
@@ -27,7 +29,7 @@ export function Scope2CompareTab() {
     { id: "current", name: "Current levers", result },
     ...scenarios
       .filter((sc) => picked.includes(sc.id))
-      .map((sc) => ({ id: sc.id, name: sc.name, result: computeScope2(baseFacilities.filter((f) => !f.excluded), sc.levers, baseYear) })),
+      .map((sc) => ({ id: sc.id, name: sc.name, result: computeScope2(baseFacilities.filter((f) => !f.excluded), sc.levers, baseYear, assumptions) })),
   ];
 
   const series: TrajectorySeries[] = rows.flatMap((r, i) => [

@@ -60,8 +60,8 @@ export function CombinedCompare() {
   const s2Result = useMemo(() => {
     const sc = s2Id === CURRENT ? null : s2.scenarios.find((x) => x.id === s2Id);
     if (!sc) return s2.result;
-    return computeScope2(s2.baseFacilities.filter((f) => !f.excluded), sc.levers, s2.baseYear);
-  }, [s2Id, s2.scenarios, s2.result, s2.baseFacilities, s2.baseYear]);
+    return computeScope2(s2.baseFacilities.filter((f) => !f.excluded), sc.levers, s2.baseYear, s1.settings.assumptions);
+  }, [s2Id, s2.scenarios, s2.result, s2.baseFacilities, s2.baseYear, s1.settings.assumptions]);
 
   const rows = useMemo(
     () => combineTrajectories(s1Result.trajectory, s2Result.trajectoryMarket),

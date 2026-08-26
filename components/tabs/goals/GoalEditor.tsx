@@ -5,6 +5,7 @@
    (auto-suggested from data, regenerable, plus manual). */
 
 import { Plus, Trash2, Flag, RefreshCw, ArrowLeft } from "lucide-react";
+import { useOptionalAssumptions } from "@/lib/store";
 import { useGoals } from "@/lib/goals/store";
 import { uniqueId } from "@/lib/store-helpers";
 import { FY_YEARS } from "@/lib/model/types";
@@ -24,6 +25,7 @@ const YEAR_OPTS = [...FY_YEARS, 2028, 2029, 2030, 2035, 2040, 2045, 2050].map((y
 
 export function GoalEditor({ goal, inv, onBack }: { goal: Goal; inv: Inventories; onBack?: () => void }) {
   const { updateGoal, deleteGoal, initiatives, addInitiative, regenerateAuto } = useGoals();
+  const assumptions = useOptionalAssumptions();
   const set = (patch: Partial<Goal>) => updateGoal(goal.id, patch);
   const mine = initiatives.filter((i) => i.goalId === goal.id);
   const unit = METRIC_UNIT[goal.metric];
@@ -118,7 +120,7 @@ export function GoalEditor({ goal, inv, onBack }: { goal: Goal; inv: Inventories
           <h4 className="text-sm font-semibold text-ink">Initiatives ({mine.length})</h4>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => regenerateAuto(goal.id, autoInitiatives(goal, inv))}
+              onClick={() => regenerateAuto(goal.id, autoInitiatives(goal, inv, assumptions))}
               title="Replace auto-suggested initiatives with fresh ones from current data (your manual ones are kept)"
               className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg bg-surface-muted px-2.5 py-2 text-ink-soft hover:text-ink transition-colors"
             >

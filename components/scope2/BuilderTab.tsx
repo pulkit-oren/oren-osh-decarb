@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useOptionalAssumptions } from "@/lib/store";
 import {
   ChevronDown, RotateCcw, Save,
   Lightbulb, Sun, Landmark, Info,
@@ -283,9 +284,10 @@ function Scope2Home({ setView, name, setName }: { setView: SetView; name: string
    each scored with the real model — computed only while the collapsible is open. */
 function Scope2PathwaysPanel({ onApply }: { onApply: (l: Scope2Levers) => void }) {
   const { baseFacilities, levers, baseYear } = useScope2();
+  const assumptions = useOptionalAssumptions();
   const pathways = useMemo(
-    () => buildScope2Pathways(baseFacilities, levers, baseYear),
-    [baseFacilities, levers, baseYear],
+    () => buildScope2Pathways(baseFacilities, levers, baseYear, assumptions),
+    [baseFacilities, levers, baseYear, assumptions],
   );
 
   return (
@@ -400,6 +402,9 @@ function Scope2SuggestionCard({ facilityId }: { facilityId: string }) {
 
 function FacilityImpact({ facilityId }: { facilityId: string }) {
   const { baseFacilities, levers, result, baseYear } = useScope2();
+  // Before the early return below: hooks must run in the same order on every
+  // render, so this cannot sit further down beside its use.
+  const assumptions = useOptionalAssumptions();
   const f = baseFacilities.find((x) => x.id === facilityId);
   if (!f) return null;
   const acts = levers.byFacility[f.id] ?? defaultFacilityActions(f);
@@ -419,7 +424,7 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
   // sharply: LED and BMS retrofits over 8 years, solar over 25. Collapsing
   // them into one series would need an invented blended life; combining two
   // real ones does not.
-  const fa = financeAssumptionsFrom(undefined);
+  const fa = financeAssumptionsFrom(assumptions);
   const ramp = (a: { startYear: number; targetYear: number }) =>
     ({ startYear: a.startYear, rampYears: Math.max(1, a.targetYear - a.startYear + 1) });
   const series = [

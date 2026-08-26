@@ -116,7 +116,7 @@ export function compute(
   let effStart = Infinity, effEnd = -Infinity;
   let elecMobile = 0, elecStationary = 0, fuelMobile = 0, fuelStationary = 0;
   let scope2SpillFullT = 0, biogenicT = 0;
-  let elecEnergyCost = 0, elecDispOpex = 0, elecCapex = 0, elecMaintAddBack = 0;
+  let elecEnergyCost = 0, elecDispFuel = 0, elecDispMaint = 0, elecCapex = 0, elecMaintAddBack = 0;
   const fa = financeAssumptionsFrom(g);
   // Which basis each source was priced on. Reported so the UI can mark
   // estimates instead of presenting a reference price as a measured one.
@@ -155,14 +155,21 @@ export function compute(
       elecStart = Math.min(elecStart, acts.electrify.startYear);
       elecEnd = Math.max(elecEnd, acts.electrify.targetYear);
       elecEnergyCost += r.kWh * acts.electrify.tariffPerKwh;
-      // Displaced spend comes off the post-efficiency remainder (step 0 already saved its share).
-      elecDispOpex += (spend.fuel + spend.maintenance) * (1 - r.effFraction) * r.elecFraction;
+      // Efficiency cuts FUEL VOLUME only — `effFraction` is documented as
+      // "fraction of FUEL saved" (segments.ts). So the fuel leg comes off the
+      // post-efficiency remainder, while the maintenance contract is untouched
+      // by efficiency and is displaced in full at the electrified share.
+      // Scaling maintenance by (1 - effFraction) too, as this line used to,
+      // silently dropped that share of the contract out of the model entirely:
+      // neither saved by efficiency nor displaced by electrification.
+      elecDispFuel += spend.fuel * (1 - r.effFraction) * r.elecFraction;
+      elecDispMaint += spend.maintenance * r.elecFraction;
       // The replacement plant still needs maintaining. Mobile was already
       // handled; stationary was implicitly assumed maintenance-free (F3).
       const retainRatio = a.category === "mobile"
         ? fa.evMaintenanceRatioPct / 100
         : fa.heatPumpMaintenanceRatioPct / 100;
-      elecMaintAddBack += spend.maintenance * (1 - r.effFraction) * r.elecFraction * retainRatio;
+      elecMaintAddBack += spend.maintenance * r.elecFraction * retainRatio;
       elecCapex += electrifyCapexFor(a, acts.electrify);
     }
 
@@ -257,15 +264,23 @@ export function compute(
     { label: "Avoided fuel spend", amount: -effOpexSaving, kind: "fuel" },
   ];
 
-  const elecOpexDelta = elecEnergyCost + elecMaintAddBack + scope2SpillFullT * g.recCostPerTonne - elecDispOpex;
+  const elecOpexDelta = elecEnergyCost + elecMaintAddBack + scope2SpillFullT * g.recCostPerTonne - elecDispFuel - elecDispMaint;
   const fuelOpexDelta = fuelNewSpend - fuelDispSpend;
   const elecCapexTotal = elecCapex + (anyElec ? g.infraCapex : 0);
 
   const elecParts: OpexPart[] = [
     { label: "New electricity cost", amount: elecEnergyCost, kind: "elec" },
     { label: "Retained maintenance on replacement plant", amount: elecMaintAddBack, kind: "other" },
-    { label: "REC cost on added Scope 2", amount: scope2SpillFullT * g.recCostPerTonne, kind: "other" },
-    { label: "Displaced fuel & maintenance", amount: -elecDispOpex, kind: "fuel" },
+    // "elec", matching lib/scope2's "Unbundled RECs" — a REC price tracks the
+    // renewable electricity market it settles against, and the same instrument
+    // must not escalate at 0% in one scope and elecEscalationPct in the other.
+    { label: "REC cost on added Scope 2", amount: scope2SpillFullT * g.recCostPerTonne, kind: "elec" },
+    // Split, because these two escalate differently and must not share a tag.
+    // As one "fuel"-tagged part, the maintenance rupees inside it compounded at
+    // fuelEscalationPct while the identical rupees in the add-back above
+    // compounded at otherEscalationPct — one physical contract, two rates.
+    { label: "Displaced fuel", amount: -elecDispFuel, kind: "fuel" },
+    { label: "Displaced maintenance", amount: -elecDispMaint, kind: "other" },
   ];
   const fuelParts: OpexPart[] = [
     { label: "Alt-fuel spend", amount: fuelNewSpend, kind: "fuel" },

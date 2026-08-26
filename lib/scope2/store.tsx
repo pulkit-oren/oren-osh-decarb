@@ -15,6 +15,7 @@ import {
   DEFAULT_BASE_YEAR, DEFAULT_FACILITIES_BY_YEAR, DEFAULT_SCOPE2_LEVERS, defaultFacilityActions,
 } from "./defaults";
 import { computeScope2, type Scope2ComputeResult } from "./model";
+import { useOptionalAssumptions } from "@/lib/store";
 import { baselineScope2, type Scope2Baseline } from "./model/baseline";
 import type {
   EfficiencyAction, FacilitiesByYear, Facility, FacilityActions, GenerationAction,
@@ -179,7 +180,16 @@ export function Scope2Provider({
 
   const baseFacilities = useMemo(() => resolveFacilities(facilities, baseYear), [facilities, baseYear]);
   const selectedFacilities = useMemo(() => resolveFacilities(facilities, selectedYear), [facilities, selectedYear]);
-  const result = useMemo(() => computeScope2(baseFacilities.filter((f) => !f.excluded), levers, baseYear), [baseFacilities, levers, baseYear]);
+  // The user's discount rate and escalations, so this store prices the same way
+  // the Scope 1 side and the combined balance view do. computeScope2's
+  // assumptions parameter was OPTIONAL, and being optional meant every caller
+  // here silently kept the defaults — F8's discrepancy moved from two module
+  // constants to two tabs, and the compiler could not flag it.
+  const assumptions = useOptionalAssumptions();
+  const result = useMemo(
+    () => computeScope2(baseFacilities.filter((f) => !f.excluded), levers, baseYear, assumptions),
+    [baseFacilities, levers, baseYear, assumptions],
+  );
   const selectedBaseline = useMemo(() => baselineScope2(selectedFacilities.filter((f) => !f.excluded)), [selectedFacilities]);
 
   const value: Scope2StoreShape = {

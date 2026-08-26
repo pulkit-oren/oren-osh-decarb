@@ -7,6 +7,7 @@
 
 import { ALT_FUELS, DEFRA_YEARS, FUELS, REFRIGERANTS } from "./model/factors";
 import { financeAssumptionsFrom, resolvePrice, S1_LIFETIME_YEARS } from "@/lib/finance";
+import type { LeverMetrics } from "@/lib/finance";
 import { rampFraction } from "./model/trajectory";
 import { FY_YEARS, fyLabel } from "./model/types";
 import type {
@@ -20,6 +21,21 @@ export interface SheetSpec {
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/** A spreadsheet cell for a money figure that may be UNDEFINED rather than
+ *  zero. `levelisedCostPerTonne` is Infinity when a lever has capex but no
+ *  tonnes, and `Math.round(Infinity)` is Infinity — a `number`, which exceljs
+ *  writes as the literal token `Infinity`. That is not a valid xsd:double, so
+ *  Excel reports the workbook as corrupt and repairs it by DISCARDING content.
+ *  The UI got `fmtPerTonne` for this; the export is the artifact most likely to
+ *  reach an auditor, and it had nothing. */
+const cell = (n: number): number | string => (Number.isFinite(n) ? Math.round(n) : "n/a");
+
+/** Payback for a spreadsheet cell. `null` means two opposite things — no
+ *  capital at risk, or never recovered — and one string for both loses the
+ *  distinction `paybackKind` exists to carry. */
+const paybackCell = (years: number | null, kind: LeverMetrics["paybackKind"]): number | string =>
+  years != null ? round1(years) : kind === "no-capital" ? "n/a - no capital" : "never";
 
 export function inputsSheet(
   combustion: CombustionByYear,
@@ -166,10 +182,10 @@ export function kpiFinanceSheet(result: ComputeResult): SheetSpec {
     ["KPI", "Value"],
     ["Reduction by 2030 (%)", round1(k.reduction2030 * 100)],
     ["Reduction by 2050 (%)", round1(k.reduction2050 * 100)],
-    ["Weighted cost per tonne", Math.round(k.costPerTonne)],
+    ["Levelised cost per tonne", cell(k.costPerTonne)],
     ["Total CAPEX", k.totalCapex],
     ["Years to target", k.yearsToTarget ?? "off track"],
-    ["Scenario payback (yrs)", k.paybackYears != null ? round1(k.paybackYears) : "no payback"],
+    ["Scenario payback (yrs)", paybackCell(k.paybackYears, k.paybackKind)],
     ["Scope 2 spillover t (full ramp)", round1(result.scope2SpillFullT)],
     ["Biogenic CO2 t (full ramp)", round1(result.biogenicT)],
     [],
@@ -177,12 +193,12 @@ export function kpiFinanceSheet(result: ComputeResult): SheetSpec {
   ];
   for (const l of result.levers.filter((x) => x.enabled)) {
     rows.push([
-      l.label, round1(l.abatementT), l.capex, Math.round(l.annualOpexDelta),
-      Math.round(l.annualCost), Math.round(l.costPerTonne),
-      l.paybackYears != null ? round1(l.paybackYears) : "no payback",
+      l.label, round1(l.abatementT), l.capex, cell(l.annualOpexDelta),
+      cell(l.annualCost), cell(l.costPerTonne),
+      paybackCell(l.paybackYears, l.paybackKind),
     ]);
     for (const p of l.opexParts) {
-      rows.push([`  ${l.label} — ${p.label}`, "", "", Math.round(p.amount), "", "", ""]);
+      rows.push([`  ${l.label} — ${p.label}`, "", "", cell(p.amount), "", "", ""]);
     }
   }
   return { name: "KPIs & Finance", rows };
