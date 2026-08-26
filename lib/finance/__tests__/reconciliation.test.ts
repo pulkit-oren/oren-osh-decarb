@@ -20,7 +20,12 @@ describe("one engine, one answer", () => {
     // own arithmetic somewhere, these two numbers would part company.
     const rebuilt = r.levers.filter(costed).map((l) => buildLeverSeries(
       {
-        id: l.id, capex: l.capex, opexParts: l.opexParts, fullAbatementT: l.abatementT,
+        // netAbatementT, not abatementT. Electrification buys RECs for the grid
+        // load it adds, so the money is divided by tonnes net of that load; the
+        // two are equal on every other lever. This test is what caught the
+        // change — it rebuilds the denominator from the public field, so using
+        // the wrong one parts the two numbers by Rs 472/t here.
+        id: l.id, capex: l.capex, opexParts: l.opexParts, fullAbatementT: l.netAbatementT,
         startYear: l.startYear, rampYears: l.rampYears, assetLifeYears: S1_LIFETIME_YEARS[l.id],
       },
       baseYear, fa,

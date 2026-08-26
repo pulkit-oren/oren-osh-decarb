@@ -149,9 +149,16 @@ describe("review finding C1: no non-finite number may reach a spreadsheet cell",
     const ref = r.levers.find((l) => l.id === "refrigerant")!;
     expect(ref.capex).toBe(0);
     expect(ref.paybackKind).toBe("no-capital");
-    const row = kpiFinanceSheet(r).rows.find((x) => String(x[0]) === ref.label)!;
+    const sheet = kpiFinanceSheet(r);
+    // By HEADER, not by index. This read `row[6]` and a later column insertion
+    // shifted the payback cell — an index that moves is an assertion that can
+    // quietly start checking a different number.
+    const header = sheet.rows.find((x) => String(x[0]) === "Lever")!;
+    const col = header.findIndex((c) => String(c).startsWith("Payback"));
+    expect(col).toBeGreaterThan(0);
+    const row = sheet.rows.find((x) => String(x[0]) === ref.label)!;
     // Was "no payback" for BOTH no-capital and never.
-    expect(String(row[6])).toContain("no capital");
+    expect(String(row[col])).toContain("no capital");
   });
 });
 

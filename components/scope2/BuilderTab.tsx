@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useOptionalAssumptions } from "@/lib/store";
+import { useOptionalAssumptions, useOptionalUpdateAssumptions } from "@/lib/store";
 import {
   ChevronDown, RotateCcw, Save,
   Lightbulb, Sun, Landmark, Info,
@@ -22,7 +22,7 @@ import { suggestAllScope2 } from "@/lib/scope2/model/suggest-all";
 import { buildScope2Pathways } from "@/lib/scope2/model/pathways";
 import type { Scope2Levers } from "@/lib/scope2/model/types";
 import { groupByBu } from "@/lib/group-by-bu";
-import { cn, fmt, fmtMoney, pct } from "@/lib/utils";
+import { cn, fmt, fmtMoney, pct, fmtPayback } from "@/lib/utils";
 import { DetailCard, SliderField, ToggleSwitch, NumField, SelectField } from "@/components/tabs/activity/fields";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { Scope2CalcPanel } from "./Scope2CalcPanel";
@@ -443,7 +443,7 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
         }, baseYear, fa).series
       : null,
   ].filter((x): x is NonNullable<typeof x> => x !== null);
-  const payback = series.length > 0 ? programmeMetrics(series).paybackYears : null;
+  const paybackM = series.length > 0 ? programmeMetrics(series) : null;
 
   return (
     <div className="rounded-xl3 border border-line/60 bg-surface shadow-card px-5 py-4">
@@ -473,7 +473,7 @@ function FacilityImpact({ facilityId }: { facilityId: string }) {
         </div>
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">Payback <InfoTip text="Discounted payback: the year the cumulative discounted cashflow first turns positive. Read off the same series as every other money figure." /></p>
-          <p className="text-lg font-extrabold tabular-nums text-ink">{payback != null ? `${payback.toFixed(1)} yr` : "—"}</p>
+          <p className="text-lg font-extrabold tabular-nums text-ink">{paybackM != null ? fmtPayback(paybackM.paybackYears, paybackM.paybackKind) : "—"}</p>
         </div>
       </div>
       <div className="h-2 rounded-full bg-surface-muted overflow-hidden">
@@ -660,6 +660,11 @@ function SolarCard({ facilityId }: { facilityId: string }) {
 function ProcurementScreen({ onBack }: { onBack?: () => void }) {
   const { levers, result, updateProcurement } = useScope2();
   const p = levers.procurement;
+  // The certificate price is a SHARED assumption, not a procurement field. Both
+  // hooks return undefined when this tab is mounted without the Scope 1 store,
+  // which is the contract useOptionalAssumptions already established.
+  const recFa = financeAssumptionsFrom(useOptionalAssumptions());
+  const updateAssumptions = useOptionalUpdateAssumptions();
   const procSum = p.ppaPct + p.greenTariffPct + p.recPct;
 
   return (
@@ -730,8 +735,10 @@ function ProcurementScreen({ onBack }: { onBack?: () => void }) {
               />
               <NumField
                 label="REC price / kWh"
-                value={p.recPricePerKwh}
-                onChange={(v) => updateProcurement({ recPricePerKwh: v })}
+                value={recFa.recPricePerKwh}
+                min={0} step={0.05}
+                footer={updateAssumptions ? "shared with Scope 1" : "set in the Scope 1 assumptions"}
+                onChange={(v) => updateAssumptions?.({ recPricePerKwh: v })}
               />
               <NumField
                 label="Start year"

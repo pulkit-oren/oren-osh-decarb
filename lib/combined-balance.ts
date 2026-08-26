@@ -146,16 +146,30 @@ const withDial = (d: CombinedDials, f: FamilyKey, v: number): CombinedDials =>
 interface FamilyPrice { costPerTonne: number; capexPerTonne: number; opexPerTonne: number; tonnes: number; }
 
 /** Price one family alone at 100% with the real model (leak fixes excluded so
- *  the family's own economics aren't polluted). */
+ *  the family's own economics aren't polluted).
+ *
+ *  `costPerTonne` is the SAME programme-levelised figure kpisOf reports and the
+ *  card displays. It used to be `Σ annualCost / Σ tonnes` — the CRF annuity
+ *  that lib/model marks DISPLAY ONLY, over a filtered tonne count — so the
+ *  ranking that CHOSE the mix and the number shown for it were two different
+ *  quantities on two different bases, and could order the families differently.
+ *  Two lines treating one thing differently, as in Rulings P, R and T.
+ *
+ *  The `abatementT > 0` filter went with it: it dropped a family's capex from
+ *  its own price whenever the spend produced no tonnes, which is F4 rebuilt
+ *  inside the suggester. Tonnes are still counted over every lever, so a family
+ *  that spends without abating prices as Infinity rather than vanishing. */
 function priceFamily(inp: CombinedInputs, f: FamilyKey): FamilyPrice {
   const { r1, r2 } = results(inp, withDial(ZERO, f, 100), false);
-  const levers = (f.scope === 1 ? r1.levers : r2.levers).filter((l) => l.abatementT > 0);
+  const levers = f.scope === 1 ? r1.levers : r2.levers;
+  const costed = levers.filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
   const tonnes = levers.reduce((s, l) => s + l.abatementT, 0);
   if (tonnes <= 0) return { costPerTonne: Infinity, capexPerTonne: Infinity, opexPerTonne: Infinity, tonnes: 0 };
+  const programme = programmeMetrics(costed.map((l) => l.series));
   return {
-    costPerTonne: levers.reduce((s, l) => s + l.annualCost, 0) / tonnes,
-    capexPerTonne: levers.reduce((s, l) => s + l.capex, 0) / tonnes,
-    opexPerTonne: levers.reduce((s, l) => s + l.annualOpexDelta, 0) / tonnes,
+    costPerTonne: programme.levelisedCostPerTonne,
+    capexPerTonne: programme.totalCapex / tonnes,
+    opexPerTonne: costed.reduce((s, l) => s + l.annualOpexDelta, 0) / tonnes,
     tonnes,
   };
 }

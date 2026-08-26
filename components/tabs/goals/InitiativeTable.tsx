@@ -8,7 +8,7 @@ import { useGoals } from "@/lib/goals/store";
 import { PERSONAS, type Persona } from "@/lib/persona";
 import { FY_YEARS } from "@/lib/model/types";
 import { STATUS_COLOR, STATUS_LABEL, type Initiative, type InitiativeStatus } from "@/lib/goals/types";
-import { cn, fmtMoney, fmtNum } from "@/lib/utils";
+import { cn, fmtMoney, fmtNum, fmtPayback } from "@/lib/utils";
 
 const STATUSES = Object.keys(STATUS_LABEL) as InitiativeStatus[];
 const YEARS = [...FY_YEARS, 2028, 2029, 2030, 2035, 2040, 2045, 2050];
@@ -89,7 +89,7 @@ export function InitiativeTable({ initiatives, unit }: { initiatives: Initiative
                 )}
                 {hasFinance && (
                   <td className="py-2 px-2 text-right tabular-nums text-sm pt-3.5 text-ink-soft">
-                    {i.paybackYears != null ? `${fmtNum(i.paybackYears, 1)} yr` : "—"}
+                    {i.paybackKind != null ? fmtPayback(i.paybackYears ?? null, i.paybackKind) : "—"}
                   </td>
                 )}
                 <td className="py-2 px-2">

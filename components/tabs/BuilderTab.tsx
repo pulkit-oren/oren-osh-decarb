@@ -8,6 +8,7 @@ import {
 import { combustionGrade, refrigerantGrade, type Grade } from "@/lib/data-quality";
 import { suggestForAsset, suggestForSystem, capexForAsset, capexForSystem, electrifyTip, fuelSwitchTip, flexFuelTip, gasSwitchTip, leakFixTip, type Suggestion, type SuggestedAction } from "@/lib/model/suggestions";
 import { outlivesAsset, retirementYear } from "@/lib/model/validate";
+import { recCostPerTonneFrom } from "@/lib/finance";
 import { useScenario } from "@/lib/store";
 import { FUELS, ALT_FUELS, ALT_FUELS_BY_FUEL, maxBlendPctFor, FAMILY_COLORS, REFRIGERANTS, ALT_REFRIGERANT_IDS, RECOMMENDED_ALT_BY_SYSTEM, refrigerantPricePerKg } from "@/lib/model/factors";
 import { applyAssetActions, defaultActions, defaultEfficiency, defaultFlexFuel, defaultSystemActions, flexFuelCapable } from "@/lib/model/segments";
@@ -20,7 +21,7 @@ import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { CURRENCY } from "@/lib/defaults";
 import type { CombustionAsset, FlexFuelAction, FuelSwitchAction, RefrigerantEra, RefrigerantId, RefrigerationSystem } from "@/lib/model/types";
-import { cn, fmt, fmtK, fmtMoney, fmtNum, pct, fmtPerTonne } from "@/lib/utils";
+import { cn, fmt, fmtK, fmtMoney, fmtNum, pct, fmtPerTonne, fmtPayback } from "@/lib/utils";
 import { InfoTip } from "../ui/InfoTip";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, SelectField } from "@/components/tabs/activity/fields";
@@ -407,7 +408,7 @@ function PathwaysPanel({ onApply }: { onApply: (s: LeverSettings) => void }) {
             <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cut by 2030</div><div className="text-sm font-extrabold tabular-nums text-brand-600">{pct(p.kpis.reduction2030)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(p.kpis.totalCapex)}</div></div>
             <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost / t</div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmtPerTonne(p.kpis.costPerTonne)}</div></div>
-            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Payback</div><div className="text-sm font-extrabold tabular-nums text-ink">{p.kpis.paybackYears != null ? `${fmtNum(p.kpis.paybackYears, 1)} yr` : "—"}</div></div>
+            <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Payback</div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtPayback(p.kpis.paybackYears, p.kpis.paybackKind)}</div></div>
           </div>
           <button
             onClick={() => onApply(p.settings)}
@@ -1389,9 +1390,16 @@ function AssumptionsCard({ seg }: { seg: Seg }) {
           <>
             <NumField label="Renewable sourcing" hint="Share of new electricity that is clean (solar/PPA) — cuts the Scope 2 electrification adds." value={a.renewableSourcingPct} step={5} suffix="%" onChange={(v) => updateAssumptions({ renewableSourcingPct: v })} />
             <NumField label="Grid emission factor" hint="How dirty the local grid is per unit of electricity." value={a.gridEf} step={0.01} suffix="kgCO₂e/kWh" onChange={(v) => updateAssumptions({ gridEf: v })} />
-            <NumField label="REC cost" hint="Price of a renewable certificate per tonne, if offsetting leftover grid power." value={a.recCostPerTonne} step={100} suffix={`${CURRENCY}/t`} onChange={(v) => updateAssumptions({ recCostPerTonne: v })} />
+            <NumField
+              label="REC price"
+              hint="Price of a renewable certificate, per kWh — the unit they trade in. Scope 2 procurement and the certificates bought for electrification's added grid load both use this one number."
+              value={a.recPricePerKwh ?? 0.45}
+              min={0} step={0.05} suffix={`${CURRENCY}/kWh`}
+              footer={`≈ ${CURRENCY}${fmt(recCostPerTonneFrom(a.recPricePerKwh ?? 0.45, a.gridEf))}/tCO₂e at a grid factor of ${a.gridEf}`}
+              onChange={(v) => updateAssumptions({ recPricePerKwh: v })}
+            />
             <NumField label="Infrastructure CAPEX" hint="One-off charging / grid-upgrade cost for electrification." value={a.infraCapex} step={1_000_000} suffix={CURRENCY} onChange={(v) => updateAssumptions({ infraCapex: v })} />
-            <NumField label="Discount rate (WACC)" hint="Annualizes capex over each lever's own lifetime (capital recovery factor) — drives every ₹/t ranking." value={a.discountRatePct ?? 10} step={0.5} suffix="%" onChange={(v) => updateAssumptions({ discountRatePct: v })} />
+            <NumField label="Discount rate (WACC)" hint="Discounts every year's cash and tonnes back to the base year — drives ₹/t, NPV and payback." value={a.discountRatePct ?? 10} min={0} step={0.5} suffix="%" onChange={(v) => updateAssumptions({ discountRatePct: v })} />
             {seg === "mobile" && (
               <NumField label="EV maintenance vs ICE" hint="EVs still need maintenance — this share of the displaced maintenance is added back to the running cost." value={a.evMaintenanceRatioPct ?? 65} step={5} suffix="%" onChange={(v) => updateAssumptions({ evMaintenanceRatioPct: v })} />
             )}

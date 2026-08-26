@@ -1,27 +1,19 @@
 /* ============================================================
-   Finance helpers — cost-per-tonne weighting, capex annualization
-   and time-to-target. Kept tiny and pure; the compute aggregator
-   feeds them. Spec §5.
+   Time-to-target. Kept tiny and pure; the compute aggregator
+   feeds it.
+
+   `crf` and `annuity` lived here and are gone. Money is levelised
+   over a discounted series in lib/finance, and the per-lever
+   `annualCost` those two produced was the last surviving consumer
+   of the annuity basis. Two mutation survivors (annualise over a
+   flat 10 years, on each scope) were only reachable through it.
+   Do not reintroduce a capital-recovery factor here: an annual
+   capital charge and a levelised cost are different quantities,
+   and the whole finance rework exists because the app reported
+   both and called them one thing.
    ============================================================ */
 
 import type { TrajectoryRow } from "./types";
-
-
-
-/** Capital recovery factor: r(1+r)ⁿ / ((1+r)ⁿ − 1). Straight-line when r = 0. */
-export function crf(ratePct: number, years: number): number {
-  if (years <= 0) return 1;
-  const r = ratePct / 100;
-  if (r <= 0) return 1 / years;
-  const f = Math.pow(1 + r, years);
-  return (r * f) / (f - 1);
-}
-
-/** Decision-grade annualization: CAPEX × CRF over the lever's own lifetime.
- *  An EV (8-yr life) and a boiler replacement (20-yr) stop looking the same. */
-export function annuity(capex: number, years: number, ratePct: number): number {
-  return capex * crf(ratePct, years);
-}
 
 /** First year the net line meets or beats the target, else null. */
 export function yearsToTarget(rows: TrajectoryRow[]): number | null {

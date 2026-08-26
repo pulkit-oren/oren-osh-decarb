@@ -15,7 +15,7 @@ import { ALT_FUELS, FAMILY_COLORS, REFRIGERANTS } from "@/lib/model/factors";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { applyAssetActions } from "@/lib/model/segments";
 import { CURRENCY } from "@/lib/defaults";
-import { cn, fmt, fmtMoney, fmtNum, pct, fmtPerTonne, fmtPayback, paybackHint } from "@/lib/utils";
+import { cn, fmt, fmtMoney, pct, fmtPerTonne, fmtPayback, paybackHint } from "@/lib/utils";
 import { groupByBu } from "@/lib/group-by-bu";
 import type { ComputeResult } from "@/lib/model";
 import { Card, CardHeader } from "../ui/Card";
@@ -233,7 +233,7 @@ export function ActionPlanTab() {
           title="What each action costs"
           subtitle={`Cost per tonne of CO₂e removed, cheapest first · ${CURRENCY}/t`}
           right={<HowTo points={[
-            "Each bar shows the all-in yearly cost of removing one tonne of CO₂e with that action (investment spread over 10 years, plus the change in running costs).",
+            "Each bar shows the all-in cost of removing one tonne of CO₂e with that action — every year's investment and running-cost change discounted to today over the asset's own life, divided by the tonnes it removes over that life.",
             `“Pays for itself” means the action saves more in running costs than it costs — the cheapest tonnes you can buy.`,
             "Fund the actions at the top of this list first.",
             "Click any row in the table below it for the full money breakdown.",
@@ -263,7 +263,7 @@ export function ActionPlanTab() {
           <span className="flex items-center gap-1.5 text-ink-soft">
             Blended cost of the plan:
             <strong className="text-ink tabular-nums">{CURRENCY}{fmtPerTonne(k.costPerTonne)}/t</strong>
-            <InfoTip text="The weighted average yearly cost per tonne removed across all active actions — investment annualized over 10 years plus running-cost changes." />
+            <InfoTip text="Every active action's discounted cost added up and divided by its discounted tonnes — not the average of the per-action figures, which would weight a one-tonne measure the same as a thousand-tonne one." />
           </span>
         </div>
       </Card>
@@ -307,10 +307,12 @@ function CostRanking({ levers }: { levers: ComputeResult["levers"] }) {
             <span className="w-40 shrink-0 text-right">
               {paysForItself ? (
                 <span className="text-xs font-bold text-brand-600 bg-brand-50 rounded-full px-2.5 py-1">Pays for itself</span>
+              ) : l.paybackKind === "no-capital" ? (
+                <span className="text-xs text-ink-soft">no capital at risk</span>
               ) : l.paybackYears != null ? (
-                <span className="text-xs text-ink-soft">payback {fmtNum(l.paybackYears, 1)} yrs</span>
+                <span className="text-xs text-ink-soft">payback {fmtPayback(l.paybackYears, l.paybackKind)}</span>
               ) : (
-                <span className="text-xs text-ink-faint">net yearly cost</span>
+                <span className="text-xs text-ink-faint">not recovered</span>
               )}
             </span>
           </div>
@@ -359,7 +361,15 @@ function LeverEconomics({ levers }: { levers: ComputeResult["levers"] }) {
                     <ChevronDown size={13} className={cn("text-ink-faint transition-transform", open === l.id && "rotate-180")} />
                   </span>
                 </td>
-                <td className="py-2.5 px-2 text-right tabular-nums">{fmt(l.abatementT)} t</td>
+                <td className="py-2.5 px-2 text-right tabular-nums">
+                  {fmt(l.abatementT)} t
+                  {l.netAbatementT < l.abatementT && (
+                    <span
+                      className="ml-1 text-[10px] text-ink-faint align-super cursor-help"
+                      title={`Net of the ${fmt(l.abatementT - l.netAbatementT)} t of Scope 2 this adds. The ${CURRENCY}/t is per NET tonne, because the plan also buys certificates for that added load.`}
+                    >net {fmt(l.netAbatementT)}</span>
+                  )}
+                </td>
                 <td className="py-2.5 px-2 text-right tabular-nums">{fmtMoney(l.capex)}</td>
                 <td className={cn("py-2.5 px-2 text-right tabular-nums", l.annualOpexDelta < 0 && "text-brand-600 font-semibold")}>
                   {l.annualOpexDelta < 0 ? "−" : "+"}{fmtMoney(Math.abs(l.annualOpexDelta))}
@@ -380,7 +390,7 @@ function LeverEconomics({ levers }: { levers: ComputeResult["levers"] }) {
                       ))}
                     </div>
                     <p className="text-[11px] text-ink-faint mt-2">
-                      Negative = saving. Yearly cost = investment ÷ 10 years + running-cost change. Payback = investment ÷ yearly saving.
+                      Negative = saving. These are full-ramp annual figures; the {CURRENCY}/t above discounts them over the asset’s life, and payback counts the years until the discounted cash turns in your favour.
                     </p>
                   </td>
                 </tr>

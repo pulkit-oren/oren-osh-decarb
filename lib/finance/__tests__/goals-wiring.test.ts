@@ -157,3 +157,47 @@ describe("goals initiatives on a MEASURED-basis source", () => {
     expect(Math.abs(at(40))).toBeLessThan(Math.abs(at(0)));
   });
 });
+
+// Every auto initiative on the fixtures above pays back in YEAR 0 — the
+// suggester's savings dwarf its capex. At payback 0 neither the asset life nor
+// the escalation rate can change the answer, so two mutations lived there:
+// pinning assetLifeYears to a flat 3, and retagging the opex part's kind. The
+// identity-value trap one level up: not a factor at its identity value, but an
+// OUTCOME on its boundary. This block uses a capex-heavy, saving-thin fleet
+// where payback lands thirteen years out.
+describe("an initiative is financed over its OWN life, at its OWN escalation", () => {
+  // 8 excavators, 3,000 L of diesel between them: Rs 200,000 of retrofit
+  // against Rs 27,132/yr of saving.
+  const thinDigger = boiler({
+    id: "c1", name: "Excavator", category: "mobile", endUse: "heavyEquip",
+    annualVolume: 3_000, opex: 0, unitCount: 8,
+  } as Partial<CombustionAsset>);
+  const initAt = (fuelEscalationPct: number) =>
+    autoInitiatives(goalOf("abs_sbti"), invOf([thinDigger]), { fuelEscalationPct })
+      .find((i) => i.sourceRef === "c1")!;
+
+  it("the fixture really does pay back years out, not in year 0", () => {
+    // Without this the block below could pass on a payback of 0 and prove
+    // nothing, which is exactly how the two mutations survived.
+    const i = initAt(0);
+    expect(i.budget).toBeGreaterThan(0);
+    expect(i.annualOpexDelta).toBeLessThan(0);
+    expect(i.paybackYears).toBeGreaterThan(3);
+  });
+
+  it("the window is the fuel-switch asset life, not a short flat one", () => {
+    // 13 years. A flat 3-year window ends before the money is recovered, so the
+    // engine returns "never" and the initiative loses its payback entirely.
+    const i = initAt(0);
+    expect(i.paybackYears).toBe(13);
+    expect(i.paybackKind).toBe("discounted");
+  });
+
+  it("the saving escalates as FUEL, so the fuel rate moves the payback", () => {
+    // Retagging the part to "other" makes it escalate at otherEscalationPct
+    // (0% by default), and the fuel rate stops reaching it. Exact values both
+    // sides: 13 years at 0%, 4 years at 30%.
+    expect(initAt(0).paybackYears).toBe(13);
+    expect(initAt(30).paybackYears).toBe(4);
+  });
+});

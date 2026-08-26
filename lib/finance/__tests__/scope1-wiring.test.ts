@@ -1,5 +1,6 @@
 // lib/finance/__tests__/scope1-wiring.test.ts
 import { describe, expect, it } from "vitest";
+import { financeAssumptionsFrom, recCostPerTonneFrom } from "@/lib/finance";
 import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import { compute } from "@/lib/model";
 import { applyAssetActions, defaultActions } from "@/lib/model/segments";
@@ -166,5 +167,104 @@ describe("Scope 1 on a MEASURED-basis source, where the fuel/maintenance split b
     // that fuel identically — otherwise two levers price the same litre
     // differently, which is the drift this engine exists to end.
     expect(fsDisplaced).toBeCloseTo(effSaving * applied.fuelFraction, 6);
+  });
+});
+
+describe("the price-basis tally covers every source, not just the ones with levers", () => {
+  it("a source with NO lever settings is still counted", () => {
+    // `basisTally[...] += 1` sits deliberately BEFORE `if (!acts) continue`.
+    // Moving it after — which reads like tidying, since everything else in the
+    // loop needs `acts` — silently makes the tally a count of ACTIONED sources.
+    // The UI reads it to say how much of the plan rests on reference prices, so
+    // undercounting it overstates how much of the money is measured.
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const noActions: LeverSettings = { ...settings, byAsset: {} };
+    const r = compute(combustion, systems, noActions, baseYear);
+    const s = r.kpis.priceBasisSummary;
+    expect(s.measured + s.reference + s.unavailable).toBe(combustion.length);
+    expect(s.reference).toBe(combustion.length);
+    // Every combustion source really does hit the `continue`, or the fixture is
+    // not exercising the path. (The refrigerant lever still runs: bySystem is
+    // untouched, and it does not read the combustion loop at all.)
+    for (const id of ["efficiency", "electrification", "fuelSwitch"]) {
+      expect(r.levers.find((l) => l.id === id)!.abatementT).toBe(0);
+    }
+  });
+
+  it("the tally still totals every source when levers ARE set", () => {
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const s = compute(combustion, systems, settings, baseYear).kpis.priceBasisSummary;
+    expect(s.measured + s.reference + s.unavailable).toBe(combustion.length);
+  });
+});
+
+describe("electrification is costed on tonnes NET of the Scope 2 load it adds", () => {
+  // Owner decision, round 3. The lever's opexParts already charged
+  // `scope2SpillFullT * recCostPerTonne` for certificates on its added grid
+  // load, while its Rs/t divided by the GROSS Scope 1 tonnes — so the numerator
+  // and the denominator disagreed about what the lever achieves.
+  it("net is gross less the spill, to the tonne", () => {
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const r = compute(combustion, systems, settings, baseYear);
+    const el = r.levers.find((l) => l.id === "electrification")!;
+
+    expect(r.scope2SpillFullT).toBeGreaterThan(0);   // the spill is live here
+    expect(el.netAbatementT).toBeLessThan(el.abatementT);
+    expect(el.netAbatementT).toBeCloseTo(el.abatementT - r.scope2SpillFullT, 6);
+  });
+
+  it("every OTHER lever's net equals its gross", () => {
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const r = compute(combustion, systems, settings, baseYear);
+    let checked = 0;
+    for (const l of r.levers) {
+      if (l.id === "electrification") continue;
+      expect(l.netAbatementT).toBeCloseTo(l.abatementT, 9);
+      checked++;
+    }
+    expect(checked).toBe(3);
+  });
+
+  it("PHYSICS is untouched: the gross tonnes the trajectory credits did not move", () => {
+    // The whole point of keeping `abatementT` gross. The trajectory adds the
+    // spill back on the Scope 2 line, so netting the wedge as well would
+    // subtract it twice — and reconciliation.test.ts's tonnage guard would
+    // catch it. This asserts the same thing at the lever.
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const r = compute(combustion, systems, settings, baseYear);
+    const el = r.levers.find((l) => l.id === "electrification")!;
+    const gross = r.segments
+      .filter((s) => s.key === "elec-mobile" || s.key === "elec-stationary")
+      .reduce((s, x) => s + x.abatementT, 0);
+    expect(gross).toBeGreaterThan(0);
+    expect(el.abatementT).toBeCloseTo(gross, 6);
+  });
+});
+
+describe("both scopes charge the same rate for the same certificate", () => {
+  it("Scope 1's spill charge is the shared per-kWh price, converted", () => {
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const r = compute(combustion, systems, settings, baseYear);
+    const el = r.levers.find((l) => l.id === "electrification")!;
+    const rec = el.opexParts.find((p) => p.label === "REC cost on added Scope 2")!;
+
+    expect(r.scope2SpillFullT).toBeGreaterThan(0);
+    const fa = financeAssumptionsFrom(settings.assumptions);
+    const expected = r.scope2SpillFullT * recCostPerTonneFrom(fa.recPricePerKwh, settings.assumptions.gridEf);
+    expect(rec.amount).toBeCloseTo(expected, 6);
+    // and it really is the Rs 634 rate rather than the retired Rs 800 one
+    expect(rec.amount / r.scope2SpillFullT).toBeCloseTo(633.8028169, 4);
+  });
+
+  it("the charge follows the shared price, so the two scopes cannot drift", () => {
+    const { combustion, systems, settings, baseYear } = seedScope1();
+    const at = (recPricePerKwh: number) => {
+      const s = { ...settings, assumptions: { ...settings.assumptions, recPricePerKwh } };
+      const r = compute(combustion, systems, s, baseYear);
+      return r.levers.find((l) => l.id === "electrification")!
+        .opexParts.find((p) => p.label === "REC cost on added Scope 2")!.amount;
+    };
+    expect(at(0)).toBeCloseTo(0, 6);
+    expect(at(0.9)).toBeCloseTo(at(0.45) * 2, 6);
   });
 });

@@ -267,8 +267,12 @@ describe("BuilderTab — SuggestionCard and SourceImpact on source scenario scre
     // SourceImpact labels
     expect(screen.getByText(/^Impact$/i)).toBeTruthy();
     expect(screen.getByText(/^Cut$/i)).toBeTruthy();
-    // The strip shows tCO₂e
-    expect(screen.getByText(/tCO₂e/)).toBeTruthy();
+    // The strip shows tCO₂e. getByText(/tCO₂e/) alone is ambiguous — the
+    // assumptions panel now prints the derived certificate price "per tCO₂e"
+    // too — and an ambiguous query throws rather than picking one, so this
+    // asserts the STRIP's own cell.
+    expect(screen.getAllByText(/tCO₂e/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/^tCO₂e$/)).toBeTruthy();
   });
 
   it("clicking Apply suggestion updates levers (Cut shows non-zero after apply)", () => {

@@ -9,13 +9,14 @@ import { baselineScope1, refrigerantCO2e } from "./baseline";
 import { FAMILY_COLORS, getRefrigerant, refrigerantPricePerKg } from "./factors";
 import {
   financeAssumptionsFrom,
+  recCostPerTonneFrom,
   programmeMetrics,
   resolveFuelSpend,
   S1_LIFETIME_YEARS,
   summariseLever,
 } from "@/lib/finance";
 import type { LeverMetrics, OpexPart, PriceBasis, SeriesRow } from "@/lib/finance";
-import { yearsToTarget, annuity } from "./finance";
+import { yearsToTarget } from "./finance";
 import { applyRefrigerant } from "./levers";
 import { applyAssetActions, electrifyCapexFor } from "./segments";
 import { buildTrajectory, targetLine } from "./trajectory";
@@ -43,9 +44,15 @@ export interface LeverSummary {
   scope: 1 | 2;
   enabled: boolean;
   abatementT: number; // full-ramp Scope 1 tonnes/yr
+  /** Scope 1 tonnes removed LESS the Scope 2 tonnes this lever creates. Only
+   *  electrification differs from `abatementT`: it charges RECs on its added
+   *  grid load, so the tonnes it is costed against are net of that load. Every
+   *  other lever's net equals its gross. `abatementT` stays gross because the
+   *  trajectory wedge credits it and adds the spill back on the Scope 2 line —
+   *  netting the wedge too would subtract the spill twice. */
+  netAbatementT: number;
   capex: number;
   annualOpexDelta: number;
-  annualCost: number; // annualized capex + opex delta — DISPLAY ONLY
   /** Σ discounted net cash ÷ Σ discounted tonnes over the lever's own life.
    *  The decision number; `costPerTonne` is an alias during the UI transition. */
   levelisedCostPerTonne: number;
@@ -264,7 +271,10 @@ export function compute(
     { label: "Avoided fuel spend", amount: -effOpexSaving, kind: "fuel" },
   ];
 
-  const elecOpexDelta = elecEnergyCost + elecMaintAddBack + scope2SpillFullT * g.recCostPerTonne - elecDispFuel - elecDispMaint;
+  // Derived from the per-kWh price and the grid factor, so this line and
+  // Scope 2's "Unbundled RECs" line price the same instrument at the same rate.
+  const recPerTonne = recCostPerTonneFrom(fa.recPricePerKwh, g.gridEf);
+  const elecOpexDelta = elecEnergyCost + elecMaintAddBack + scope2SpillFullT * recPerTonne - elecDispFuel - elecDispMaint;
   const fuelOpexDelta = fuelNewSpend - fuelDispSpend;
   const elecCapexTotal = elecCapex + (anyElec ? g.infraCapex : 0);
 
@@ -274,7 +284,7 @@ export function compute(
     // "elec", matching lib/scope2's "Unbundled RECs" — a REC price tracks the
     // renewable electricity market it settles against, and the same instrument
     // must not escalate at 0% in one scope and elecEscalationPct in the other.
-    { label: "REC cost on added Scope 2", amount: scope2SpillFullT * g.recCostPerTonne, kind: "elec" },
+    { label: "REC cost on added Scope 2", amount: scope2SpillFullT * recPerTonne, kind: "elec" },
     // Split, because these two escalate differently and must not share a tag.
     // As one "fuel"-tagged part, the maintenance rupees inside it compounded at
     // fuelEscalationPct while the identical rupees in the add-back above
@@ -296,25 +306,29 @@ export function compute(
     id: LeverSummary["id"], label: string, colorIdx: number, abatementT: number,
     capex: number, opexDelta: number, ramp: { startYear: number; rampYears: number },
     opexParts: OpexPart[],
+    /** Tonnes the MONEY is divided by. Defaults to `abatementT`; electrification
+     *  passes its gross less the Scope 2 spill it charges RECs for. */
+    financeAbatementT: number = abatementT,
   ): LeverSummary & { startYear: number; rampYears: number; series: SeriesRow[] } => {
     // Shared with Scope 2 — the cost assembly has one implementation, and the
     // two scopes differ only in the lifetime table and the `scope` literal.
     const { series, metrics: m } = summariseLever(
-      { id, capex, opexParts, fullAbatementT: Math.max(0, abatementT), assetLifeYears: S1_LIFETIME_YEARS[id], ...ramp },
+      { id, capex, opexParts, fullAbatementT: Math.max(0, financeAbatementT), assetLifeYears: S1_LIFETIME_YEARS[id], ...ramp },
       baseYear, fa,
     );
     return {
       id, label, colorIdx, scope: 1,
       // A lever that spends money is enabled even at zero tonnes — dropping it
       // is how its capex used to vanish from the KPIs (F4).
-      enabled: abatementT > 0 || capex > 0 || opexParts.some((p) => p.amount !== 0),
-      abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta,
-      annualCost: annuity(capex, S1_LIFETIME_YEARS[id], fa.discountRatePct) + opexDelta, // display only
+      enabled: abatementT > 0 || financeAbatementT > 0 || capex > 0 || opexParts.some((p) => p.amount !== 0),
+      abatementT: Math.max(0, abatementT),
+      netAbatementT: Math.max(0, financeAbatementT),
+      capex, annualOpexDelta: opexDelta,
       levelisedCostPerTonne: m.levelisedCostPerTonne,
       costPerTonne: m.levelisedCostPerTonne,   // one number, two names, during the UI transition
       // Carbon price as a SENSITIVITY, applied uniformly to every lever —
       // never mixed into the base cash view.
-      costPerTonneWithCarbon: abatementT > 0 ? m.levelisedCostPerTonne - g.carbonPricePerTonne : 0,
+      costPerTonneWithCarbon: financeAbatementT > 0 ? m.levelisedCostPerTonne - g.carbonPricePerTonne : 0,
       opexParts,
       paybackYears: m.paybackYears,
       paybackKind: m.paybackKind,
@@ -326,7 +340,10 @@ export function compute(
 
   const leverRows = [
     mk("efficiency", "Energy efficiency", 7, effAbate, effCapex, -effOpexSaving, effR, effParts),
-    mk("electrification", "Electrification", 5, elecAbate, elecCapexTotal, elecOpexDelta, elecR, elecParts),
+    // The only lever whose money and physics denominators differ: it buys RECs
+    // for the grid load it adds, so those tonnes are not abatement it can claim.
+    mk("electrification", "Electrification", 5, elecAbate, elecCapexTotal, elecOpexDelta, elecR, elecParts,
+      elecAbate - scope2SpillFullT),
     mk("fuelSwitch", "Fuel switch", 2, fuelAbate, fuelCapex, fuelOpexDelta, fuelR, fuelParts),
     mk("refrigerant", "Refrigerant", 1, refAbate, refCapex, refOpexDelta, refR, refParts),
   ];

@@ -392,3 +392,12 @@ export function useScenario(): StoreShape {
 export function useOptionalAssumptions(): GlobalAssumptions | undefined {
   return useContext(Ctx)?.settings.assumptions;
 }
+
+/** The write half of `useOptionalAssumptions`, and undefined for the same
+ *  reason: Scope 2 tabs mounted on their own have no Scope 1 store. Exists so
+ *  the certificate price can be EDITED from the Scope 2 procurement panel while
+ *  living in ONE place — the alternative was a second copy of the field, which
+ *  is how it drifted 26% from the Scope 1 one. */
+export function useOptionalUpdateAssumptions(): ((patch: Partial<GlobalAssumptions>) => void) | undefined {
+  return useContext(Ctx)?.updateAssumptions;
+}

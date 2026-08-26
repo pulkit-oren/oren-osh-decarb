@@ -165,3 +165,44 @@ describe("programmeMetrics merges by CALENDAR YEAR, not by concatenation", () =>
     expect(p.totalCapex).toBeCloseTo(4000, 6);
   });
 });
+
+describe("programme payback cannot precede the capital it repays", () => {
+  // The deleted cashflow module carried a `spentAnything` flag for exactly this
+  // and the rewrite dropped it. A saving-only lever running from the base year
+  // drives the merged cumulative negative years before the spending lever's
+  // capex lands, so the programme reported payback in the BASE YEAR while the
+  // per-lever card beside it showed the real one.
+  //
+  // saver:   capex 0,    -300/yr, 2026..2030
+  // spender: capex 5000, -1000/yr, 2030..2034
+  // merged cumulative at 0%: 2026 -300 ... 2029 -1200 (nothing spent yet),
+  // 2030 +3700 -> +2500, 2031 1500, 2032 500, 2033 -500  <- first real payback.
+  const saver = () => buildLeverSeries(
+    { id: "saver", capex: 0, opexParts: [{ label: "s", amount: -300, kind: "fuel" }],
+      fullAbatementT: 5, startYear: 2026, rampYears: 1, assetLifeYears: 5 },
+    2026, flat);
+  const spender = () => buildLeverSeries(
+    { id: "spender", capex: 5000, opexParts: [{ label: "s", amount: -1000, kind: "fuel" }],
+      fullAbatementT: 20, startYear: 2030, rampYears: 1, assetLifeYears: 5 },
+    2026, flat);
+
+  it("reports the year the spend is actually recovered, not the base year", () => {
+    const p = programmeMetrics([saver(), spender()]);
+    expect(p.paybackKind).toBe("discounted");
+    expect(p.paybackYears).toBe(7);       // 2033 - 2026; without the guard, 0
+  });
+
+  it("the merged cumulative really is negative before any capex lands", () => {
+    // Without this, the test above could pass for the wrong reason — it must be
+    // the GUARD suppressing an early hit, not the absence of an early hit.
+    const rows = [...saver(), ...spender()]
+      .filter((r) => r.year < 2030)
+      .reduce((s, r) => s + r.net, 0);
+    expect(rows).toBeLessThan(0);
+    expect(saver().every((r) => r.capex === 0)).toBe(true);
+  });
+
+  it("peak funding still reads the worst calendar-year position", () => {
+    expect(programmeMetrics([saver(), spender()]).peakFunding).toBeCloseTo(2500, 6);
+  });
+});

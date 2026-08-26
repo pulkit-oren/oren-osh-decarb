@@ -30,7 +30,7 @@ import { cn, fmt, fmtMoney, fmtPerTonne, fmtPayback } from "@/lib/utils";
 const MIX_LOGIC: Record<MixObjective, string[]> = {
   costPerTonne: [
     "Every lever family is priced standalone at 100% with the real model.",
-    `Families are ranked by annualized total cost per tonne — CAPEX spread over each lever's lifetime at your discount rate, plus the yearly OPEX change, divided by tonnes abated (${CURRENCY}/t).`,
+    `Families are ranked on the same levelised ${CURRENCY}/t the card shows — every year's CAPEX and running-cost change discounted to today over the lever's own life, divided by discounted tonnes abated.`,
     "Dials rise in 10% steps, cheapest family first, until the target is met.",
   ],
   capex: [

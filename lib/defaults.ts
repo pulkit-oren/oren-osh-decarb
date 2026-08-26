@@ -93,7 +93,7 @@ export const DEFAULT_SYSTEMS = resolveRefrigeration(DEFAULT_REFRIGERATION, DEFAU
 
 export const DEFAULT_SETTINGS: LeverSettings = {
   assumptions: {
-    gridEf: GRID_EF_DEFAULT, renewableSourcingPct: 50, recCostPerTonne: 800,
+    gridEf: GRID_EF_DEFAULT, renewableSourcingPct: 50, recPricePerKwh: 0.45,
     carbonPricePerTonne: 2000, infraCapex: 15_000_000,
     discountRatePct: 10, maintenanceShareOfSpendPct: 20, evMaintenanceRatioPct: 65,
   },

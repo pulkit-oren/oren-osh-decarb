@@ -10,7 +10,7 @@ import { useScenario } from "@/lib/store";
 import { compute } from "@/lib/model";
 import { CURRENCY } from "@/lib/defaults";
 import type { ComputeResult } from "@/lib/model";
-import { cn, fmt, fmtK, fmtMoney, fmtNum, pct, fmtPerTonne } from "@/lib/utils";
+import { cn, fmt, fmtK, fmtMoney, pct, fmtPerTonne, fmtPayback } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
 import { CombinedCompare } from "./CombinedCompare";
@@ -47,7 +47,7 @@ export function CompareTab() {
     { label: "Emissions cut by 2050", render: (c) => pct(c.result.kpis.reduction2050), best: "max" },
     { label: "Investment needed", render: (c) => fmtMoney(c.result.kpis.totalCapex), best: "min" },
     { label: "Cost per tonne", render: (c) => `${CURRENCY}${fmtPerTonne(c.result.kpis.costPerTonne)}`, best: "min" },
-    { label: "Payback", render: (c) => (c.result.kpis.paybackYears != null ? `${fmtNum(c.result.kpis.paybackYears, 1)} yrs` : "—"), best: "min" },
+    { label: "Payback", render: (c) => fmtPayback(c.result.kpis.paybackYears, c.result.kpis.paybackKind), best: "min" },
     { label: "On the target line from", render: (c) => String(c.result.kpis.yearsToTarget ?? "not by 2050") },
   ];
 
@@ -185,7 +185,10 @@ function valueFor(label: string, c: Col): number {
     "Emissions cut by 2050": c.result.kpis.reduction2050,
     "Investment needed": c.result.kpis.totalCapex,
     "Cost per tonne": c.result.kpis.costPerTonne,
-    "Payback": c.result.kpis.paybackYears ?? 9999,
+    // A null payback sorted to 9999 either way, so an option with NO capital at
+    // risk — the best possible outcome — was ranked as the worst. The kind is
+    // what separates them, and this column carries a tick for the winner.
+    "Payback": c.result.kpis.paybackYears ?? (c.result.kpis.paybackKind === "no-capital" ? -1 : 9999),
     "On the target line from": c.result.kpis.yearsToTarget ?? 9999,
   };
   return map[label] ?? 0;

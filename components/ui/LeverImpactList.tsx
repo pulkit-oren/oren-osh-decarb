@@ -4,7 +4,7 @@
    cuts, what it costs to run, and how fast it pays back — the numbers that
    otherwise hide in the CFO tab. */
 
-import { fmt, fmtMoney } from "@/lib/utils";
+import { fmt, fmtMoney, fmtPayback, paybackHint, type PaybackKind } from "@/lib/utils";
 
 export interface LeverImpactRow {
   id: string;
@@ -12,6 +12,10 @@ export interface LeverImpactRow {
   abatementT: number;
   annualOpexDelta: number; // positive = cost, negative = saving
   paybackYears: number | null;
+  /** Required, not optional: without it "no capital at risk" and "never
+   *  recovered" both render as an em dash, which are opposite facts. Both
+   *  callers pass a LeverSummary, which already carries it. */
+  paybackKind: PaybackKind;
 }
 
 export function LeverImpactList({ levers }: { levers: LeverImpactRow[] }) {
@@ -29,8 +33,8 @@ export function LeverImpactList({ levers }: { levers: LeverImpactRow[] }) {
             <span className="tabular-nums text-white/70 shrink-0 w-20 text-right" title="Annual operating cost impact">
               {l.annualOpexDelta === 0 ? "±0/yr" : l.annualOpexDelta < 0 ? `saves ${fmtMoney(-l.annualOpexDelta)}` : `+${fmtMoney(l.annualOpexDelta)}/yr`}
             </span>
-            <span className="tabular-nums text-white/70 shrink-0 w-14 text-right" title="Simple payback (CAPEX ÷ annual saving)">
-              {l.paybackYears != null ? `${l.paybackYears.toFixed(1)} yr` : "—"}
+            <span className="tabular-nums text-white/70 shrink-0 w-16 text-right" title={`Discounted payback — ${paybackHint(l.paybackYears, l.paybackKind)}`}>
+              {fmtPayback(l.paybackYears, l.paybackKind)}
             </span>
           </div>
         ))}

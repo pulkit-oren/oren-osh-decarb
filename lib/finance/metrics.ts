@@ -11,9 +11,19 @@ function discountedPayback(rows: SeriesRow[], capex: number): { years: number | 
   // reads as a computed result and is not one (F9).
   if (capex <= 0) return { years: null, kind: "no-capital" };
   let cumulative = 0;
+  let spent = 0;
   for (const r of rows) {
     cumulative += r.net * r.discount;
-    if (cumulative <= 0) return { years: r.year - rows[0].year, kind: "discounted" };
+    spent += r.capex;
+    // Payback cannot precede the capital it repays. Within one lever this never
+    // binds (capex lands in the first row, because windowFor starts at
+    // startYear), but the PROGRAMME series spans every lever: a saving-only
+    // lever running from the base year makes the merged cumulative negative
+    // years before a later lever's capex arrives, and without this guard the
+    // whole programme reports payback in the base year. This is the
+    // `spentAnything` guard the deleted cashflow module carried; dropping it in
+    // the rewrite is what let two payback cards on one screen disagree.
+    if (spent > 0 && cumulative <= 0) return { years: r.year - rows[0].year, kind: "discounted" };
   }
   return { years: null, kind: "never" };
 }
@@ -49,11 +59,14 @@ export function programmeMetrics(series: SeriesRow[][]): LeverMetrics {
   const all = series.flat();
   const capex = all.reduce((s, r) => s + r.capex, 0);
 
-  const byYear = new Map<number, { net: number; discount: number }>();
+  // capex rides along purely so discountedPayback's capital-at-risk guard can
+  // see WHEN the money is spent, not just that it was. `net` already contains
+  // it; nothing sums this field.
+  const byYear = new Map<number, { net: number; capex: number; discount: number }>();
   for (const r of all) {
     const existing = byYear.get(r.year);
     if (existing === undefined) {
-      byYear.set(r.year, { net: r.net, discount: r.discount });
+      byYear.set(r.year, { net: r.net, capex: r.capex, discount: r.discount });
     } else {
       // The merged row can only carry ONE discount factor per year. That is
       // only valid while every lever shares a baseYear and discountRatePct —
@@ -66,11 +79,12 @@ export function programmeMetrics(series: SeriesRow[][]): LeverMetrics {
         );
       }
       existing.net += r.net;
+      existing.capex += r.capex;
     }
   }
   const merged: SeriesRow[] = [...byYear.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([year, { net, discount }]) => ({ year, capex: 0, opexDelta: 0, net, tonnes: 0, discount }));
+    .map(([year, { net, capex: yearCapex, discount }]) => ({ year, capex: yearCapex, opexDelta: 0, net, tonnes: 0, discount }));
 
   const m = leverMetrics(all, capex);
   const pbSource = leverMetrics(merged, capex);

@@ -6,7 +6,7 @@
    ============================================================ */
 
 import { ALT_FUELS, DEFRA_YEARS, FUELS, REFRIGERANTS } from "./model/factors";
-import { financeAssumptionsFrom, resolvePrice, S1_LIFETIME_YEARS } from "@/lib/finance";
+import { financeAssumptionsFrom, recCostPerTonneFrom, resolvePrice, S1_LIFETIME_YEARS } from "@/lib/finance";
 import type { LeverMetrics } from "@/lib/finance";
 import { rampFraction } from "./model/trajectory";
 import { FY_YEARS, fyLabel } from "./model/types";
@@ -88,7 +88,6 @@ export function factorsSheet(settings: LeverSettings): SheetSpec {
   const g = settings.assumptions;
   rows.push(["Assumption", "Grid emission factor", "Value", g.gridEf, "kgCO2e/kWh"]);
   rows.push(["Assumption", "Renewable sourcing", "Value", g.renewableSourcingPct, "%"]);
-  rows.push(["Assumption", "REC cost", "Value", g.recCostPerTonne, "per tCO2e"]);
   rows.push(["Assumption", "Carbon price", "Value", g.carbonPricePerTonne, "per tCO2e"]);
   rows.push(["Assumption", "Infrastructure CAPEX", "Value", g.infraCapex, "currency"]);
 
@@ -100,6 +99,10 @@ export function factorsSheet(settings: LeverSettings): SheetSpec {
   // per-lever lives and a discount rate below, so no reader could reconcile the
   // currency-per-tonne figures by hand.
   const fa = financeAssumptionsFrom(g);
+  rows.push(["Assumption", "REC price", "Value", fa.recPricePerKwh, "per kWh"]);
+  // Printed as well as the input, because it is the figure the Scope 1 spill
+  // charge actually multiplies, and it is derived rather than typed.
+  rows.push(["Assumption", "REC cost (derived)", "Value", recCostPerTonneFrom(fa.recPricePerKwh, g.gridEf), "per tCO2e"]);
   rows.push(["Assumption", "Discount rate (WACC)", "Value", fa.discountRatePct, "%/yr"]);
   rows.push(["Assumption", "Fuel escalation", "Value", fa.fuelEscalationPct, "%/yr"]);
   rows.push(["Assumption", "Electricity escalation", "Value", fa.elecEscalationPct, "%/yr"]);
@@ -189,16 +192,16 @@ export function kpiFinanceSheet(result: ComputeResult): SheetSpec {
     ["Scope 2 spillover t (full ramp)", round1(result.scope2SpillFullT)],
     ["Biogenic CO2 t (full ramp)", round1(result.biogenicT)],
     [],
-    ["Lever", "Abatement t/yr", "CAPEX", "Annual OPEX delta", "Annualized cost", "Cost per tonne", "Payback (yrs)"],
+    ["Lever", "Abatement t/yr", "Net abatement t/yr", "CAPEX", "Annual OPEX delta", "NPV", "Levelised cost per tonne", "Payback (yrs)"],
   ];
   for (const l of result.levers.filter((x) => x.enabled)) {
     rows.push([
-      l.label, round1(l.abatementT), l.capex, cell(l.annualOpexDelta),
-      cell(l.annualCost), cell(l.costPerTonne),
+      l.label, round1(l.abatementT), round1(l.netAbatementT), l.capex, cell(l.annualOpexDelta),
+      cell(l.npv), cell(l.costPerTonne),
       paybackCell(l.paybackYears, l.paybackKind),
     ]);
     for (const p of l.opexParts) {
-      rows.push([`  ${l.label} — ${p.label}`, "", "", cell(p.amount), "", "", ""]);
+      rows.push([`  ${l.label} — ${p.label}`, "", "", "", cell(p.amount), "", "", ""]);
     }
   }
   return { name: "KPIs & Finance", rows };

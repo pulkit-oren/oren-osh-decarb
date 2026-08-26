@@ -65,3 +65,27 @@ describe("resolveFuelSpend", () => {
     expect(Number.isFinite(s.maintenance)).toBe(true);
   });
 });
+
+describe("splitSpend clamps the share, because the field it comes from is free text", () => {
+  it("a share above 100 does not make the fuel half NEGATIVE", () => {
+    // maintenanceShareOfSpendPct is a number input with no max. Without the
+    // clamp, 150 gives maintenance 1,500,000 out of a 1,000,000 bill and fuel
+    // of -500,000 — and a negative fuel bill makes every efficiency saving on
+    // that source a cost.
+    expect(splitSpend(1_000_000, 150)).toEqual({ fuel: 0, maintenance: 1_000_000 });
+    expect(splitSpend(1_000_000, 150).fuel).toBeGreaterThanOrEqual(0);
+  });
+
+  it("a negative share does not credit maintenance back", () => {
+    expect(splitSpend(1_000_000, -40)).toEqual({ fuel: 1_000_000, maintenance: 0 });
+  });
+
+  it("the two halves always sum to the bill, at any share", () => {
+    for (const pct of [-40, 0, 20, 100, 150]) {
+      const { fuel, maintenance } = splitSpend(1_000_000, pct);
+      expect(fuel + maintenance).toBeCloseTo(1_000_000, 6);
+      expect(fuel).toBeGreaterThanOrEqual(0);
+      expect(maintenance).toBeGreaterThanOrEqual(0);
+    }
+  });
+});

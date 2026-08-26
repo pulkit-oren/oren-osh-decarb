@@ -150,6 +150,31 @@ export function autoInitiatives(
     econ: Econ = FUEL_ECON,
   ) => {
     if (metricImpact <= 0) return;
+    // ONE summariseLever call, read twice. It used to be called inline inside
+    // the paybackYears expression, which meant the kind could not be reached
+    // without calling the engine a second time — so it was dropped instead.
+    // No `budget > 0` condition. discountedPayback already answers capex <= 0
+    // with {years: null, kind: "no-capital"} — the same answer a guard here
+    // would hand-write, which is one rule in two places and a mutation that
+    // cannot fail.
+    const financed = annualOpexDelta != null
+      ? summariseLever(
+          {
+            id: ref ?? "initiative", capex: Math.round(budget),
+            opexParts: [{ label: "net", amount: annualOpexDelta, kind: econ.kind }],
+            fullAbatementT: 1,
+            // The initiative's OWN ramp and life. This used to hardcode
+            // startYear + 1 / rampYears 1 / assetLifeYears 10, ignoring the
+            // startYear and targetYear set a few lines below in this same
+            // object — so the payback was computed over a window and a phasing
+            // the initiative does not have.
+            startYear: Math.min(goal.baseYear + 1, goal.targetYear),
+            rampYears: Math.max(1, goal.targetYear - Math.min(goal.baseYear + 1, goal.targetYear) + 1),
+            assetLifeYears: econ.assetLifeYears,
+          },
+          goal.baseYear, fa,
+        ).metrics
+      : null;
     out.push({
       id: `a:${goal.id}:${ref}`,
       goalId: goal.id,
@@ -163,24 +188,11 @@ export function autoInitiatives(
       annualOpexDelta: annualOpexDelta != null ? Math.round(annualOpexDelta) : undefined,
       // Discounted, off the same series the modeller reads (F6) — and
       // undefined rather than 0 when there is no capital at risk (F9).
-      paybackYears: annualOpexDelta != null && budget > 0
-        ? (summariseLever(
-            {
-              id: ref ?? "initiative", capex: Math.round(budget),
-              opexParts: [{ label: "net", amount: annualOpexDelta, kind: econ.kind }],
-              fullAbatementT: 1,
-              // The initiative's OWN ramp and life. This used to hardcode
-              // startYear + 1 / rampYears 1 / assetLifeYears 10, ignoring the
-              // startYear and targetYear set a few lines above in this same
-              // object — so the payback was computed over a window and a
-              // phasing the initiative does not have.
-              startYear: Math.min(goal.baseYear + 1, goal.targetYear),
-              rampYears: Math.max(1, goal.targetYear - Math.min(goal.baseYear + 1, goal.targetYear) + 1),
-              assetLifeYears: econ.assetLifeYears,
-            },
-            goal.baseYear, fa,
-          ).metrics.paybackYears ?? undefined)
-        : undefined,
+      paybackYears: financed?.paybackYears ?? undefined,
+      // A budget of 0 gives kind "no-capital" from the engine — a RESULT, not
+      // missing data. Only a genuinely unfinanced initiative (no
+      // annualOpexDelta at all) leaves the kind undefined.
+      paybackKind: financed?.paybackKind,
       progressPct: 0,
       auto: true,
       sourceRef: ref,

@@ -6,6 +6,7 @@
    ============================================================ */
 
 import type { Persona } from "@/lib/persona";
+import type { LeverMetrics } from "@/lib/finance";
 
 export type GoalScope = "s1" | "s2" | "s1s2";
 export type GoalCategory = "emissions" | "energy" | "water" | "waste";
@@ -73,8 +74,14 @@ export interface Initiative {
   budget: number;
   /** Annual running-cost change (₹/yr, negative = saving) — the OPEX view surviving into the goal. */
   annualOpexDelta?: number;
-  /** Simple payback (budget ÷ annual saving), null/undefined when it never pays back. */
+  /** Discounted payback off the shared finance series, undefined when it is not
+   *  computed at all. Read it WITH `paybackKind` — alone it cannot say whether a
+   *  missing value means "no capital at risk" or "never recovered". */
   paybackYears?: number | null;
+  /** Why `paybackYears` is what it is. Undefined on hand-added initiatives and
+   *  on saves written before this field existed; render those as unknown rather
+   *  than inventing an outcome. */
+  paybackKind?: LeverMetrics["paybackKind"];
   /** Manual rollout completeness (0..100) — shown in the rollup, not the forecast. */
   progressPct?: number;
   note?: string;

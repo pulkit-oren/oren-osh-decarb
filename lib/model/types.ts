@@ -291,7 +291,17 @@ export interface SystemActions {
 export interface GlobalAssumptions {
   gridEf: number; // kgCO2e / kWh
   renewableSourcingPct: number; // 0..100, clean share of new electricity
-  recCostPerTonne: number;
+  /** THE certificate price, in Rs per kWh — the unit certificates actually
+   *  trade in. Both scopes read this one field: Scope 2's procurement cost is
+   *  kWh x this, and Scope 1's charge on electrification's added grid load is
+   *  tonnes x (this / gridEf), so the two can no longer disagree. Optional for
+   *  old saves; defaults 0.45. */
+  recPricePerKwh?: number;
+  /** @deprecated Retired in favour of `recPricePerKwh`. Accepted on old saves
+   *  so they still parse; read by nothing. A Rs/t certificate price and a
+   *  Rs/kWh one are the same instrument, and holding both is how they drifted
+   *  26% apart. */
+  recCostPerTonne?: number;
   carbonPricePerTonne: number;
   infraCapex: number; // one-off charging / grid-upgrade cost
   /** WACC used to annualize capex (capital recovery factor). Optional for old saves; defaults 10. */

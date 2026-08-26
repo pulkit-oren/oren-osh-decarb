@@ -119,3 +119,33 @@ describe("suggestMixOptions — three bases, ordered trade-offs", () => {
     expect(applied.bySystem["s1"].leakFix.leakImprovementPct).toBeGreaterThanOrEqual(50);
   });
 });
+
+describe("the ranking basis is the SAME basis the card shows", () => {
+  // priceFamily used to rank on `annualCost` — the CRF annuity lib/model marks
+  // DISPLAY ONLY — while the KPI beside the options showed the programme
+  // levelised figure. Two quantities, two bases, and they order the families
+  // differently: on the annuity basis S2:procurementPct ranked 4th of six; on
+  // the levelised basis it ranks last. So the mix the user was offered as
+  // "cheapest" was cheapest by a number the screen never displayed.
+  //
+  // Electrification leads because its Rs/t is a SAVING and netting the Scope 2
+  // spill out of its denominator divides that saving by fewer tonnes, which
+  // reads as cheaper. That is a property of ranking savings by Rs/t, not of the
+  // netting: for a lever that costs money, netting makes it dearer. Recorded
+  // here because it is the kind of sign asymmetry that looks like a bug later.
+  const order = suggestCombinedMix(inp, 0.12, "costPerTonne").order;
+
+  it("ranks the six families in levelised order, procurement last", () => {
+    expect(order).toEqual([
+      "S1:electrifyPct", "S2:solarPct", "S2:efficiencyPct",
+      "S1:refrigPct", "S1:bioBlendPct", "S2:procurementPct",
+    ]);
+  });
+
+  it("every family is ranked — none is dropped for having no tonnes", () => {
+    // The old filter was `abatementT > 0` INSIDE the price, which is F4 rebuilt:
+    // spend on a zero-tonne lever left the family's own price.
+    expect(order).toHaveLength(6);
+    expect(new Set(order).size).toBe(6);
+  });
+});

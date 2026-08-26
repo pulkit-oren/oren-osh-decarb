@@ -2,7 +2,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { LeverMetrics } from "@/lib/finance";
 
-type PaybackKind = LeverMetrics["paybackKind"];
+export type PaybackKind = LeverMetrics["paybackKind"];
 import { CURRENCY } from "./defaults";
 
 /** Merge Tailwind class names, de-duplicating conflicts. */

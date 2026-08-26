@@ -13,7 +13,6 @@ import {
   summariseLever,
 } from "@/lib/finance";
 import type { LeverMetrics, OpexPart as FinanceOpexPart, SeriesRow } from "@/lib/finance";
-import { annuity } from "@/lib/model/finance";
 import { buildTrajectory, targetLine } from "@/lib/model/trajectory";
 import type { GlobalAssumptions, TrajectoryRow, Wedge } from "@/lib/model/types";
 import { defaultFacilityActions } from "../defaults";
@@ -54,7 +53,6 @@ export interface Scope2LeverSummary {
   abatementT: number; // full-ramp tonnes/yr (procurement: market-based only)
   capex: number;
   annualOpexDelta: number; // positive = cost, negative = saving
-  annualCost: number; // annualized capex + opex delta — DISPLAY ONLY
   /** Σ discounted net cash ÷ Σ discounted tonnes over the lever's own life.
    *  The decision number; `costPerTonne` is an alias during the UI transition. */
   levelisedCostPerTonne: number;
@@ -162,7 +160,11 @@ export function computeScope2(
   }
 
   /* ---- Pillar 3 across the portfolio ---- */
-  const proc = applyProcurement(draws, levers.procurement);
+  // The certificate price comes from the shared assumptions, not from the
+  // procurement blob's own copy — that copy is what let Scope 1 charge Rs 800/t
+  // for the instrument Scope 2 was buying at Rs 634/t. procurement.ts stays
+  // pure and its own tests keep passing on the field; only the value changes.
+  const proc = applyProcurement(draws, { ...levers.procurement, recPricePerKwh: fa.recPricePerKwh });
   const procAbateT = facilities.reduce(
     (s, f) => s + ((proc.procuredByFacility[f.id] ?? 0) * f.gridEf) / 1000, 0,
   );
@@ -211,7 +213,6 @@ export function computeScope2(
       // is how its capex used to vanish from the KPIs (F4).
       enabled: abatementT > 0 || capex > 0 || opexParts.some((p) => p.amount !== 0),
       abatementT: Math.max(0, abatementT), capex, annualOpexDelta: opexDelta,
-      annualCost: annuity(capex, S2_ENGINE_LIFETIMES[id], fa.discountRatePct) + opexDelta, // display only
       levelisedCostPerTonne: m.levelisedCostPerTonne,
       costPerTonne: m.levelisedCostPerTonne,   // one number, two names, during the UI transition
       opexParts,

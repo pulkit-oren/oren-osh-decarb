@@ -11,12 +11,16 @@ import { boardroomVariants } from "@/lib/boardroom-scenarios";
 import { compute } from "./index";
 import { suggestAllSettings } from "./suggest-all";
 import type { CombustionAsset, LeverSettings, RefrigerationSystem } from "./types";
+import type { LeverMetrics } from "@/lib/finance";
 
 export interface PathwayKpis {
   reduction2030: number;
   totalCapex: number;
   costPerTonne: number;
   paybackYears: number | null;
+  /** Carried so the preset row can say "n/a" for no capital at risk and "never"
+   *  for not recovered, instead of one em dash for both. */
+  paybackKind: LeverMetrics["paybackKind"];
 }
 
 export interface Pathway {
@@ -55,6 +59,7 @@ export function buildPathways(
         totalCapex: r.kpis.totalCapex,
         costPerTonne: r.kpis.costPerTonne,
         paybackYears: r.kpis.paybackYears,
+        paybackKind: r.kpis.paybackKind,
       },
     };
   };
