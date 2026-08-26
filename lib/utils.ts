@@ -1,5 +1,8 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { LeverMetrics } from "@/lib/finance";
+
+type PaybackKind = LeverMetrics["paybackKind"];
 import { CURRENCY } from "./defaults";
 
 /** Merge Tailwind class names, de-duplicating conflicts. */
@@ -35,6 +38,30 @@ export function pct(fraction: number, dp = 0): string {
  *  tonnes, so every site showing a blended or per-lever rate needs this. */
 export function fmtPerTonne(n: number): string {
   return Number.isFinite(n) ? fmt(n) : "—";
+}
+
+/** Payback, said in a way that distinguishes the three real outcomes.
+ *
+ *  `paybackYears` is null for BOTH "no capital at risk" and "never recovered",
+ *  which are opposite facts — the first is the best case, the second the worst —
+ *  so rendering both as an em dash loses the distinction the engine works to
+ *  provide. `paybackKind` is what separates them.
+ *
+ *  A computed 0 is also real: a lever whose first-year saving already exceeds
+ *  its phased capex genuinely pays back inside year one. It used to print
+ *  "0.0 yrs", which is indistinguishable from the old defect where a zero-capex
+ *  lever rendered a bogus 0 — so say "< 1 yr" instead. */
+export function fmtPayback(years: number | null, kind: PaybackKind): string {
+  if (years == null) return kind === "no-capital" ? "n/a" : "never";
+  return years < 1 ? "< 1 yr" : `${fmtNum(years, 1)} yrs`;
+}
+
+/** The one-line explanation that belongs beside `fmtPayback`. */
+export function paybackHint(years: number | null, kind: PaybackKind): string {
+  if (years == null) {
+    return kind === "no-capital" ? "no capital at risk" : "not recovered at this discount rate";
+  }
+  return "investment recovered";
 }
 
 /** Compact tonnes, e.g. 6300 → "6.3k". */

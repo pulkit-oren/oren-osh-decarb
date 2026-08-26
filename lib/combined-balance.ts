@@ -14,6 +14,7 @@ import { compute } from "@/lib/model";
 import { applyDials, deriveDials, withLeakFixes, type BalanceDials } from "@/lib/model/energy-balance";
 import { combineTrajectories } from "@/lib/model/combined";
 import { programmeMetrics } from "@/lib/finance";
+import type { LeverMetrics } from "@/lib/finance";
 import type { CombustionAsset, LeverSettings, RefrigerationSystem } from "@/lib/model/types";
 import { computeScope2 } from "@/lib/scope2/model";
 import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/model/energy-balance";
@@ -39,6 +40,9 @@ export interface MixKpis {
   annualOpexDelta: number; // positive = cost, negative = saving
   costPerTonne: number;
   paybackYears: number | null;
+  /** Why `paybackYears` is what it is. Without it, "no capital at risk" and
+   *  "never recovered" both render as an em dash — opposite facts, one glyph. */
+  paybackKind: LeverMetrics["paybackKind"];
 }
 
 export interface MixOption {
@@ -112,6 +116,7 @@ function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeSco
     annualOpexDelta: costed.reduce((s, l) => s + l.annualOpexDelta, 0),
     costPerTonne: programme.levelisedCostPerTonne,
     paybackYears: programme.paybackYears,
+    paybackKind: programme.paybackKind,
   };
 }
 

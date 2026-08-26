@@ -5,7 +5,7 @@ import { useScenario } from "@/lib/store";
 import { FAMILY_COLORS } from "@/lib/model/factors";
 import { financeAssumptionsFrom } from "@/lib/finance";
 import { CURRENCY } from "@/lib/defaults";
-import { fmt, fmtMoney, fmtNum, cn } from "@/lib/utils";
+import { fmt, fmtMoney, cn, fmtPayback, paybackHint } from "@/lib/utils";
 import { Card, CardHeader } from "../ui/Card";
 import { KpiCard } from "../ui/KpiCard";
 import { HowTo } from "../ui/HowTo";
@@ -51,9 +51,8 @@ export function CfoFinanceTab() {
           hint={Number.isFinite(k.costPerTonne) ? "levelised ₹/tCO₂e" : "no abatement to divide by"} />
         <KpiCard icon={IndianRupee} label="Running-cost impact" value={`${opexDelta <= 0 ? "−" : "+"}${fmtMoney(Math.abs(opexDelta))}`} hint={opexDelta <= 0 ? "saving per year" : "cost per year"} />
         <KpiCard icon={Clock} label="Portfolio payback"
-          value={k.paybackYears != null ? `${fmtNum(k.paybackYears, 1)} yrs` : k.paybackKind === "no-capital" ? "n/a" : "never"}
-          hint={k.paybackYears != null ? "investment recovered"
-            : k.paybackKind === "no-capital" ? "no capital at risk" : "not recovered at this discount rate"} />
+          value={fmtPayback(k.paybackYears, k.paybackKind)}
+          hint={paybackHint(k.paybackYears, k.paybackKind)} />
       </div>
 
       <Card>
@@ -100,8 +99,7 @@ export function CfoFinanceTab() {
                       {l.costPerTonne < 0 ? "−" : ""}{CURRENCY}{fmt(Math.abs(l.costPerTonne))}
                     </td>
                     <td className="py-2.5 px-2 text-right tabular-nums">
-                      {l.paybackYears != null ? `${fmtNum(l.paybackYears, 1)} yrs`
-                        : l.paybackKind === "no-capital" ? "n/a" : "never"}
+                      {fmtPayback(l.paybackYears, l.paybackKind)}
                     </td>
                   </tr>
                 ))}

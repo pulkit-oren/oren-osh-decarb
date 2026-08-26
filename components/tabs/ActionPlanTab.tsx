@@ -15,7 +15,7 @@ import { ALT_FUELS, FAMILY_COLORS, REFRIGERANTS } from "@/lib/model/factors";
 import { applyRefrigerant } from "@/lib/model/levers";
 import { applyAssetActions } from "@/lib/model/segments";
 import { CURRENCY } from "@/lib/defaults";
-import { cn, fmt, fmtMoney, fmtNum, pct, fmtPerTonne } from "@/lib/utils";
+import { cn, fmt, fmtMoney, fmtNum, pct, fmtPerTonne, fmtPayback, paybackHint } from "@/lib/utils";
 import { groupByBu } from "@/lib/group-by-bu";
 import type { ComputeResult } from "@/lib/model";
 import { Card, CardHeader } from "../ui/Card";
@@ -148,9 +148,9 @@ export function ActionPlanTab() {
           hint={totalOpexDelta <= 0 ? "saving per year" : "cost per year"}
         />
         <KpiCard
-          icon={Clock} label="Payback" value={k.paybackYears != null ? `${fmtNum(k.paybackYears, 1)} yrs` : "—"}
+          icon={Clock} label="Payback" value={fmtPayback(k.paybackYears, k.paybackKind)}
           info="Years for the yearly savings to repay the investment. Shown as — when the plan costs more to run than it saves."
-          hint={k.paybackYears != null ? "investment recovered" : "no payback at current settings"}
+          hint={paybackHint(k.paybackYears, k.paybackKind)}
         />
       </div>
 
@@ -364,7 +364,7 @@ function LeverEconomics({ levers }: { levers: ComputeResult["levers"] }) {
                 <td className={cn("py-2.5 px-2 text-right tabular-nums", l.annualOpexDelta < 0 && "text-brand-600 font-semibold")}>
                   {l.annualOpexDelta < 0 ? "−" : "+"}{fmtMoney(Math.abs(l.annualOpexDelta))}
                 </td>
-                <td className="py-2.5 px-2 text-right tabular-nums">{l.paybackYears != null ? `${fmtNum(l.paybackYears, 1)} yrs` : "—"}</td>
+                <td className="py-2.5 px-2 text-right tabular-nums">{fmtPayback(l.paybackYears, l.paybackKind)}</td>
               </tr>
               {open === l.id && (
                 <tr className="bg-surface-muted/50">

@@ -24,7 +24,7 @@ import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/selec
 import { CURRENCY } from "@/lib/defaults";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { InfoTip } from "@/components/ui/InfoTip";
-import { cn, fmt, fmtMoney, fmtPerTonne } from "@/lib/utils";
+import { cn, fmt, fmtMoney, fmtPerTonne, fmtPayback } from "@/lib/utils";
 
 /* How each basis builds its mix — shown when the card's (i) is clicked. */
 const MIX_LOGIC: Record<MixObjective, string[]> = {
@@ -393,7 +393,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
                           <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">CAPEX <InfoTip text={KPI_TIPS.capex} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(o.kpis.totalCapex)}</div></div>
                           <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">OPEX Δ / yr <InfoTip text={KPI_TIPS.opex} /></div><div className={cn("text-sm font-extrabold tabular-nums", o.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700")}>{fmtMoney(o.kpis.annualOpexDelta)}</div></div>
                           <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Cost / t <InfoTip text={KPI_TIPS.costPerT} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmtPerTonne(o.kpis.costPerTonne)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Payback <InfoTip text={KPI_TIPS.payback} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{o.kpis.paybackYears != null ? `${o.kpis.paybackYears.toFixed(1)} yr` : "—"}</div></div>
+                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Payback <InfoTip text={KPI_TIPS.payback} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtPayback(o.kpis.paybackYears, o.kpis.paybackKind)}</div></div>
                         </div>
                       </div>
                     )}
