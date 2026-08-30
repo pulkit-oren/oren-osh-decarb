@@ -1,14 +1,27 @@
 "use client";
 
-/* Balance to target — the builder's landing screen, as a guided 3-step flow.
-   Step 1: set the target year + percentage (defaulting from your active
-   emissions goal) and watch the gauge track how much of the required cut the
-   current levers deliver. Step 2: compare suggested mixes on three bases
-   (four with a CAPEX budget) — each card's (i) flips it over to the exact
-   calculation logic. Step 3: fine-tune the seven lever families with live
-   tonnes from the real model. The dials are DERIVED from the per-source
-   levers, so fine-tuning inside Scope 1 / Scope 2 moves them here — the two
-   views can never drift. */
+/* Balance to target — the builder's landing screen, in the same two-pane shape
+   as the data-entry screens: a work pane on the left, a result rail on the
+   right that never scrolls away.
+
+   The rail is the point. This screen used to stack three full-height steps down
+   a 1,387px page, so dragging a lever in step 3 moved a Required / Allocated /
+   Gap readout that had scrolled 500px out of view. The gap, the progress bar
+   and the arithmetic behind them now sit permanently beside the controls that
+   change them.
+
+   Three things follow from that, all deliberate:
+
+   - The TARGET BAND is pinned above the tabs rather than being a tab of its
+     own. Year and percentage are the premise every other section depends on —
+     "Suggest mixes for 50% by 2030" is a strange button to read when the 50%
+     is behind a tab you are not on.
+   - PROGRESS IS LINEAR AND CAPPED. A plan can exceed its target (mixes move in
+     10% steps and the OPEX basis deliberately overshoots), and an uncapped
+     radial read as a calculation bug. The bar stops at 100% and the overshoot
+     is stated in words.
+   - The dials are DERIVED from the per-source levers, so fine-tuning inside
+     Scope 1 / Scope 2 moves them here — the two views can never drift. */
 
 import { useEffect, useMemo, useState } from "react";
 import { Zap, Fuel, Snowflake, Sun, Lightbulb, Landmark, Wind, ChevronRight, Info, Check, Sparkles } from "lucide-react";
@@ -22,8 +35,8 @@ import { END_YEAR } from "@/lib/model";
 import { suggestMixOptions, type CombinedInputs, type MixObjective, type MixOption } from "@/lib/combined-balance";
 import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/select";
 import { CURRENCY } from "@/lib/defaults";
-import { Collapsible } from "@/components/tabs/activity/Collapsible";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { SectionTabs } from "@/components/ui/SectionTabs";
 import { cn, fmt, fmtMoney, fmtPerTonne, fmtPayback } from "@/lib/utils";
 
 /* How each basis builds its mix — shown when the card's (i) is clicked. */
@@ -56,22 +69,14 @@ const LOGIC_FOOTER =
 const KPI_TIPS = {
   capex: "Upfront capital, summed across every lever active in this mix — equipment conversions, EV purchase premiums, solar install, refrigerant retrofits, LDAR programs. Priced per source by the same model as the CFO tab.",
   opex: "Change in yearly running cost vs business-as-usual once the mix is fully ramped: fuel and electricity spend, tariff / REC premiums, maintenance changes, refrigerant gas top-ups. Negative (green) = the mix saves money every year.",
-  costPerT: "Annualized cost per tonne: CAPEX spread over each lever's lifetime at your discount rate, plus the yearly OPEX change, divided by tonnes abated. The like-for-like number for comparing levers.",
-  payback: "Years for the yearly OPEX savings to repay the upfront CAPEX. Shows — when the mix doesn't save money on net.",
+  costPerT: "Levelised cost per tonne: every year's CAPEX and running-cost change discounted to today over each lever's own life, divided by the discounted tonnes it abates. Summed across the mix and divided once — not an average of the per-lever figures, which would weight a one-tonne measure like a thousand-tonne one.",
+  payback: "Discounted payback: years until the mix's cumulative discounted cash turns in your favour. Reads \"< 1 yr\" when the first year already repays it, \"n/a\" when there is no capital at risk, and \"never\" when it is not recovered at your discount rate — the last two are opposite outcomes, so they are named rather than blanked.",
 } as const;
 
 /** Deep-link target for a lever family — the exact screen where it's edited. */
 export type LeverFocus =
   | { scope: "s1"; seg: "mobile" | "stationary" | "refrigerant" }
   | { scope: "s2"; mode: "facilities" | "procurement"; facilityId?: string };
-
-function StepBadge({ n, onDark }: { n: number; onDark?: boolean }) {
-  return (
-    <span className={cn("w-7 h-7 rounded-full grid place-items-center text-sm font-extrabold shrink-0", onDark ? "bg-white text-brand-700" : "bg-brand-600 text-white")}>
-      {n}
-    </span>
-  );
-}
 
 export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) => void }) {
   const s1 = useScenario();
@@ -139,6 +144,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const [appliedObj, setAppliedObj] = useState<MixObjective | null>(null);
   const [logicOpen, setLogicOpen] = useState<MixObjective | null>(null);
   const [capexBudget, setCapexBudget] = useState(0); // 0 = no cap
+  const [tab, setTab] = useState<"mixes" | "levers">("levers");
   const invalidate = () => { setOptions(null); setAppliedObj(null); setLogicOpen(null); };
   const computeOptions = () => {
     const inp: CombinedInputs = {
@@ -217,217 +223,176 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
     },
   ];
 
-  return (
-    <div className="screen-in flex flex-col gap-5">
-      {/* ---- Step 1: target setting ---- */}
-      <section className="rounded-xl3 bg-gradient-to-br from-brand-600 via-brand-700 to-brand-800 text-white shadow-card p-6" aria-label="Step 1 — target setting">
-        <div className="flex items-center gap-3 mb-6 flex-wrap">
-          <StepBadge n={1} onDark />
-          <div>
-            <h2 className="text-lg font-extrabold leading-tight">Target Setting</h2>
-            <p className="text-xs text-white/70">Pick the year and how much of the Scope 1+2 footprint to cut — 100% is net zero.</p>
-          </div>
-          {goal && goalTargetPct === target && !touched && (
-            <span className="ml-auto text-[11px] font-semibold text-white bg-white/15 rounded-full px-2.5 py-1" title={goal.name}>from your goal: {goal.name}</span>
-          )}
-        </div>
+  const activeLevers = LEVER_ROWS.filter((r) => r.value > 0).length;
+  const pctOfRequired = Math.round(allocPct * 100);
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(260px,1fr)_minmax(300px,1.2fr)] items-center">
-          {/* inputs */}
-          <div className="flex flex-col gap-5">
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-white/85 font-semibold">Target year</span>
-              <select
-                value={year}
-                aria-label="Target year"
-                onChange={(e) => { setTouched(true); invalidate(); setYear(Number(e.target.value)); }}
-                className="w-28 tabular-nums rounded-lg border border-white/30 bg-white/10 px-3 py-2 font-bold text-white cursor-pointer hover:bg-white/20 transition-colors [&>option]:text-ink"
-              >
-                {Array.from({ length: END_YEAR - minYear + 1 }, (_, i) => minYear + i).map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </label>
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-1.5">
-                <span className="text-sm text-white/85 font-semibold">Cut Scope 1+2 by</span>
-                <span className="flex items-baseline gap-0.5">
-                  <input
-                    type="number" value={target} min={0} max={100}
-                    aria-label="Combined reduction target"
-                    onChange={(e) => { setTouched(true); invalidate(); setTarget(Math.max(0, Math.min(100, Number(e.target.value)))); }}
-                    className="w-16 bg-transparent text-right tabular-nums text-2xl font-extrabold text-white focus:outline-none focus:bg-white/10 rounded-md"
-                  />
-                  <span className="text-sm font-bold text-white/70">%</span>
-                </span>
-              </div>
-              <input
-                type="range" min={0} max={100} step={1} value={target}
-                aria-label="Combined reduction target slider"
-                onChange={(e) => { setTouched(true); invalidate(); setTarget(Number(e.target.value)); }}
-                style={{ accentColor: "#fff" }}
-                className="w-full cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] font-bold text-white/50 mt-1">
-                <span>0%</span><span>50%</span><span>Net zero</span>
-              </div>
-            </div>
-            <p className="text-xs text-white/80 leading-relaxed">
-              {target >= 100 ? <>That&rsquo;s <strong className="text-white">net zero by {year}</strong> ✨</> : <>Cut {target}% of the {s1.baseYear} base by {year}{target >= 90 ? " — near net zero" : ""}.</>}
-            </p>
-          </div>
-
-          {/* stat tiles */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl2 border border-white/20 bg-white/10 p-3.5">
-              <div className="text-[10px] uppercase tracking-wide font-bold text-white/60">Required cut</div>
-              <div className="text-xl font-extrabold tabular-nums mt-1">{fmt(requiredT)} t</div>
-              <div className="text-[10px] text-white/60 mt-0.5">by {year}</div>
-            </div>
-            <div className="rounded-xl2 border border-white/20 bg-white/10 p-3.5">
-              <div className="text-[10px] uppercase tracking-wide font-bold text-white/60">Allocated</div>
-              <div className="text-xl font-extrabold tabular-nums mt-1">{fmt(allocatedT)} t</div>
-              <div className="text-[10px] text-white/60 mt-0.5">from the levers</div>
-            </div>
-            <div className={cn("rounded-xl2 p-3.5", onTrack ? "bg-white text-brand-700" : "bg-amber-300 text-amber-950")}>
-              <div className={cn("text-[10px] uppercase tracking-wide font-bold flex items-center gap-1", onTrack ? "text-brand-700/70" : "text-amber-900/70")}>
-                Gap <InfoTip text="Required cut minus what your current levers deliver by the target year (Scope 2 market-based, including your entered VPPA/I-REC coverage)." />
-              </div>
-              <div className="text-xl font-extrabold tabular-nums mt-1">{onTrack ? "Met" : `${fmt(gapT)} t`}</div>
-              <div className={cn("text-[10px] mt-0.5", onTrack ? "text-brand-700/70" : "text-amber-900/70")}>{onTrack ? "target reached" : "still to close"}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* progress to target */}
-        <div className="mt-6" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(allocPct * 100))} aria-label="Progress to target">
-          <div className="flex items-baseline justify-between gap-3 text-xs font-semibold mb-1.5">
-            <span className="text-white/80">Plan progress</span>
-            <span className="tabular-nums text-white">
-              {allocPct > 1
-                ? <>target met — the plan delivers {Math.round(allocPct * 100)}% of the required cut</>
-                : <>{Math.round(allocPct * 100)}% of the required cut</>}
-            </span>
-          </div>
-          <div className="h-3 rounded-full bg-white/15 overflow-hidden">
-            <div
-              className={cn("h-full rounded-full transition-all duration-700", onTrack ? "bg-white" : "bg-amber-300")}
-              style={{ width: `${Math.min(100, Math.round(allocPct * 100))}%` }}
+  /* ── Target band: the premise, pinned above the tabs ─────────────────── */
+  const targetBand = (
+    <section
+      className="rounded-xl3 bg-gradient-to-br from-brand-600 via-brand-700 to-brand-800 text-white shadow-card px-5 py-4 shrink-0"
+      aria-label="Target setting"
+    >
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span className="text-sm font-extrabold">Cut Scope 1+2 by</span>
+          <span className="flex items-baseline gap-0.5">
+            <input
+              type="number" value={target} min={0} max={100}
+              aria-label="Combined reduction target"
+              onChange={(e) => { setTouched(true); invalidate(); setTarget(Math.max(0, Math.min(100, Number(e.target.value)))); }}
+              className="w-14 bg-transparent text-right tabular-nums text-2xl font-extrabold text-white focus:outline-none focus:bg-white/10 rounded-md"
             />
-          </div>
+            <span className="text-sm font-bold text-white/70">%</span>
+          </span>
+          <span className="text-sm font-extrabold text-white/85">by</span>
+          <select
+            value={year}
+            aria-label="Target year"
+            onChange={(e) => { setTouched(true); invalidate(); setYear(Number(e.target.value)); }}
+            className="tabular-nums rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-sm font-bold text-white cursor-pointer hover:bg-white/20 transition-colors [&>option]:text-ink"
+          >
+            {Array.from({ length: END_YEAR - minYear + 1 }, (_, i) => minYear + i).map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
         </div>
-      </section>
 
-      {/* ---- Step 2: compare ways to get there ---- */}
-      <section className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6" aria-label="Step 2 — compare ways to get there">
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <StepBadge n={2} />
-          <div>
-            <h2 className="text-base font-extrabold text-ink leading-tight">Compare ways to get there</h2>
-            <p className="text-xs text-ink-soft">Each basis builds a full mix with the real model — tap <Info size={11} className="inline -mt-0.5" /> on a card to see exactly how it&rsquo;s calculated.</p>
-          </div>
-          <div className="ml-auto flex items-center gap-3 flex-wrap">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-ink-soft font-medium">CAPEX budget</span>
-              <input
-                type="number" min={0} step={1_000_000}
-                value={capexBudget === 0 ? "" : capexBudget}
-                placeholder="no cap"
-                aria-label="CAPEX budget"
-                onChange={(e) => { invalidate(); setCapexBudget(Math.max(0, Number(e.target.value) || 0)); }}
-                className="w-32 text-right tabular-nums rounded-lg border border-line px-2 py-1.5"
-              />
-              <span className="text-ink-faint text-xs">{CURRENCY}</span>
-            </label>
-            <button onClick={computeOptions} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-4 py-2 hover:bg-brand-600 transition-colors">
-              <Sparkles size={15} /> Suggest mixes for {target}% by {year}
-            </button>
+        <div className="flex-1 min-w-[14rem]">
+          <input
+            type="range" min={0} max={100} step={1} value={target}
+            aria-label="Combined reduction target slider"
+            onChange={(e) => { setTouched(true); invalidate(); setTarget(Number(e.target.value)); }}
+            style={{ accentColor: "#fff" }}
+            className="w-full cursor-pointer"
+          />
+          <div className="flex justify-between text-[10px] font-bold text-white/50 mt-0.5">
+            <span>0%</span><span>50%</span><span>Net zero</span>
           </div>
         </div>
 
-        {!options ? (
-          <p className="text-xs text-ink-faint rounded-xl2 border border-dashed border-line px-4 py-6 text-center">
-            Prices each lever with the real model ({CURRENCY}/t, CAPEX/t, OPEX/t) and builds one mix per basis — {capexBudget > 0 ? "four bases with your budget cap" : "three bases"} — so you see the trade-off before anything changes.
-          </p>
-        ) : (
-          <>
-            <div className={cn("grid gap-4 sm:grid-cols-2", options.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
-              {options.map((o) => {
-                const showLogic = logicOpen === o.objective;
-                const applied = appliedObj === o.objective;
-                return (
-                  <div key={o.objective} className={cn("rounded-xl2 border flex flex-col transition-shadow", applied ? "border-brand-400 bg-brand-50/50 shadow-card" : "border-line/70 bg-surface hover:shadow-card")}>
-                    <div className="px-4 pt-4 pb-3 flex items-start gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-extrabold text-ink">{o.label}</div>
-                        {o.met ? (
-                          <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-brand-100 text-brand-700">meets target</span>
-                        ) : (
-                          <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-amber-100 text-amber-700">
-                            {o.budgetLimited ? `budget-capped at ${Math.round(o.achieved * 100)}%` : `best reachable ${Math.round(o.achieved * 100)}%`}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => setLogicOpen(showLogic ? null : o.objective)}
-                        aria-expanded={showLogic}
-                        aria-label={`How ${o.label} is calculated`}
-                        title="How this is calculated"
-                        className={cn("ml-auto w-7 h-7 rounded-full grid place-items-center shrink-0 transition-colors", showLogic ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-soft hover:bg-brand-100 hover:text-brand-700")}
-                      >
-                        <Info size={14} />
-                      </button>
-                    </div>
+        <p className="text-xs text-white/80 shrink-0">
+          {target >= 100
+            ? <>That&rsquo;s <strong className="text-white">net zero by {year}</strong> &#10024;</>
+            : <>{target}% of the {s1.baseYear} base{target >= 90 ? " — near net zero" : ""}</>}
+        </p>
 
-                    {showLogic ? (
-                      <div className="px-4 pb-3 flex-1">
-                        <ul className="text-[11px] text-ink-soft leading-relaxed list-disc pl-4 space-y-1.5">
-                          {MIX_LOGIC[o.objective].map((line, i) => <li key={i}>{line}</li>)}
-                        </ul>
-                        <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">{LOGIC_FOOTER}</p>
-                      </div>
-                    ) : (
-                      <div className="px-4 pb-3 flex-1">
-                        <p className="text-[11px] text-ink-soft leading-snug min-h-8">{o.blurb}</p>
-                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">CAPEX <InfoTip text={KPI_TIPS.capex} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(o.kpis.totalCapex)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">OPEX Δ / yr <InfoTip text={KPI_TIPS.opex} /></div><div className={cn("text-sm font-extrabold tabular-nums", o.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700")}>{fmtMoney(o.kpis.annualOpexDelta)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Cost / t <InfoTip text={KPI_TIPS.costPerT} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmtPerTonne(o.kpis.costPerTonne)}</div></div>
-                          <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Payback <InfoTip text={KPI_TIPS.payback} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtPayback(o.kpis.paybackYears, o.kpis.paybackKind)}</div></div>
-                        </div>
-                      </div>
-                    )}
+        {goal && goalTargetPct === target && !touched && (
+          <span className="text-[11px] font-semibold text-white bg-white/15 rounded-full px-2.5 py-1 shrink-0" title={goal.name}>
+            from your goal: {goal.name}
+          </span>
+        )}
+      </div>
+    </section>
+  );
 
-                    <div className="px-4 pb-4 mt-auto">
-                      {applied ? (
-                        <span className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-100 text-brand-700 px-3 py-2"><Check size={15} /> Applied</span>
+  /* ── Panel: compare suggested mixes ──────────────────────────────────── */
+  const mixesPanel = (
+    <div className="h-full min-h-0 overflow-y-auto p-6">
+      <div className="flex items-start gap-3 flex-wrap mb-4">
+        <p className="text-xs text-ink-soft max-w-md">
+          Each basis builds a full mix with the real model — tap <Info size={11} className="inline -mt-0.5" /> on a card to see exactly how it&rsquo;s calculated.
+        </p>
+        <div className="ml-auto flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-ink-soft font-medium">CAPEX budget</span>
+            <input
+              type="number" min={0} step={1_000_000}
+              value={capexBudget === 0 ? "" : capexBudget}
+              placeholder="no cap"
+              aria-label="CAPEX budget"
+              onChange={(e) => { invalidate(); setCapexBudget(Math.max(0, Number(e.target.value) || 0)); }}
+              className="w-32 text-right tabular-nums rounded-lg border border-line px-2 py-1.5"
+            />
+            <span className="text-ink-faint text-xs">{CURRENCY}</span>
+          </label>
+          <button onClick={computeOptions} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-4 py-2 hover:bg-brand-600 transition-colors">
+            <Sparkles size={15} /> Suggest mixes for {target}% by {year}
+          </button>
+        </div>
+      </div>
+
+      {!options ? (
+        <p className="text-xs text-ink-faint rounded-xl2 border border-dashed border-line px-4 py-8 text-center">
+          Prices each lever with the real model ({CURRENCY}/t, CAPEX/t, OPEX/t) and builds one mix per basis — {capexBudget > 0 ? "four bases with your budget cap" : "three bases"} — so you see the trade-off before anything changes.
+        </p>
+      ) : (
+        <>
+          <div className={cn("grid gap-4 sm:grid-cols-2", options.length >= 4 ? "2xl:grid-cols-4" : "2xl:grid-cols-3")}>
+            {options.map((o) => {
+              const showLogic = logicOpen === o.objective;
+              const applied = appliedObj === o.objective;
+              return (
+                <div key={o.objective} className={cn("rounded-xl2 border flex flex-col transition-shadow", applied ? "border-brand-400 bg-brand-50/50 shadow-card" : "border-line/70 bg-surface hover:shadow-card")}>
+                  <div className="px-4 pt-4 pb-3 flex items-start gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-extrabold text-ink">{o.label}</div>
+                      {o.met ? (
+                        <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-brand-100 text-brand-700">meets target</span>
                       ) : (
-                        <button
-                          onClick={() => applyOption(o)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold rounded-lg border border-brand-300 bg-white text-brand-700 px-3 py-2 hover:bg-brand-50 transition-colors"
-                        >
-                          Apply this mix
-                        </button>
+                        <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-amber-100 text-amber-700">
+                          {o.budgetLimited ? `budget-capped at ${Math.round(o.achieved * 100)}%` : `best reachable ${Math.round(o.achieved * 100)}%`}
+                        </span>
                       )}
                     </div>
+                    <button
+                      onClick={() => setLogicOpen(showLogic ? null : o.objective)}
+                      aria-expanded={showLogic}
+                      aria-label={`How ${o.label} is calculated`}
+                      title="How this is calculated"
+                      className={cn("ml-auto w-7 h-7 rounded-full grid place-items-center shrink-0 transition-colors", showLogic ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-soft hover:bg-brand-100 hover:text-brand-700")}
+                    >
+                      <Info size={14} />
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-ink-faint mt-3">Leak fixes are included in every mix (near-zero cost, pure savings). Applying replaces the current dials — step 3 updates instantly.</p>
-          </>
-        )}
-      </section>
 
-      {/* ---- Step 3: fine-tune the levers ---- */}
-      <section className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6" aria-label="Step 3 — fine-tune the levers">
-        <div className="flex items-center gap-3 mb-2">
-          <StepBadge n={3} />
-          <div>
-            <h2 className="text-base font-extrabold text-ink leading-tight">Fine-tune the levers</h2>
-            <p className="text-xs text-ink-soft">Drag a dial to move every matching source, or click a lever to jump straight to where it&rsquo;s planned.</p>
+                  {showLogic ? (
+                    <div className="px-4 pb-3 flex-1">
+                      <ul className="text-[11px] text-ink-soft leading-relaxed list-disc pl-4 space-y-1.5">
+                        {MIX_LOGIC[o.objective].map((line, i) => <li key={i}>{line}</li>)}
+                      </ul>
+                      <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">{LOGIC_FOOTER}</p>
+                    </div>
+                  ) : (
+                    <div className="px-4 pb-3 flex-1">
+                      <p className="text-[11px] text-ink-soft leading-snug min-h-8">{o.blurb}</p>
+                      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                        <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">CAPEX <InfoTip text={KPI_TIPS.capex} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtMoney(o.kpis.totalCapex)}</div></div>
+                        <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">OPEX &Delta; / yr <InfoTip text={KPI_TIPS.opex} /></div><div className={cn("text-sm font-extrabold tabular-nums", o.kpis.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700")}>{fmtMoney(o.kpis.annualOpexDelta)}</div></div>
+                        <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Cost / t <InfoTip text={KPI_TIPS.costPerT} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{CURRENCY}{fmtPerTonne(o.kpis.costPerTonne)}</div></div>
+                        <div><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold flex items-center gap-1">Payback <InfoTip text={KPI_TIPS.payback} /></div><div className="text-sm font-extrabold tabular-nums text-ink">{fmtPayback(o.kpis.paybackYears, o.kpis.paybackKind)}</div></div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="px-4 pb-4 mt-auto">
+                    {applied ? (
+                      <span className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-100 text-brand-700 px-3 py-2"><Check size={15} /> Applied</span>
+                    ) : (
+                      <button
+                        onClick={() => applyOption(o)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-semibold rounded-lg border border-brand-300 bg-white text-brand-700 px-3 py-2 hover:bg-brand-50 transition-colors"
+                      >
+                        Apply this mix
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+          <p className="text-[11px] text-ink-faint mt-3">Leak fixes are included in every mix (near-zero cost, pure savings). Applying replaces the current dials — the rail and Fine-tune update instantly.</p>
+        </>
+      )}
+    </div>
+  );
+
+  /* ── Panel: fine-tune the lever families ─────────────────────────────── */
+  const leversPanel = (
+    <div className="h-full min-h-0 flex flex-col">
+      <p className="shrink-0 px-6 pt-5 pb-3 text-xs text-ink-soft">
+        Drag a dial to move every matching source, or click a lever to jump straight to where it&rsquo;s planned.
+      </p>
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-5">
         <div className="flex flex-col divide-y divide-line/60">
           {LEVER_ROWS.map((r) => {
             const Icon = r.icon;
@@ -468,22 +433,109 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
           {(w2["existing"] ?? 0) > 0.05 && (
             <div className="py-3 flex items-center gap-3 text-sm">
               <span className="text-ink-soft">Already contracted (VPPA / I-REC from Data input)</span>
-              <span className="ml-auto font-extrabold tabular-nums text-brand-600">−{fmt(w2["existing"] ?? 0)} t</span>
+              <span className="ml-auto font-extrabold tabular-nums text-brand-600">&minus;{fmt(w2["existing"] ?? 0)} t</span>
               <span className="w-24" />
             </div>
           )}
         </div>
-      </section>
+      </div>
+    </div>
+  );
 
-      <Collapsible title="How this is calculated">
-        <div className="text-xs text-ink-soft space-y-2 leading-relaxed">
-          <p><strong className="text-ink">Required cut</strong> = combined base-year total × target = {fmt(base)} t × {target}% = <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> by {year}.</p>
-          <p><strong className="text-ink">Allocated</strong> = combined BAU {year} − net {year} = {fmt(atYear?.bau ?? 0)} − {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. The progress bar shows allocated ÷ required, capped at 100% — a plan can over-deliver, because suggested mixes move dials in 10% steps (they land just past the target, never exactly on it), the OPEX-saving basis deliberately maximizes every self-funding lever beyond the target, and already-contracted VPPA / I-REC abatement also counts toward the allocated tonnes. Each lever row shows its own share — its wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
-          <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
-          <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
-          <p><strong className="text-ink">Suggested mixes</strong>: each basis card in step 2 carries its own <Info size={11} className="inline -mt-0.5" /> with the exact ranking and stopping rule it uses.</p>
+  return (
+    /* The floor is 30rem, not 36: a min-height on a viewport-height frame is a
+       promise the viewport may not be able to keep, and a floor set too high
+       simply pushes the page back into scrolling — the very thing this layout
+       exists to stop. 30rem still leaves a usable panel, and only binds below
+       roughly a 700px window. */
+    <div className="screen-in grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem] lg:h-[calc(100dvh-14rem)] lg:min-h-[30rem]">
+      {/* ── Work pane ── */}
+      <div className="flex flex-col min-h-0 gap-3">
+        {targetBand}
+        <SectionTabs
+          ariaLabel="Balance sections"
+          active={tab}
+          onSelect={(k) => setTab(k as "mixes" | "levers")}
+          tabs={[
+            { key: "mixes", label: "Compare mixes", badge: options ? String(options.length) : undefined },
+            { key: "levers", label: "Fine-tune levers", badge: String(activeLevers) },
+          ]}
+        />
+        <div
+          role="tabpanel"
+          key={tab}
+          className="panel-in flex-1 min-h-0 rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden"
+        >
+          {tab === "mixes" ? mixesPanel : leversPanel}
         </div>
-      </Collapsible>
+      </div>
+
+      {/* ── Result rail: the verdict, permanently beside the controls ── */}
+      <aside className="flex flex-col min-h-0 rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden">
+        <div className={cn("px-5 pt-5 pb-4 shrink-0 border-b border-line/70 border-l-[3px]", onTrack ? "border-l-brand-500" : "border-l-amber-500")}>
+          <div className="text-[10px] uppercase tracking-wide text-ink-soft font-bold">Balance to target</div>
+          <div className={cn("text-[2.5rem] leading-none font-extrabold tabular-nums mt-1.5", onTrack ? "text-brand-600" : "text-ink")}>
+            {onTrack ? "Met" : <>{fmt(gapT)}<span className="text-sm font-semibold text-ink-soft ml-1">t</span></>}
+          </div>
+          <div className="mt-2 text-[11px] font-medium text-ink-faint">
+            {onTrack ? `target reached by ${year}` : `still to close by ${year}`}
+          </div>
+        </div>
+
+        {/* Capped linear progress. A plan CAN exceed its target — mixes move in
+            10% steps and the OPEX basis deliberately overshoots — so the bar
+            stops at 100% and the overshoot is stated in words. A fill running
+            past the end of its own track reads as a bug, not a win. */}
+        <div
+          className="px-5 py-4 shrink-0 border-b border-line/70"
+          role="progressbar" aria-valuemin={0} aria-valuemax={100}
+          aria-valuenow={Math.min(100, pctOfRequired)} aria-label="Progress to target"
+        >
+          <div className="flex items-baseline justify-between gap-2 mb-1.5">
+            <span className="text-[11px] font-semibold text-ink-soft">Plan progress</span>
+            <span className="text-sm font-extrabold tabular-nums text-ink">{Math.min(100, pctOfRequired)}%</span>
+          </div>
+          <div className="h-2.5 rounded-full bg-surface-muted overflow-hidden">
+            <div
+              className={cn("h-full rounded-full transition-all duration-700", onTrack ? "bg-brand-500" : "bg-amber-400")}
+              style={{ width: `${Math.min(100, pctOfRequired)}%` }}
+            />
+          </div>
+          {pctOfRequired > 100 && (
+            <p className="mt-1.5 text-[11px] text-brand-700">
+              Target met — the plan delivers {pctOfRequired}% of the required cut.
+            </p>
+          )}
+        </div>
+
+        <div className="px-5 py-4 shrink-0 border-b border-line/70 space-y-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] text-ink-soft">Required cut</span>
+            <span className="text-sm font-extrabold tabular-nums text-ink">{fmt(requiredT)} t</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] text-ink-soft flex items-center gap-1">
+              Allocated
+              <InfoTip text="What your current levers deliver by the target year (Scope 2 market-based, including your entered VPPA / I-REC coverage)." />
+            </span>
+            <span className="text-sm font-extrabold tabular-nums text-brand-600">{fmt(allocatedT)} t</span>
+          </div>
+        </div>
+
+        <div className="relative flex-1 min-h-0">
+          <div className="h-full overflow-y-auto px-5 py-4">
+            <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold mb-3">How this is calculated</div>
+            <div className="text-[11px] text-ink-soft space-y-2 leading-relaxed">
+              <p><strong className="text-ink">Required cut</strong> = combined base-year total &times; target = {fmt(base)} t &times; {target}% = <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> by {year}.</p>
+              <p><strong className="text-ink">Allocated</strong> = combined BAU {year} &minus; net {year} = {fmt(atYear?.bau ?? 0)} &minus; {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. Progress is allocated &divide; required, capped at 100% — a plan can over-deliver, because suggested mixes move dials in 10% steps (they land just past the target, never exactly on it), the OPEX-saving basis deliberately maximizes every self-funding lever beyond the target, and already-contracted VPPA / I-REC abatement also counts. Each lever row shows its own wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
+              <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
+              <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
+              <p><strong className="text-ink">Suggested mixes</strong>: each basis card carries its own <Info size={11} className="inline -mt-0.5" /> with the exact ranking and stopping rule it uses.</p>
+            </div>
+          </div>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-surface to-transparent" />
+        </div>
+      </aside>
     </div>
   );
 }

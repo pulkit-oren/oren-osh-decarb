@@ -41,6 +41,8 @@ const unrecorded = entry({
   allocationBasis: undefined,
 });
 
+/* The split explainer and the D5 spend line moved to the entry screen's result
+   rail — their assertions live in entry-rail-explainer.test.tsx. */
 describe("EquipmentSection", () => {
   it("lists every equipment with its volume", () => {
     render(<EquipmentSection entry={entry()} onChange={() => {}} />);
@@ -111,11 +113,10 @@ describe("EquipmentSection", () => {
   it("defaults to the first AVAILABLE basis, and shows the one in use (Ruling W)", () => {
     render(<EquipmentSection entry={unrecorded} onChange={() => {}} />);
     // `units` is the honest floor — unitCount is always >= 1 (D10). Spec 4.1
-    // forbids a silent fallback, so the picker and the explainer must BOTH
-    // name the basis the numbers were actually computed from.
+    // forbids a silent fallback, so the picker must name the basis the numbers
+    // were actually computed from. The explainer half of this guarantee is in
+    // entry-rail-explainer.test.tsx, where the explainer now renders.
     expect((screen.getByLabelText(/split by/i) as HTMLSelectElement).value).toBe("units");
-    expect(screen.getByText(/in proportion to/i).textContent)
-      .toContain("in proportion to number of units");
   });
 
   it("still defaults to load when every machine has a capacity and hours", () => {
@@ -165,19 +166,6 @@ describe("EquipmentSection", () => {
     expect(screen.getByText(/2 equipment have no running hours/i)).toBeTruthy();
   });
 
-  it("shows the explainer with the same number as the row", () => {
-    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
-    expect(screen.getByText(/number of units/i)).toBeTruthy();
-    expect(screen.getByText(/3 of 5 units/i)).toBeTruthy();
-  });
-
-  it("renders the explainer arrow verbatim, as U+2192 (Ruling D)", () => {
-    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
-    const row = screen.getByText(/3 of 5 units/i).textContent ?? "";
-    expect(row).toContain("→");
-    expect(row).not.toContain("->");
-  });
-
   it("switches to manual when a volume is typed, and writes only that row", () => {
     const onChange = vi.fn();
     render(<EquipmentSection entry={fleet} onChange={onChange} />);
@@ -216,30 +204,6 @@ describe("EquipmentSection", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /change the unit/i }));
     expect(onChange.mock.calls[0][0].capacityUnit).toBe("kW");
-  });
-
-  it("heads the explainer 'How this is split' (spec 4.3)", () => {
-    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
-    // Without it the user meets an unlabelled block of arithmetic.
-    expect(screen.getByText(/how this is split/i)).toBeTruthy();
-  });
-
-  it("carries the source unit into the explainer, with a real × (spec 4.3)", () => {
-    render(<EquipmentSection entry={entry()} onChange={() => {}} />);
-    const row = screen.getByText(/of 18,000 total/i).textContent ?? "";
-    expect(row).toContain("×");        // U+00D7, not an ASCII "x"
-    expect(row).not.toContain(" x ");
-    expect(row.endsWith("1,25,333.33 m³")).toBe(true);  // the unit rides along
-    expect(screen.getByText(/in proportion to/i).textContent)
-      .toContain("share of 1,88,000 m³ in proportion");
-  });
-
-  it("states the per-equipment spend, taken from the volume share (D5, invariant 6)", () => {
-    render(<EquipmentSection entry={fleet} onChange={() => {}} />);
-    // Spec 5.2 mockup 2, verbatim. 0.6 and 0.4 of the source's own opex, so the
-    // figures sum back to it — the correction this branch exists to make.
-    expect(screen.getByText(/spend follows the volume share/i).textContent)
-      .toContain("₹68,40,000 and ₹45,60,000");
   });
 
   it("shows Unallocated even when it is zero (invariant 2)", () => {

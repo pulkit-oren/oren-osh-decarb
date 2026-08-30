@@ -51,12 +51,30 @@ export function HomeScreen({ year, setYear, fyYears, setNav, openCat, countOf, c
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.85fr_1fr] gap-5 items-stretch lg:flex-1 lg:min-h-0">
-        <div className="flex flex-col gap-3 min-h-0">
+        {/* The column is fixed-height at lg, and its content has a hard floor:
+            six category buttons that cannot shrink past min-h, plus the
+            biogenic footnote which is shrink-0. Below roughly 850px of window
+            height that floor exceeds the space available, and with the default
+            overflow:visible the surplus escaped the card entirely — the
+            biogenic row rendered past the panel's bottom edge.
+
+            The scrollport contains it. A scrollport clips at its padding box
+            whether or not it is actually scrolling, so the padding/negative
+            margin pairs buy room for the buttons' hover lift and ring without
+            moving where they sit: 4px a side, absorbed by the grid's 20px
+            gutter and the card's own padding. */}
+        <div className="flex flex-col gap-3 min-h-0 lg:overflow-y-auto lg:px-1 lg:-mx-1 lg:py-1 lg:-my-1">
+          {/* The floor is 64px, not 72: six of these plus the gaps plus the
+              biogenic footnote have to fit the fixed-height column, and at 72
+              they could not on any window shorter than ~850px. 64 clears the
+              48px icon tile with room to spare, and `flex-1` still grows them
+              past it whenever there is height to spare — the floor only binds
+              on short screens, which is exactly where the slack is needed. */}
           {CAT_DEFS.map((def) => {
             const n = countOf(def.key);
             const Icon = CAT_ICON[def.meta];
             return (
-              <button key={def.key} onClick={() => openCat(def.key)} style={{ background: GRAD[def.meta] }} className="group flex items-center gap-4 rounded-xl3 border border-white/60 shadow-card px-5 text-left flex-1 min-h-[72px] transition-all duration-200 hover:-translate-y-1 hover:shadow-card-lg hover:ring-2 hover:ring-white/80">
+              <button key={def.key} onClick={() => openCat(def.key)} style={{ background: GRAD[def.meta] }} className="group flex items-center gap-4 rounded-xl3 border border-white/60 shadow-card px-5 text-left flex-1 min-h-[64px] transition-all duration-200 hover:-translate-y-1 hover:shadow-card-lg hover:ring-2 hover:ring-white/80">
                 <span className="w-12 h-12 rounded-2xl bg-white/55 backdrop-blur-sm grid place-items-center shrink-0 transition-all group-hover:bg-white/85 group-hover:scale-105">
                   <Icon size={24} strokeWidth={1.9} style={{ color: ICON_COLOR[def.meta] }} />
                 </span>

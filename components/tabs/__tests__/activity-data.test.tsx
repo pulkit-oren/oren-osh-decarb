@@ -402,6 +402,14 @@ async function openDieselSourceEntry() {
   fireEvent.click(nameSpan!.closest("div")!);
 }
 
+/* The entry screen is two panes: a tabbed work pane and a permanent result
+   rail. Fields that used to be stacked on one page now sit behind a tab, so a
+   test that reaches for one has to open its section first — exactly as a user
+   does. The rail (emissions, the derivation, every warning) needs no click. */
+function openEntryTab(name: RegExp) {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
 describe("ActivityDataTab — fuel entry shows all detail fields", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -409,12 +417,16 @@ describe("ActivityDataTab — fuel entry shows all detail fields", () => {
 
   it("fuel entry details expose the full interactive field set", async () => {
     await openDieselSourceEntry(); // helper: add 'Diesel gensets', click it
-    expect(screen.getByLabelText("Number of units")).toBeTruthy();
-    expect(screen.getAllByText(/Annual spend/i).length).toBeGreaterThan(0);
-    // "Show all the things": site, metered/spend toggle, category & remaining life present
-    expect(screen.getByLabelText(/Site \/ location/i)).toBeTruthy();
+    // Consumption is where the entry opens.
     expect(screen.getByText(/Metered volume/i)).toBeTruthy();
+
+    openEntryTab(/Asset details/i);
+    expect(screen.getByLabelText(/Site \/ location/i)).toBeTruthy();
     expect(screen.getByLabelText(/^Category$/i)).toBeTruthy();
+    expect(screen.getAllByText(/Annual spend/i).length).toBeGreaterThan(0);
+
+    openEntryTab(/Equipment/i);
+    expect(screen.getByLabelText("Number of units")).toBeTruthy();
     expect(screen.getByLabelText(/Remaining life/i)).toBeTruthy();
   });
 });
@@ -460,6 +472,7 @@ describe("ActivityDataTab — end-use selector", () => {
 
   it("fuel entry shows an end-use selector filtered by category", async () => {
     await openDieselSourceEntry(); // existing helper: adds 'Diesel gensets', opens its entry
+    openEntryTab(/Equipment/i);
     const sel = screen.getByLabelText(/Equipment \/ end-use/i) as HTMLSelectElement;
     expect(sel).toBeTruthy();
     const opts = Array.from(sel.querySelectorAll("option")).map((o) => o.textContent);
@@ -477,6 +490,7 @@ describe("ActivityDataTab — refrigerant equipment class", () => {
     await openR404aBuRow();
     const nameSpanR = screen.getAllByText("Pune R404A System").find((el) => el.tagName === "SPAN");
     fireEvent.click(nameSpanR!.closest("div")!);
+    openEntryTab(/System details/i);
     const sel = screen.getByLabelText(/Equipment class/i) as HTMLSelectElement;
     expect(sel).toBeTruthy();
     const opts = Array.from(sel.querySelectorAll("option")).map((o) => o.textContent);

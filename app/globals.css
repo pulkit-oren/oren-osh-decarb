@@ -158,6 +158,11 @@ body > * { position: relative; z-index: 1; }
   to   { opacity: 1; transform: translateX(0); }
 }
 
+/* Entry-screen tab panels: the section changes, the frame does not. A short
+   fade only — the surrounding rail and hero are still, so a travelling panel
+   would read as the whole page moving. */
+.panel-in { animation: fadeUp 200ms var(--ease-out-soft); }
+
 /* Popover menus scale-fade in. */
 .pop-in { animation: popIn 160ms var(--ease-out-soft); transform-origin: top right; }
 @keyframes popIn {
@@ -209,7 +214,7 @@ button:active { transform: scale(0.97); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, .tab-fade, .tab-fade > *, .stat-in, .bar-in, .draw-in {
+  *, .tab-fade, .tab-fade > *, .panel-in, .stat-in, .bar-in, .draw-in {
     animation: none !important;
     transition: none !important;
   }

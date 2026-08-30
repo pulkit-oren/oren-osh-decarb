@@ -23,15 +23,13 @@
       already share. */
 
 import { useState } from "react";
-import { Info, Plus, RotateCcw, X } from "lucide-react";
-import { basisAvailability, clampAllocation, computeAllocation, defaultBasis, explainAllocation, unallocated } from "@/lib/equipment/allocate";
+import { Plus, RotateCcw, X } from "lucide-react";
+import { basisAvailability, clampAllocation, computeAllocation, defaultBasis, unallocated } from "@/lib/equipment/allocate";
 import { mintFirstEquipment } from "@/lib/equipment/migrate";
 import type { AllocationBasis, CapacityUnit, Equipment } from "@/lib/equipment/types";
 import type { CombustionAsset } from "@/lib/model/types";
 import { endUsesFor, type EndUseId } from "@/lib/model/end-use";
-import { FUELS } from "@/lib/model/factors";
 import { fmt } from "@/lib/utils";
-import { CURRENCY } from "@/lib/defaults";
 import { newId, unitLabel } from "./shared";
 
 type Props = {
@@ -64,7 +62,8 @@ const BASES = Object.keys(BASIS_LABEL) as AllocationBasis[];
 
 const CELL = "w-full border border-line rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400";
 const NUMCELL = `${CELL} text-right tabular-nums`;
-const TH = "text-left text-[10px] uppercase tracking-wide text-ink-faint font-bold px-2 pb-2";
+/* The table body scrolls inside the panel, so the header pins to its top. */
+const TH = "text-left text-[10px] uppercase tracking-wide text-ink-faint font-bold px-2 pb-2 pt-1 sticky top-0 bg-surface z-10";
 
 /** A blank number input must read as "not recorded", not as 0 — `capacity`
  *  absent is what excludes a row from the capacity/load bases. */
@@ -95,7 +94,6 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
   const [pendingRemoval, setPendingRemoval] = useState<Equipment | null>(null);
 
   const avail = basisAvailability(equipment, previousAllocation);
-  const explain = explainAllocation({ entryVolume: volume, basis, equipment, previous: previousAllocation, unit });
   const leftover = unallocated(volume, alloc);
   const unitTotal = equipment.reduce((s, e) => s + (e.unitCount || 0), 0);
 
@@ -180,66 +178,51 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
 
   const endUseOptions = endUsesFor(entry.category);
 
-  /* D5 / invariant 6: spend follows the volume share. Derived from the very map
-     the Volume column renders, and by the same `volume / annualVolume` ratio
-     resolveEquipment() uses — NOT a second, independently computed share, which
-     is exactly how the shipped build came to inflate total spend on every
-     split (spec 2.2). Because the shares sum to 1 the figures sum to the
-     source's opex, which is what invariant 6 pins. */
-  const spendShares = volume > 0 && entry.opex > 0
-    ? equipment.map((e) => `${CURRENCY}${fmt(((alloc[e.id] ?? 0) / volume) * entry.opex)}`)
-    : [];
-  const spendLine = spendShares.length === 0
-    ? null
-    : spendShares.length === 1
-      ? spendShares[0]
-      : `${spendShares.slice(0, -1).join(", ")} and ${spendShares[spendShares.length - 1]}`;
-
   return (
-    <div className="rounded-xl3 border border-line/60 bg-surface shadow-card p-6">
+    /* Panel-shaped, not card-shaped: EntryShell supplies the card. Header and
+       split controls are pinned; only the table — the one part that grows a row
+       per machine — scrolls. */
+    <div className="relative h-full min-h-0 flex flex-col">
       {/* ── Source header: the capacity unit is declared ONCE, here (D9) ── */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Equipment using this fuel</div>
-          <p className="text-sm text-ink-soft mt-1">
-            {entry.name} · {FUELS[entry.fuelType].label} · {entry.bu || "Central"} · {fmt(volume)} {unit}/yr
-          </p>
-        </div>
-        <button
-          type="button" onClick={onAdd}
-          className="group shrink-0 inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 text-brand-700 font-semibold text-sm px-4 py-2 hover:border-brand-400 hover:bg-brand-50 transition-colors"
-        >
-          <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
-            <Plus size={14} strokeWidth={2.5} />
-          </span>
-          Add equipment
-        </button>
-      </div>
-
-      <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
+      <div className="shrink-0 px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        {/* The hero band already names the source and fuel — all this needs to
+            add is the figure being divided up. */}
         <label className="flex items-center gap-2">
           <span className="text-xs font-semibold text-ink-soft">Capacity measured in</span>
           <select
             aria-label="Capacity measured in"
             value={entry.capacityUnit ?? ""}
             onChange={(e) => onPickCapacityUnit(e.target.value)}
-            className="border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400"
+            className="border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400"
           >
             <option value="">— not recorded</option>
             {CAPACITY_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
         </label>
-        <span className="text-[11px] text-ink-faint">(applies to this source)</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-ink-soft tabular-nums">
+            <strong className="text-ink font-bold">{fmt(volume)} {unit}</strong>/yr to split
+          </span>
+          <button
+            type="button" onClick={onAdd}
+            className="group shrink-0 inline-flex items-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-brand-50/40 text-brand-700 font-semibold text-sm px-3.5 py-1.5 hover:border-brand-400 hover:bg-brand-50 transition-colors"
+          >
+            <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
+              <Plus size={14} strokeWidth={2.5} />
+            </span>
+            Add equipment
+          </button>
+        </div>
       </div>
 
       {notice && (
-        <p role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+        <p role="alert" className="shrink-0 mx-6 mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
           {notice}
         </p>
       )}
 
-      {/* ── The equipment table ── */}
-      <div className="overflow-x-auto">
+      {/* ── The equipment table — the only part allowed to scroll ── */}
+      <div className="flex-1 min-h-0 overflow-auto px-6">
         <table className="w-full border-collapse min-w-[52rem]">
           <thead>
             <tr>
@@ -334,120 +317,123 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
         </table>
       </div>
 
-      {/* ── How the volume is split ── */}
-      <div className="mt-4 border-t border-line/70 pt-4 flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className="text-xs font-semibold text-ink-soft">Split by</span>
-          <select
-            aria-label="Split by" value={basis}
-            onChange={(e) => onPickBasis(e.target.value as AllocationBasis)}
-            className="mt-1.5 block border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400"
-          >
-            {BASES.map((b) => (
-              <option key={b} value={b} disabled={avail[b] != null}>{BASIS_LABEL[b]}</option>
-            ))}
-          </select>
-        </label>
-        {basis !== "manual" && (
-          <button
-            type="button" onClick={() => onChange({ allocations: reallocate(equipment, basis, alloc) })}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium text-ink-soft hover:text-ink hover:border-brand-300 transition-colors"
-          >
-            <RotateCcw size={14} /> Redistribute
-          </button>
+      {/* ── How the volume is split — pinned below the scrolling table ── */}
+      <div className="shrink-0 border-t border-line/70 px-6 py-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <label className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-ink-soft shrink-0">Split by</span>
+            <select
+              aria-label="Split by" value={basis}
+              onChange={(e) => onPickBasis(e.target.value as AllocationBasis)}
+              className="border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:border-brand-400"
+            >
+              {BASES.map((b) => (
+                <option key={b} value={b} disabled={avail[b] != null}>{BASIS_LABEL[b]}</option>
+              ))}
+            </select>
+          </label>
+          {basis !== "manual" && (
+            <button
+              type="button" onClick={() => onChange({ allocations: reallocate(equipment, basis, alloc) })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink-soft hover:text-ink hover:border-brand-300 transition-colors"
+            >
+              <RotateCcw size={14} /> Redistribute
+            </button>
+          )}
+          {/* Invariant 2: stated ALWAYS, including at zero, so "nothing is
+              missing" is something the screen says rather than something the
+              user infers. */}
+          <span className={`ml-auto text-[12px] tabular-nums ${leftover > 0 ? "text-amber-800 font-semibold" : "text-ink-faint"}`}>
+            Unallocated: {fmt(leftover)} {unit}
+          </span>
+        </div>
+
+        {leftover > 0 && (
+          <p className="mt-1.5 text-[11px] text-amber-800">
+            It still reaches the model as an unassigned remainder, but no lever can act on it.
+          </p>
         )}
+
+        {/* A basis is disabled WITH ITS REASON rather than hidden — the shipped
+            version silently fell back to `even`, which made a wrong split look
+            computed (spec 4.1). Run together on one wrapped line: three stacked
+            list rows cost the table above a whole equipment row. */}
+        {BASES.some((b) => avail[b]) && (
+          <p className="mt-2 text-[11px] text-ink-faint leading-relaxed">
+            Unavailable:{" "}
+            {BASES.filter((b) => avail[b]).map((b, i, arr) => (
+              <span key={b}>
+                <span className="font-semibold text-ink-soft">{BASIS_LABEL[b]}</span> ({avail[b]}){i < arr.length - 1 ? "; " : "."}
+              </span>
+            ))}
+          </p>
+        )}
+
+        {/* "How this is split" and the D5 spend line are NOT rendered here: they
+            are derivations, and every derivation on this screen lives in the
+            rail beside the emissions figure. EntryScreen renders both from the
+            same explainAllocation call, so rule 3 in the module comment still
+            holds — there remains exactly one formatter. */}
       </div>
 
-      {/* A basis is disabled WITH ITS REASON rather than hidden — the shipped
-          version silently fell back to `even`, which made a wrong split look
-          computed (spec 4.1). */}
-      {BASES.some((b) => avail[b]) && (
-        <ul className="mt-2 space-y-0.5">
-          {BASES.filter((b) => avail[b]).map((b) => (
-            <li key={b} className="text-[11px] text-ink-faint">
-              <span className="font-semibold text-ink-soft">{BASIS_LABEL[b]}</span> unavailable — {avail[b]}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* Invariant 2: stated ALWAYS, including at zero, so "nothing is missing"
-          is something the screen says rather than something the user infers. */}
-      <p className={`mt-3 text-[12px] ${leftover > 0 ? "text-amber-800" : "text-ink-faint"}`}>
-        Unallocated: {fmt(leftover)} {unit}
-        {leftover > 0 ? " — it still reaches the model as an unassigned remainder, but no lever can act on it." : ""}
-      </p>
-
-      {/* Verbatim from explainAllocation — see rule 3 in the module comment. */}
-      {explain && (
-        <div className="mt-3 rounded-lg bg-surface-muted px-3 py-2.5">
-          <p className="text-[12px] font-semibold text-ink flex items-center gap-1.5">
-            <Info size={13} className="text-ink-faint shrink-0" aria-hidden="true" /> How this is split
-          </p>
-          <p className="mt-1.5 text-[12px] text-ink-soft">{explain.formula}</p>
-          <p className="mt-1 text-[12px] font-mono text-ink break-words">{explain.row}</p>
-        </div>
-      )}
-
-      {/* D5 / invariant 6 — the correction this whole branch exists to make. */}
-      {spendLine && (
-        <p className="mt-3 text-[12px] text-ink-soft">
-          Spend follows the volume share (D5): {spendLine}.
-        </p>
-      )}
-
-      {/* ── D9 confirm: the typed capacities were entered against the old unit ── */}
+      {/* ── D9 confirm: the typed capacities were entered against the old unit ──
+          Overlaid on the panel rather than appended below it: the panel scrolls,
+          and a confirmation the user has to scroll to find is not one. */}
       {pendingUnit !== null && (
-        <div role="alertdialog" aria-modal="true" aria-label="Change the capacity unit" className="mt-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-ink">
-            Change the capacity unit to {pendingUnit || "not recorded"}?
-          </p>
-          <p className="mt-1 text-[12px] text-ink-soft">
-            The capacity figures already typed stay as they are and will now be read as {pendingUnit || "unrecorded"}. Retype them if they were measured in {entry.capacityUnit}.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const next = (pendingUnit || undefined) as CapacityUnit | undefined;
-                setPendingUnit(null);
-                setNotice(null);
-                onChange({ capacityUnit: next });
-              }}
-              className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 transition-colors"
-            >
-              Change the unit
-            </button>
-            <button
-              type="button" onClick={() => setPendingUnit(null)}
-              className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink-soft hover:text-ink transition-colors"
-            >
-              Keep {entry.capacityUnit ?? "as is"}
-            </button>
+        <div className="absolute inset-0 z-20 grid place-items-center bg-ink/10 backdrop-blur-[1px] p-6">
+          <div role="alertdialog" aria-modal="true" aria-label="Change the capacity unit" className="w-full max-w-md rounded-xl border-2 border-amber-300 bg-amber-50 p-4 shadow-card-lg">
+            <p className="text-sm font-semibold text-ink">
+              Change the capacity unit to {pendingUnit || "not recorded"}?
+            </p>
+            <p className="mt-1 text-[12px] text-ink-soft">
+              The capacity figures already typed stay as they are and will now be read as {pendingUnit || "unrecorded"}. Retype them if they were measured in {entry.capacityUnit}.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = (pendingUnit || undefined) as CapacityUnit | undefined;
+                  setPendingUnit(null);
+                  setNotice(null);
+                  onChange({ capacityUnit: next });
+                }}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 transition-colors"
+              >
+                Change the unit
+              </button>
+              <button
+                type="button" onClick={() => setPendingUnit(null)}
+                className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink-soft hover:text-ink transition-colors"
+              >
+                Keep {entry.capacityUnit ?? "as is"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* ── Lever confirm: levers are keyed by equipment id ── */}
       {pendingRemoval && (
-        <div role="alertdialog" aria-modal="true" aria-label="Remove equipment with a lever" className="mt-4 rounded-xl border-2 border-red-300 bg-red-50 p-4">
-          <p className="text-sm font-semibold text-ink">Remove {pendingRemoval.name}?</p>
-          <p className="mt-1 text-[12px] text-ink-soft">
-            A scenario lever is set on this equipment. Removing it drops that lever from the plan.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button" onClick={() => commitRemoval(pendingRemoval)}
-              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
-            >
-              Remove it anyway
-            </button>
-            <button
-              type="button" onClick={() => setPendingRemoval(null)}
-              className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink-soft hover:text-ink transition-colors"
-            >
-              Keep it
-            </button>
+        <div className="absolute inset-0 z-20 grid place-items-center bg-ink/10 backdrop-blur-[1px] p-6">
+          <div role="alertdialog" aria-modal="true" aria-label="Remove equipment with a lever" className="w-full max-w-md rounded-xl border-2 border-red-300 bg-red-50 p-4 shadow-card-lg">
+            <p className="text-sm font-semibold text-ink">Remove {pendingRemoval.name}?</p>
+            <p className="mt-1 text-[12px] text-ink-soft">
+              A scenario lever is set on this equipment. Removing it drops that lever from the plan.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button" onClick={() => commitRemoval(pendingRemoval)}
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Remove it anyway
+              </button>
+              <button
+                type="button" onClick={() => setPendingRemoval(null)}
+                className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink-soft hover:text-ink transition-colors"
+              >
+                Keep it
+              </button>
+            </div>
           </div>
         </div>
       )}

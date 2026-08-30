@@ -32,12 +32,15 @@ describe("BuilderHub — Balance to target lands first", () => {
     expect(screen.getAllByText("Balance to target").length).toBeGreaterThan(0);
     expect(screen.getByText(/Scope 1 · fuels & refrigerants/)).toBeTruthy();
     expect(screen.getByText(/Scope 2 · electricity/)).toBeTruthy();
-    // target-first landing content — the 3-step flow
-    expect(screen.getByText("Required cut")).toBeTruthy();
-    expect(screen.getByText("Target Setting")).toBeTruthy();
+    // Target-first landing: the target band is pinned above the tabs, the
+    // verdict rail is always on screen, and the pane opens on the levers —
+    // the working surface — rather than on an empty "press Suggest" panel.
     expect(screen.getByLabelText("Target year")).toBeTruthy();
-    expect(screen.getByText("Compare ways to get there")).toBeTruthy();
-    expect(screen.getByText("Fine-tune the levers")).toBeTruthy();
+    expect(screen.getByLabelText("Combined reduction target")).toBeTruthy();
+    // "Required cut" appears twice: the rail row and the arithmetic below it.
+    expect(screen.getAllByText("Required cut").length).toBeGreaterThan(0);
+    expect(screen.getByRole("tab", { name: /Compare mixes/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Fine-tune levers/ })).toBeTruthy();
     expect(screen.getByLabelText("Efficiency dial")).toBeTruthy();
     expect(screen.getByLabelText("Electrify fuel dial")).toBeTruthy();
   });
@@ -71,13 +74,17 @@ describe("BuilderHub — Balance to target lands first", () => {
 
   it("suggest compares three bases and applying one moves the dials", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
+    // The suggester lives in its own tab now — open it the way a user does.
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
     fireEvent.click(screen.getByRole("button", { name: /suggest mixes/i }));
     // the three option cards with their trade-off stats
     expect(screen.getByText("Cheapest overall")).toBeTruthy();
     expect(screen.getByText("Lowest CAPEX")).toBeTruthy();
     expect(screen.getByText("Best OPEX saving")).toBeTruthy();
-    // preview does NOT change the plan yet
+    // preview does NOT change the plan yet — check the dial back in its tab
+    fireEvent.click(screen.getByRole("tab", { name: /Fine-tune levers/ }));
     expect((screen.getByLabelText("Efficiency dial") as HTMLInputElement).value).toBe("0");
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
     // the (i) icon flips a card to its calculation logic
     fireEvent.click(screen.getByRole("button", { name: /how best opex saving is calculated/i }));
     expect(screen.getByText(/biggest running-cost saving first/i)).toBeTruthy();
@@ -85,6 +92,7 @@ describe("BuilderHub — Balance to target lands first", () => {
     const applyButtons = screen.getAllByRole("button", { name: /apply this mix/i });
     fireEvent.click(applyButtons[applyButtons.length - 1]);
     expect(screen.getByText("Applied")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /Fine-tune levers/ }));
     const dials = ["Efficiency dial", "Solar onsite dial", "Electrify fuel dial", "Bio-blend fuel dial", "Low-GWP refrigerant dial", "Procurement (market) dial"]
       .map((l) => Number((screen.getByLabelText(l) as HTMLInputElement).value));
     expect(Math.max(...dials)).toBeGreaterThan(0);
@@ -106,6 +114,6 @@ describe("BuilderHub — Balance to target lands first", () => {
     fireEvent.click(screen.getAllByText("Balance to target")[0]);
     fireEvent.click(screen.getByRole("button", { name: /Procurement \(market\)/ }));
     expect(screen.getAllByText(/procurement/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Fine-tune the levers")).toBeNull();
+    expect(screen.queryByRole("tab", { name: /Fine-tune levers/ })).toBeNull();
   });
 });
