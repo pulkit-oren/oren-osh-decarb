@@ -9,6 +9,7 @@ import {
 import { facilityGrade } from "@/lib/data-quality";
 import { useScope2 } from "@/lib/scope2/store";
 import { WarningStrip } from "@/components/ui/WarningStrip";
+import { RailScroll, TabPanel, TwoPaneShell, type PaneTab } from "@/components/ui/TwoPaneShell";
 import { CfePanel } from "./CfePanel";
 import { defaultFacilityActions } from "@/lib/scope2/defaults";
 import { facilityTypeProfile } from "@/lib/scope2/model/facility-type";
@@ -335,29 +336,56 @@ function Scope2PathwaysPanel({ onApply }: { onApply: (l: Scope2Levers) => void }
 
 function FacilityScenarioScreen({ facilityId, onBack }: { facilityId: string; onBack: () => void }) {
   const { baseFacilities } = useScope2();
+  const [tab, setTab] = useState<string>("plan");
   const f = baseFacilities.find((x) => x.id === facilityId);
   if (!f) { onBack(); return null; }
 
+  /* Same frame as Scope 1 and as Data input: the levers scroll inside a fixed
+     panel while the tonnes they move stay pinned in the rail. This screen used
+     to be a suggestion card, an impact strip and two lever cards stacked full
+     width, so the number you were steering by scrolled off as you reached the
+     control that steers it. */
+  const tabs: PaneTab[] = [
+    {
+      key: "plan", label: "Plan",
+      content: (
+        <TabPanel>
+          <div className="flex flex-col gap-5">
+            <Scope2SuggestionCard facilityId={facilityId} />
+            <EfficiencyCard facilityId={facilityId} />
+            <SolarCard facilityId={facilityId} />
+          </div>
+        </TabPanel>
+      ),
+    },
+  ];
+
   return (
-    <div className="screen-in flex flex-col gap-5">
-      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
-        <ChevronDown size={16} className="rotate-90" /> Back to facilities
-      </button>
-
-      <div className="rounded-xl3 border border-white/60 shadow-card px-6 py-5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60">
-        <h1 className="text-2xl font-extrabold text-ink leading-tight">{f.name}</h1>
-        <p className="text-sm text-ink-soft mt-0.5">
-          {facilityTypeProfile(f)?.label ?? "Facility"}{f.bu ? ` · ${f.bu}` : ""}
-          {f.isolated && <span className="ml-2 text-[11px] font-semibold text-amber-700">· Isolated grid</span>}
-        </p>
-      </div>
-
-      <Scope2SuggestionCard facilityId={facilityId} />
-      <FacilityImpact facilityId={facilityId} />
-      <div className="flex justify-end -mt-2"><Scope2CalcPanel target={{ kind: "facility", id: facilityId }} /></div>
-      <EfficiencyCard facilityId={facilityId} />
-      <SolarCard facilityId={facilityId} />
-    </div>
+    <TwoPaneShell
+      backLabel="facilities"
+      onBack={onBack}
+      tabsLabel="Plan sections"
+      tabs={tabs}
+      activeTab={tab}
+      onTabChange={setTab}
+      hero={
+        <div className="rounded-xl3 border border-white/60 shadow-card px-5 py-3.5 bg-gradient-to-br from-brand-50 via-surface to-oren-50/60 shrink-0">
+          <h1 className="text-xl font-extrabold text-ink leading-tight truncate">{f.name}</h1>
+          <p className="text-[13px] text-ink-soft mt-0.5 truncate">
+            {facilityTypeProfile(f)?.label ?? "Facility"}{f.bu ? ` · ${f.bu}` : ""}
+            {f.isolated && <span className="ml-2 text-[11px] font-semibold text-amber-700">· Isolated grid</span>}
+          </p>
+        </div>
+      }
+      rail={
+        <RailScroll>
+          <div className="flex flex-col gap-4">
+            <FacilityImpact facilityId={facilityId} />
+            <Scope2CalcPanel target={{ kind: "facility", id: facilityId }} />
+          </div>
+        </RailScroll>
+      }
+    />
   );
 }
 

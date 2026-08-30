@@ -24,6 +24,7 @@ import type { CombustionAsset, FlexFuelAction, FuelSwitchAction, RefrigerantEra,
 import { cn, fmt, fmtK, fmtMoney, fmtNum, pct, fmtPerTonne, fmtPayback } from "@/lib/utils";
 import { InfoTip } from "../ui/InfoTip";
 import { Collapsible } from "@/components/tabs/activity/Collapsible";
+import { RailScroll, TabPanel, TwoPaneShell, type PaneTab } from "@/components/ui/TwoPaneShell";
 import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, SelectField } from "@/components/tabs/activity/fields";
 import { groupByBu } from "@/lib/group-by-bu";
 import { suggestAllSettings } from "@/lib/model/suggest-all";
@@ -567,34 +568,19 @@ function SegmentScreen({ seg, onBack, onOpenSource }: { seg: Seg; onBack: () => 
 function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: string; onBack: () => void }) {
   const { baseAssets, resolvedBaseAssets, baseSystems, updateCombustion, baseYear } = useScenario();
   const label = SEG_META[seg].label;
-  const back = (
-    <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink w-fit">
-      <ChevronDown size={16} className="rotate-90" /> Back to {label}
-    </button>
-  );
+  const accent = FAMILY_COLORS[SEG_META[seg].colorIdx];
+  const SegIcon = SEG_META[seg].icon;
+  const [tab, setTab] = useState<string>("plan");
 
-  if (seg === "refrigerant") {
-    const sys = baseSystems.find((s) => s.id === sourceId);
-    if (!sys) { onBack(); return null; }
-    return (
-      <div className="screen-in flex flex-col gap-5">
-        {back}
-        <SuggestionCard system={sys} />
-        <SourceImpact kind="system" id={sys.id} />
-        <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "system", id: sys.id }} /></div>
-        <SystemActionCard system={sys} />
-        <AssumptionsCard seg="refrigerant" />
-      </div>
-    );
-  }
-  const a = baseAssets.find((x) => x.id === sourceId);
-  if (!a) { onBack(); return null; }
+  const sys = seg === "refrigerant" ? baseSystems.find((x) => x.id === sourceId) : undefined;
+  const a = seg === "refrigerant" ? undefined : baseAssets.find((x) => x.id === sourceId);
 
-  // D3 — equipment is the planning unit. The source resolves to one row per
-  // machine, each carrying its own lever key, so the plan is set per machine
-  // rather than once for the source. `SourceImpact` stays at source level: it
-  // is the roll-up of these rows.
-  const rows = resolvedRowsForEntry(a, resolvedBaseAssets);
+  /* D3 — equipment is the planning unit. A source resolves to one row per
+     machine, each carrying its own lever key, so the plan is set per machine.
+     Each machine therefore gets its own SECTION rather than another block
+     stacked below the last: the screen used to grow a full suggestion card,
+     lever set and alternatives catalogue per machine, all full width. */
+  const rows = a ? resolvedRowsForEntry(a, resolvedBaseAssets) : [];
   const machines = rows.filter((r) => !isUnallocatedId(r.id));
   const leftover = rows.find((r) => isUnallocatedId(r.id));
 
@@ -603,47 +589,138 @@ function SourceScenarioScreen({ seg, sourceId, onBack }: { seg: Seg; sourceId: s
    *  optional, and an equipment-less source resolves to one pass-through row
    *  that DOES read the flat field, so that shape keeps the flat write. */
   const setEndUse = (rowId: string, v: EndUseId | undefined) => {
+    if (!a) return;
     const eq = a.equipment ?? [];
     if (eq.length === 0) { updateCombustion(baseYear, a.id, { endUse: v }); return; }
     updateCombustion(baseYear, a.id, { equipment: eq.map((u) => (u.id === rowId ? { ...u, endUse: v } : u)) });
   };
 
+  if (seg === "refrigerant") {
+    if (!sys) { onBack(); return null; }
+    const tabs: PaneTab[] = [
+      {
+        key: "plan", label: "Plan",
+        content: (
+          <TabPanel>
+            <div className="flex flex-col gap-5">
+              <SuggestionCard system={sys} />
+              <SystemActionCard system={sys} />
+            </div>
+          </TabPanel>
+        ),
+      },
+      {
+        key: "assumptions", label: "Assumptions",
+        content: <TabPanel><AssumptionsCard seg="refrigerant" /></TabPanel>,
+      },
+    ];
+    return (
+      <TwoPaneShell
+        backLabel={label}
+        onBack={onBack}
+        tabsLabel="Plan sections"
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        hero={
+          <div className="rounded-xl3 border border-line/60 bg-surface shadow-card px-5 py-3.5 flex items-center gap-3.5 shrink-0">
+            <span className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${accent}1A` }}>
+              <SegIcon size={22} style={{ color: accent }} />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-xl font-extrabold text-ink truncate">{sys.name}</h1>
+              <p className="text-[13px] text-ink-soft truncate">
+                {REFRIGERANTS[sys.refrigerant].label} · {fmt(sys.toppedUpKg)} kg/yr topped up{sys.bu ? ` · ${sys.bu}` : ""}
+              </p>
+            </div>
+          </div>
+        }
+        rail={<PlanRail kind="system" id={sys.id} accent={accent} calcTarget={{ kind: "system", id: sys.id }} />}
+      />
+    );
+  }
+
+  if (!a) { onBack(); return null; }
+
+  /* Every machine stays in ONE panel rather than one-per-tab. A tab per
+     machine would hide the siblings, and comparing them is the point of
+     planning per equipment at all (D3) — the screen is long because the
+     ALTERNATIVES CATALOGUE is long, so that is what moves to its own section. */
+  const planContent = (
+    <TabPanel>
+      <div className="flex flex-col gap-5">
+        {machines.map((r) => (
+          <div key={r.id} className="flex flex-col gap-5">
+            <DetailCard title={machines.length > 1 ? `${r.name} — equipment / vehicle type` : "Equipment / vehicle type"}>
+              <SelectField
+                label="Type"
+                value={(r.endUse ?? "") as EndUseId | ""}
+                options={[{ value: "" as EndUseId | "", label: "Unspecified" }, ...endUsesFor(r.category).map((p) => ({ value: p.id as EndUseId | "", label: p.label }))]}
+                onChange={(v) => setEndUse(r.id, (v || undefined) as EndUseId | undefined)}
+                hint="Changing the type updates the suggestion and the lever defaults below — click Apply suggestion to adopt the new type's numbers. It does not change your baseline or any lever you've already set."
+              />
+            </DetailCard>
+            <SuggestionCard asset={r} />
+            <AssetActionCard asset={r} />
+          </div>
+        ))}
+      </div>
+    </TabPanel>
+  );
+
+  const tabs: PaneTab[] = [
+    { key: "plan", label: "Plan", badge: machines.length > 1 ? `${machines.length} machines` : undefined, content: planContent },
+    {
+      key: "alternatives", label: "Alternatives",
+      content: (
+        <TabPanel>
+          <div className="flex flex-col gap-5">
+            {machines.map((r) => (
+              <div key={r.id} className="flex flex-col gap-2">
+                {machines.length > 1 && (
+                  <p className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">{r.name}</p>
+                )}
+                <AlternativesPanel asset={r} />
+              </div>
+            ))}
+          </div>
+        </TabPanel>
+      ),
+    },
+    { key: "assumptions", label: "Assumptions", content: <TabPanel><AssumptionsCard seg={seg} /></TabPanel> },
+  ];
+  const active = tabs.some((t) => t.key === tab) ? tab : tabs[0].key;
+
   return (
-    <div className="screen-in flex flex-col gap-5">
-      {back}
-      {machines.length > 1 && (
-        <div>
-          <h1 className="text-xl font-extrabold text-ink">{a.name}</h1>
-          <p className="text-sm text-ink-soft">
-            {FUELS[a.fuelType].label} · {fmt(a.annualVolume)} {a.unit}/yr · {machines.length} equipment — plan each one below
-          </p>
+    <TwoPaneShell
+      backLabel={label}
+      onBack={onBack}
+      tabsLabel="Plan sections"
+      tabs={tabs}
+      activeTab={active}
+      onTabChange={setTab}
+      hero={
+        <div className="rounded-xl3 border border-line/60 bg-surface shadow-card px-5 py-3.5 flex items-center gap-3.5 shrink-0">
+          <span className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: `${accent}1A` }}>
+            <SegIcon size={22} style={{ color: accent }} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-extrabold text-ink truncate">{a.name}</h1>
+            <p className="text-[13px] text-ink-soft truncate">
+              {FUELS[a.fuelType].label} · {fmt(a.annualVolume)} {a.unit}/yr
+              {machines.length > 1 ? ` · ${machines.length} equipment` : ""}
+              {a.bu ? ` · ${a.bu}` : ""}
+            </p>
+          </div>
+          {leftover && leftover.annualVolume > 0 && (
+            <span className="text-[11px] text-amber-700 max-w-[16rem] text-right leading-snug shrink-0">
+              {fmt(leftover.annualVolume)} {a.unit}/yr unallocated — no lever can act on it. Allocate it in Data input.
+            </span>
+          )}
         </div>
-      )}
-      <SourceImpact kind="asset" id={a.id} />
-      {leftover && leftover.annualVolume > 0 && (
-        <p className="text-[11px] text-ink-faint">
-          {fmt(leftover.annualVolume)} {a.unit}/yr is not allocated to any equipment, so no lever can act on it. Allocate it in Activity data.
-        </p>
-      )}
-      {machines.map((r) => (
-        <div key={r.id} className="flex flex-col gap-5">
-          <DetailCard title={machines.length > 1 ? `${r.name} — equipment / vehicle type` : "Equipment / vehicle type"}>
-            <SelectField
-              label="Type"
-              value={(r.endUse ?? "") as EndUseId | ""}
-              options={[{ value: "" as EndUseId | "", label: "Unspecified" }, ...endUsesFor(r.category).map((p) => ({ value: p.id as EndUseId | "", label: p.label }))]}
-              onChange={(v) => setEndUse(r.id, (v || undefined) as EndUseId | undefined)}
-              hint="Changing the type updates the suggestion and the lever defaults below — click Apply suggestion to adopt the new type's numbers. It does not change your baseline or any lever you've already set."
-            />
-          </DetailCard>
-          <SuggestionCard asset={r} />
-          <div className="flex justify-end -mt-2"><ScenarioCalcPanel target={{ kind: "asset", id: r.id }} /></div>
-          <AssetActionCard asset={r} />
-          <AlternativesPanel asset={r} />
-        </div>
-      ))}
-      <AssumptionsCard seg={seg} />
-    </div>
+      }
+      rail={<PlanRail kind="asset" id={a.id} accent={accent} calcTarget={{ kind: "asset", id: a.id }} />}
+    />
   );
 }
 
@@ -1396,58 +1473,89 @@ function SuggestionCard({ asset, system }: { asset?: CombustionAsset; system?: R
   );
 }
 
-function SourceImpact({ kind, id }: { kind: "asset" | "system"; id: string }) {
+/** The same arithmetic SourceImpact prints, returned rather than rendered, so
+ *  the strip and the rail can never drift apart. */
+function useSourceImpact(kind: "asset" | "system", id: string) {
   const { baseAssets, baseSystems, settings, resolvedBaseAssets } = useScenario();
   let baseT = 0, afterT = 0, capex = 0, spillT = 0;
   if (kind === "asset") {
-    const a = baseAssets.find((x) => x.id === id); if (!a) return null;
-    baseT = combustionCO2e(a);
-    // Roll up over the entry's resolved rows — see resolvedRowsForEntry.
-    // The levers live on the equipment, not on the entry's own id.
-    let abated = 0;
-    for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
-      const acts = settings.byAsset[r.id];
-      if (!acts) continue;
-      const res = applyAssetActions(r, acts, settings.assumptions);
-      abated += res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
-      capex += capexForAsset(r, acts);
-      spillT += res.scope2AddedT;
+    const a = baseAssets.find((x) => x.id === id);
+    if (a) {
+      baseT = combustionCO2e(a);
+      let abated = 0;
+      for (const r of resolvedRowsForEntry(a, resolvedBaseAssets)) {
+        const acts = settings.byAsset[r.id];
+        if (!acts) continue;
+        const res = applyAssetActions(r, acts, settings.assumptions);
+        abated += res.efficiencyAbatementT + res.scope1AbatementT + res.fuelAbatementT;
+        capex += capexForAsset(r, acts);
+        spillT += res.scope2AddedT;
+      }
+      afterT = Math.max(0, baseT - abated);
     }
-    afterT = Math.max(0, baseT - abated);
   } else {
-    const s = baseSystems.find((x) => x.id === id); if (!s) return null;
-    baseT = refrigerantCO2e(s);
-    const acts = settings.bySystem[s.id];
-    if (acts) {
-      const after = applyRefrigerant(s, { transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0, altRefrigerant: acts.gasSwitch.altRefrigerant, leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0 });
-      afterT = Math.max(0, after.newFugitiveT); capex = capexForSystem(acts);
-    } else afterT = baseT;
+    const sys = baseSystems.find((x) => x.id === id);
+    if (sys) {
+      baseT = refrigerantCO2e(sys);
+      const acts = settings.bySystem[sys.id];
+      if (acts) {
+        const after = applyRefrigerant(sys, {
+          transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0,
+          altRefrigerant: acts.gasSwitch.altRefrigerant,
+          leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
+        });
+        afterT = Math.max(0, after.newFugitiveT);
+        capex = capexForSystem(acts);
+      } else afterT = baseT;
+    }
   }
   const abated = Math.max(0, baseT - afterT);
-  const cut = baseT > 0 ? abated / baseT : 0;
+  return { baseT, afterT, abated, capex, spillT, cut: baseT > 0 ? abated / baseT : 0 };
+}
+
+/** The rail for a source's plan: what it emits now, what the plan leaves, and
+ *  what that costs — pinned while you drag the levers that change it. */
+function PlanRail({ kind, id, accent, calcTarget }: {
+  kind: "asset" | "system"; id: string; accent: string;
+  calcTarget: React.ComponentProps<typeof ScenarioCalcPanel>["target"];
+}) {
+  const k = useSourceImpact(kind, id);
   return (
-    <div className="sticky top-2 z-20 rounded-xl3 border border-line/60 bg-surface shadow-card p-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[11px] uppercase tracking-wide text-ink-faint font-bold">Impact</span>
-          <span className="text-2xl font-extrabold tabular-nums text-ink">{fmt(baseT)} <span className="text-sm text-ink-faint">→</span> {fmt(afterT)} <span className="text-sm font-semibold text-ink-soft">tCO₂e</span></span>
+    <>
+      <div data-testid="plan-cut" className="px-5 pt-5 pb-4 shrink-0 border-b border-line/70 border-l-[3px]" style={{ borderLeftColor: accent }}>
+        <div className="text-[10px] uppercase tracking-wide text-ink-soft font-bold">Cut</div>
+        <div className="text-[2rem] leading-none font-extrabold tabular-nums text-brand-600 mt-1.5">
+          −{fmt(k.abated)} t <span className="text-base text-ink-soft font-semibold">· {pct(k.cut)}</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Cut</div><div className="text-lg font-extrabold tabular-nums text-brand-600">−{fmt(abated)} t · {pct(cut)}</div></div>
-          {spillT > 0.05 && (
-            <div className="text-right">
-              <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold flex items-center justify-end gap-1">Scope 2 added <InfoTip text="Electrification moves this energy onto electricity — after your renewable-sourcing assumption, this much lands as Scope 2. Green the supply to shrink it." /></div>
-              <div className="text-lg font-extrabold tabular-nums text-amber-600">+{fmt(spillT)} t</div>
-            </div>
-          )}
-          <div className="text-right"><div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">CAPEX</div><div className="text-lg font-extrabold tabular-nums text-ink">{fmtMoney(capex)}</div></div>
+        <p className="text-[11px] font-medium text-ink-faint mt-2">
+          {fmt(k.baseT)} → {fmt(k.afterT)} <span>tCO₂e</span> on this source
+        </p>
+        <div className="mt-3 h-2.5 rounded-full bg-surface-muted overflow-hidden flex" aria-hidden>
+          <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${k.cut * 100}%` }} />
         </div>
       </div>
-      <div className="mt-3 h-2.5 rounded-full bg-surface-muted overflow-hidden flex">
-        <div className="h-full bg-brand-500 transition-all duration-500" style={{ width: `${cut * 100}%` }} />
-        <div className="h-full bg-ink/10" style={{ width: `${(1 - cut) * 100}%` }} />
-      </div>
-    </div>
+
+      {k.spillT > 0.05 && (
+        <div className="px-5 py-3 shrink-0 border-b border-line/70 bg-amber-50/40">
+          <p className="text-[11px] text-amber-800 leading-relaxed">
+            Electrification moves energy onto electricity: <strong>+{fmt(k.spillT)} tCO₂e</strong> lands
+            in Scope 2 after your renewable-sourcing assumption. Greening the supply shrinks it.
+          </p>
+        </div>
+      )}
+
+      <RailScroll title="What it costs">
+        <div className="flex flex-col gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Capital</div>
+            <div className="text-xl font-extrabold tabular-nums text-ink">{fmtMoney(k.capex)}</div>
+          </div>
+          <div className="pt-3 border-t border-line/60">
+            <ScenarioCalcPanel target={calcTarget} />
+          </div>
+        </div>
+      </RailScroll>
+    </>
   );
 }
 

@@ -150,15 +150,17 @@ function cutTonnesFrom(text: string): number {
 }
 
 function sourceCutText(): string {
-  const cutLabel = screen.getByText("Cut");
-  return (cutLabel.nextElementSibling as HTMLElement).textContent ?? "";
+  /* The impact moved from a strip above the levers into the pinned rail beside
+     them, so it is found by test id rather than by walking off a label — the
+     roll-up being asserted is unchanged, only where it is displayed. */
+  return screen.getByTestId("plan-cut").textContent ?? "";
 }
 
 function sourceCutTonnes(): number {
   return cutTonnesFrom(sourceCutText());
 }
 
-/** SourceImpact prints "−X t · Y%"; the percentage is the discriminating
+/** The rail prints "−X t · Y%"; the percentage is the discriminating
  *  figure, because the tonnage is clamped at the source baseline. */
 function sourceCutPct(): number {
   const text = sourceCutText();

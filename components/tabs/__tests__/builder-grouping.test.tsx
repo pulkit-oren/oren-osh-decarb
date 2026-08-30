@@ -255,7 +255,7 @@ describe("BuilderTab — SuggestionCard and SourceImpact on source scenario scre
     expect(screen.getByText(/Apply suggestion/i)).toBeTruthy();
   });
 
-  it("shows the live Impact strip with 'Impact' and 'Cut' labels on the source screen", () => {
+  it("keeps the live impact pinned in the rail on the source screen", () => {
     seedMobileAssets();
     render(
       <Wrapper>
@@ -264,8 +264,9 @@ describe("BuilderTab — SuggestionCard and SourceImpact on source scenario scre
     );
     fireEvent.click(screen.getByText("Mobile"));
     fireEvent.click(screen.getByText("Pune Fleet"));
-    // SourceImpact labels
-    expect(screen.getByText(/^Impact$/i)).toBeTruthy();
+    // The impact is now the rail's headline rather than a strip above the
+            // levers, so it stays on screen while the levers below it are dragged.
+    expect(screen.getByTestId("plan-cut")).toBeTruthy();
     expect(screen.getByText(/^Cut$/i)).toBeTruthy();
     // The strip shows tCO₂e. getByText(/tCO₂e/) alone is ambiguous — the
     // assumptions panel now prints the derived certificate price "per tCO₂e"
@@ -286,10 +287,13 @@ describe("BuilderTab — SuggestionCard and SourceImpact on source scenario scre
     fireEvent.click(screen.getByText("Pune Fleet"));
     // Click Apply suggestion — suggestion engine electrifies half the fleet
     fireEvent.click(screen.getByText(/Apply suggestion/i));
-    // After apply, at least one lever is on — the Cut label shows a non-zero value
-    // The "−X t" in SourceImpact's Cut div changes from −0 t to some negative value
-    const cutMatches = screen.getAllByText(/^−[\d,.]+ t ·/);
-    expect(cutMatches.length).toBeGreaterThan(0);
+    /* After apply, at least one lever is on and the rail's cut is non-zero.
+       Read off the rail's own element rather than by text match: the figure and
+       its percentage are now separate nodes, and getByText cannot span them. */
+    const cut = screen.getByTestId("plan-cut").textContent ?? "";
+    const m = cut.match(/−([\d,.]+) t/);
+    expect(m).not.toBeNull();
+    expect(parseFloat(m![1].replace(/,/g, ""))).toBeGreaterThan(0);
   });
 
   it("shows an electrify lever tip on the source scenario screen", () => {

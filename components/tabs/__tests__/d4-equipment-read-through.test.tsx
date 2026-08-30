@@ -246,8 +246,12 @@ describe("BuilderTab — the alternatives panel survives migration", () => {
     render(<Wrapper><BuilderTab /></Wrapper>);
     fireEvent.click(screen.getByText("Stationary"));
     fireEvent.click(screen.getByText("PNG Boiler"));
-    // Pre-fix alternativesFor(undefined) returned [] and the whole panel
-    // returned null — a silent disappearance, not an error.
+    /* The catalogue moved into its own section: it is the longest thing on the
+       screen and belongs behind a tab rather than stacked under the levers.
+       What is asserted is unchanged — that it renders at all for a migrated
+       source, where alternativesFor(undefined) used to return [] and the whole
+       panel vanished silently. */
+    fireEvent.click(screen.getByRole("tab", { name: /Alternatives/i }));
     expect(screen.getByText(/Decarbonisation alternatives for/i)).toBeTruthy();
   });
 });
