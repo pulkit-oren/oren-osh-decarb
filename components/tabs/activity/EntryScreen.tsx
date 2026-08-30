@@ -36,6 +36,7 @@ import { TextField, NumField, SelectField, Segmented } from "./fields";
 import { EquipmentSection } from "./EquipmentSection";
 import type { CombustionAsset, RefrigerationSystem } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
+import { leakRatePct, IMPLAUSIBLE_LEAK_RATE_PCT, TYPICAL_LEAK_RATE_PCT } from "@/lib/model/refrigerant-charge";
 
 type Props = {
   nav: Nav & { level: "entry" };
@@ -95,6 +96,14 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
     const warnings: React.ReactNode[] = [];
     if (s.toppedUpKg === 0) warnings.push("No top-up recorded, so this system reports zero. Enter the refrigerant added over the year.");
     if (s.gasCostPerKg === 0) warnings.push("Add a gas cost to value the savings from cutting leaks.");
+    const leakRate = leakRatePct(s);
+    if (leakRate === undefined) {
+      warnings.push("No installed charge recorded, so the leak rate cannot be shown and a target can only be set relative to this year.");
+    } else if (leakRate > 100) {
+      warnings.push(`Topped up more than the full charge this year (${leakRate.toFixed(0)}%). Check the charge figure, or the system has failed.`);
+    } else if (leakRate > IMPLAUSIBLE_LEAK_RATE_PCT) {
+      warnings.push(`Leaking ${leakRate.toFixed(0)}% of its charge a year — typical for this system type is about ${TYPICAL_LEAK_RATE_PCT[s.systemType]}%.`);
+    }
 
     const tabs: EntryTab[] = [
       {
@@ -110,6 +119,15 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
                 <span className="rounded-xl border border-line bg-surface-muted px-4 py-4 text-base text-ink-soft">kg/yr</span>
               </div>
               <p className="text-xs text-ink-faint mt-3">Refrigerant topped up over the year (= the amount that leaked).</p>
+              {leakRate !== undefined && (
+                <div className="mt-5 pt-4 border-t border-line/70">
+                  <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Leak rate</div>
+                  <p className="mt-1.5 text-[13px] text-ink-soft">
+                    <strong className="text-ink font-semibold">{leakRate.toFixed(1)}%</strong> of the {fmt(s.chargeKg ?? 0)} kg charge per year
+                    {" · "}typical for this system type is about {TYPICAL_LEAK_RATE_PCT[s.systemType]}%.
+                  </p>
+                </div>
+              )}
               {s.gasCostPerKg > 0 && s.toppedUpKg > 0 && (
                 <div className="mt-5 pt-4 border-t border-line/70">
                   <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold">Cross-check</div>
@@ -143,6 +161,14 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
               />
               <SelectField label="Refrigerant gas" value={s.refrigerant} options={gasOptions} onChange={(v) => updateRefrigeration(year, s.id, { refrigerant: v })} />
               <NumField label="Gas cost" suffix={`${CURRENCY}/kg`} value={s.gasCostPerKg} min={0} onChange={(v) => updateRefrigeration(year, s.id, { gasCostPerKg: v })} hint="Purchase price of replacement refrigerant. Used to value the savings from cutting leaks." />
+              <NumField
+                label="Installed charge"
+                suffix="kg"
+                value={s.chargeKg ?? 0}
+                min={0}
+                onChange={(v) => updateRefrigeration(year, s.id, { chargeKg: v > 0 ? v : undefined })}
+                hint="The mass of refrigerant in the system, not the mass lost. Optional — but without it the leak rate cannot be computed, and every F-gas target is written as a % of charge per year."
+              />
             </div>
             {refClass && (
               <p className="text-[11px] text-ink-faint mt-4">Recommended low-GWP swap: <strong className="text-ink">{REFRIGERANTS[refClass.recommendedAlt]?.label ?? refClass.recommendedAlt}</strong></p>

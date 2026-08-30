@@ -10,6 +10,7 @@
 import { combustionCO2e, combustionEnergyKJ } from "@/lib/model/baseline";
 import { applyAssetActions, defaultActions, defaultSystemActions, type AssetActionResult } from "@/lib/model/segments";
 import { applyRefrigerant } from "@/lib/model/levers";
+import { effectiveLeakImprovementPct } from "@/lib/model/refrigerant-charge";
 import { getRefrigerant, refrigerantPricePerKg } from "@/lib/model/factors";
 import {
   financeAssumptionsFrom,
@@ -26,7 +27,7 @@ import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import { resolveCombustion, resolveRefrigeration } from "@/lib/yearly";
 import { isUnallocatedId, resolveEquipment } from "@/lib/equipment/resolve";
 import { resolveFacilities } from "@/lib/scope2/store-helpers";
-import type { AssetActions, EfficiencyAction, ElectrifyAction, FuelSwitchAction, FlexFuelAction, SystemActions, GasSwitchAction, LeakFixAction } from "@/lib/model/types";
+import type { AssetActions, EfficiencyAction, ElectrifyAction, FuelSwitchAction, FlexFuelAction, SystemActions, GasSwitchAction, LeakFixAction, RefrigerationSystem } from "@/lib/model/types";
 import type { GlobalAssumptions } from "@/lib/model/types";
 import type { Goal, Initiative } from "./types";
 import type { Inventories } from "./select";
@@ -114,7 +115,7 @@ function assetOpexDelta(
 /** Per-system running-cost delta: leak savings, alt-gas top-ups, displaced base gas. */
 function systemOpexDelta(sys: Parameters<typeof suggestForSystem>[0], acts: SystemActions): number {
   let d = 0;
-  const leakPct = acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0;
+  const leakPct = effectiveLeakImprovementPct(sys as RefrigerationSystem, acts.leakFix);
   d -= sys.toppedUpKg * (leakPct / 100) * sys.gasCostPerKg;
   if (acts.gasSwitch.enabled && acts.gasSwitch.transitionPct > 0) {
     const gShare = acts.gasSwitch.transitionPct / 100;
@@ -229,7 +230,8 @@ export function autoInitiatives(
         const r = applyRefrigerant(sys, {
           transitionPct: acts.gasSwitch.enabled ? acts.gasSwitch.transitionPct : 0,
           altRefrigerant: acts.gasSwitch.altRefrigerant,
-          leakImprovementPct: acts.leakFix.enabled ? acts.leakFix.leakImprovementPct : 0,
+          leakImprovementPct: effectiveLeakImprovementPct(sys, acts.leakFix),
+          chargeReductionPct: acts.chargeReduction?.enabled ? acts.chargeReduction.reductionPct : 0,
         });
         push(sys.id, suggestForSystem(sys).headline, r.abatementT, capexForSystem(acts), systemOpexDelta(sys, acts),
           { kind: "other", assetLifeYears: S1_LIFETIME_YEARS.refrigerant });

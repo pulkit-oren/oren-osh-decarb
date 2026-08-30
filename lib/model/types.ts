@@ -189,6 +189,12 @@ export interface RefrigerationSystem {
    *  the amount refilled equals the amount that leaked to atmosphere — so this
    *  IS the annual fugitive loss. */
   toppedUpKg: number;
+  /** Installed charge (kg) — the mass in the system, not the mass lost.
+   *  Optional: most first-year users have top-up invoices and no charge
+   *  register, and requiring both would block the figure they can produce.
+   *  Where present it makes the LEAK RATE measurable, which is the form every
+   *  F-gas target is written in. See lib/model/refrigerant-charge.ts. */
+  chargeKg?: number;
   gasCostPerKg: number;
   /** Business unit this entry belongs to. Absent ⇒ Central (consolidated). */
   bu?: string;
@@ -274,7 +280,12 @@ export interface GasSwitchAction {
 
 export interface LeakFixAction {
   enabled: boolean;
-  leakImprovementPct: number; // 0..80, reduction in leak rate
+  leakImprovementPct: number; // 0..80, reduction relative to today's leak
+  /** Target annual leak as a % of installed charge — the absolute standard a
+   *  commitment is actually written and audited against ("under 5% a year").
+   *  Wins over leakImprovementPct when the system records a charge; ignored
+   *  when it does not, and the plan says so. */
+  targetLeakRatePct?: number;
   /** LDAR program cost (sensors, tightness surveys, maintenance contract) —
    *  small but not free; keeps the MACC honest. Optional for old plans. */
   capex?: number;
@@ -282,9 +293,24 @@ export interface LeakFixAction {
   targetYear: number;
 }
 
+/** Replace a system with one holding less refrigerant — microchannel coils,
+ *  a distributed architecture, a secondary loop. Cuts the mass that CAN leak,
+ *  independently of how well the system is maintained, which is why it is a
+ *  separate lever from leak fixing rather than a better leak rate. */
+export interface ChargeReductionAction {
+  enabled: boolean;
+  /** 0..80, reduction in installed charge. */
+  reductionPct: number;
+  capex: number;
+  startYear: number;
+  targetYear: number;
+}
+
 export interface SystemActions {
   gasSwitch: GasSwitchAction;
   leakFix: LeakFixAction;
+  /** Optional — absent on every plan saved before this lever existed. */
+  chargeReduction?: ChargeReductionAction;
 }
 
 /** Corporate-level assumptions (not per asset). */

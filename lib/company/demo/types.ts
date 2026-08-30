@@ -81,6 +81,8 @@ export interface DemoSystemSpec {
   bu: string;
   /** Top-up (= fugitive loss under mass balance), kg, per DEMO_YEARS. */
   toppedUpKg: ByDemoYear;
+  /** Installed charge, kg — what makes the leak RATE measurable. */
+  chargeKg?: number;
   gasCostPerKg: number;
   actions?: SystemActions;
 }

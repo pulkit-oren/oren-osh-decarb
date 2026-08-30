@@ -212,6 +212,7 @@ export const PHARMA: DemoCompany = {
       refrigerant: "R134a",
       bu: "Ankleshwar API Plant",
       toppedUpKg: [285, 268],
+      chargeKg: 1900,
       gasCostPerKg: 1150,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 50, altRefrigerant: "R717", retrofitCapex: 22_000_000, startYear: 2027, targetYear: 2031 },
@@ -225,6 +226,7 @@ export const PHARMA: DemoCompany = {
       refrigerant: "R404A",
       bu: "Hyderabad Formulations",
       toppedUpKg: [164, 152],
+      chargeKg: 1050,
       gasCostPerKg: 950,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 70, altRefrigerant: "R744", retrofitCapex: 16_000_000, startYear: 2026, targetYear: 2030 },
@@ -238,6 +240,7 @@ export const PHARMA: DemoCompany = {
       refrigerant: "R410A",
       bu: "Hyderabad Formulations",
       toppedUpKg: [430, 412],
+      chargeKg: 4600,
       gasCostPerKg: 1200,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 55, altRefrigerant: "R454B", retrofitCapex: 18_500_000, startYear: 2027, targetYear: 2031 },
@@ -251,6 +254,7 @@ export const PHARMA: DemoCompany = {
       refrigerant: "R32",
       bu: "Mumbai Corporate Office",
       toppedUpKg: [96, 92],
+      chargeKg: 1150,
       gasCostPerKg: 1200,
       actions: {
         gasSwitch: { enabled: false, transitionPct: 0, altRefrigerant: "R454B", retrofitCapex: 0, startYear: 2028, targetYear: 2032 },

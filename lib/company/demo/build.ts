@@ -90,6 +90,7 @@ function systemForYear(spec: DemoSystemSpec, yearIdx: 0 | 1): RefrigerationSyste
     systemType: spec.systemType,
     refrigerant: spec.refrigerant,
     toppedUpKg: spec.toppedUpKg[yearIdx],
+    chargeKg: spec.chargeKg,
     gasCostPerKg: spec.gasCostPerKg,
     bu: spec.bu,
   };

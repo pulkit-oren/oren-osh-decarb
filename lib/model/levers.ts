@@ -95,7 +95,11 @@ export function applyElectrification(
 export interface RefrigerantInput {
   transitionPct: number; // share of charge moved to alt gas
   altRefrigerant: RefrigerantId;
-  leakImprovementPct: number; // reduction in leak rate
+  leakImprovementPct: number; // reduction in leaked mass, relative to today
+  /** Reduction in installed charge (%). A smaller charge leaks proportionally
+   *  less mass at the same leak rate, so it multiplies the top-up directly.
+   *  Absent ⇒ 0, i.e. exactly the behaviour before this lever existed. */
+  chargeReductionPct?: number;
 }
 
 export interface RefrigerantResult {
@@ -112,7 +116,12 @@ export function applyRefrigerant(
   const alt = getRefrigerant(cfg.altRefrigerant);
   const g = clamp01(cfg.transitionPct / 100);
   // Leak fix first: better maintenance cuts the annual top-up (the leak).
-  const topUp = s.toppedUpKg * (1 - clamp01(cfg.leakImprovementPct / 100));
+  // Then charge reduction: a smaller charge leaks less mass at the same rate.
+  // The two compose multiplicatively because they act on different terms of
+  // rate x charge, and neither substitutes for the other.
+  const topUp = s.toppedUpKg
+    * (1 - clamp01(cfg.leakImprovementPct / 100))
+    * (1 - clamp01((cfg.chargeReductionPct ?? 0) / 100));
 
   const untransitioned = ((1 - g) * topUp * baseGwp) / 1000;
   // The switched portion needs less charge (volAdj), so it leaks proportionally less mass.

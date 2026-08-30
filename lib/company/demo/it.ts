@@ -175,6 +175,7 @@ export const IT_SERVICES: DemoCompany = {
       refrigerant: "R134a",
       bu: "Bengaluru Campus",
       toppedUpKg: [402, 385],
+      chargeKg: 4400,
       gasCostPerKg: 1150,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 60, altRefrigerant: "R1234ze", retrofitCapex: 28_000_000, startYear: 2027, targetYear: 2032 },
@@ -188,6 +189,7 @@ export const IT_SERVICES: DemoCompany = {
       refrigerant: "R410A",
       bu: "Pune SEZ Campus",
       toppedUpKg: [308, 295],
+      chargeKg: 3400,
       gasCostPerKg: 1200,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 65, altRefrigerant: "R454B", retrofitCapex: 14_500_000, startYear: 2026, targetYear: 2031 },
@@ -201,6 +203,7 @@ export const IT_SERVICES: DemoCompany = {
       refrigerant: "R407C",
       bu: "Hyderabad ODC",
       toppedUpKg: [176, 168],
+      chargeKg: 1850,
       gasCostPerKg: 900,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 70, altRefrigerant: "R32", retrofitCapex: 9_800_000, startYear: 2026, targetYear: 2030 },
@@ -214,6 +217,7 @@ export const IT_SERVICES: DemoCompany = {
       refrigerant: "R134a",
       bu: "Hyderabad ODC",
       toppedUpKg: [252, 240],
+      chargeKg: 2800,
       gasCostPerKg: 1150,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 55, altRefrigerant: "R1234ze", retrofitCapex: 17_000_000, startYear: 2028, targetYear: 2032 },

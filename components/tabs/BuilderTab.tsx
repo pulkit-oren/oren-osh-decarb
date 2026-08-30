@@ -29,6 +29,7 @@ import { groupByBu } from "@/lib/group-by-bu";
 import { suggestAllSettings } from "@/lib/model/suggest-all";
 import { buildPathways } from "@/lib/model/pathways";
 import { GRID_EF_DECLINE_PCT_DEFAULT, gridEfForYear } from "@/lib/model/grid";
+import { effectiveLeakImprovementPct, leakRatePct } from "@/lib/model/refrigerant-charge";
 import type { LeverSettings } from "@/lib/model/types";
 import { boardroomVariants } from "@/lib/boardroom-scenarios";
 import { ScenarioCalcPanel } from "./ScenarioCalcPanel";
@@ -36,6 +37,8 @@ import { MiniTrajectory } from "@/components/charts/MiniTrajectory";
 import { LeverImpactList } from "@/components/ui/LeverImpactList";
 import { ScenarioList } from "@/components/ui/ScenarioList";
 import { WarningStrip } from "@/components/ui/WarningStrip";
+import { dgDisplacementOpportunities } from "@/lib/cross-scope";
+import { useOptionalScope2 } from "@/lib/scope2/store";
 import { diffFlat, diffLeverMaps, type DiffRow } from "@/lib/scenario-diff";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
@@ -231,11 +234,20 @@ export function BuilderTab({ initialSeg }: { initialSeg?: Seg } = {}) {
   const [name, setName] = useState("");
   // Rendered above every builder screen, not just the home one: a plan is
   // infeasible wherever you are looking at it from.
-  const { result } = useScenario();
+  const { result, resolvedBaseAssets, settings } = useScenario();
+  // The one thing neither engine can see alone — storage planned on the Scope 2
+  // side while the generators it could displace sit unmodelled on this one.
+  // Optional: this is an enhancement, and a Scope 1 screen must not start
+  // requiring the Scope 2 provider to render at all.
+  const s2 = useOptionalScope2();
+  const opportunities = s2
+    ? dgDisplacementOpportunities(resolvedBaseAssets, settings, s2.baseFacilities, s2.levers)
+    : [];
 
   return (
     <div className="flex flex-col gap-4">
       <WarningStrip warnings={result.warnings} label="Check this plan" />
+      <WarningStrip warnings={opportunities.map((o) => o.message)} label="Worth modelling" tone="info" />
       {view === "home" ? (
         <ModellerHome onOpen={setView} name={name} setName={setName} />
       ) : typeof view === "string" ? (
@@ -1139,21 +1151,29 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
 
   const gs = acts.gasSwitch;
   const lf = acts.leakFix;
+  const currentLeakRate = leakRatePct(system);
   const current = REFRIGERANTS[system.refrigerant];
   const alt = REFRIGERANTS[gs.altRefrigerant];
   const era = ERA_BADGE[current.era];
   const suggested = RECOMMENDED_ALT_BY_SYSTEM[system.systemType];
 
   const baseT = refrigerantCO2e(system);
+  // The SAME resolution compute() uses — a target leak rate outranks the
+  // relative slider — so the figure beside the lever cannot disagree with the
+  // figure in the trajectory.
+  const leakPct = effectiveLeakImprovementPct(system, lf);
+  const cr = acts.chargeReduction;
+  const chargeReductionPct = cr?.enabled ? cr.reductionPct : 0;
   const after = applyRefrigerant(system, {
     transitionPct: gs.enabled ? gs.transitionPct : 0,
     altRefrigerant: gs.altRefrigerant,
-    leakImprovementPct: lf.enabled ? lf.leakImprovementPct : 0,
+    leakImprovementPct: leakPct,
+    chargeReductionPct,
   });
   const afterT = Math.max(0, after.newFugitiveT);
   const gwpDelta = current.gwp > 0 ? (alt.gwp - current.gwp) / current.gwp : 0;
-  const newTopUpKg = system.toppedUpKg * (1 - (lf.enabled ? lf.leakImprovementPct : 0) / 100);
-  const gasSaving = system.toppedUpKg * ((lf.enabled ? lf.leakImprovementPct : 0) / 100) * system.gasCostPerKg;
+  const newTopUpKg = system.toppedUpKg * (1 - leakPct / 100) * (1 - chargeReductionPct / 100);
+  const gasSaving = (system.toppedUpKg - newTopUpKg) * system.gasCostPerKg;
 
   return (
     <div className={cn("rounded-xl3 border border-line/60 bg-surface shadow-card p-6", system.excluded && "opacity-60")}>
@@ -1243,6 +1263,27 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
             <SliderField label="Leak-rate improvement" value={lf.leakImprovementPct} min={0} max={80} suffix="%" accent="#D9774B" onChange={(v) => updateSystemAction(system.id, "leakFix", { leakImprovementPct: v })} hint="How much you cut leaks via maintenance & monitoring — often the biggest quick win." />
             <NumField label="Target year" hint="The year the leak programme reaches full effect." value={lf.targetYear} min={2021} onChange={(v) => updateSystemAction(system.id, "leakFix", { targetYear: Math.max(2021, Math.min(2050, v)) })} />
           </div>
+          {/* The absolute form of the same commitment. Needs an installed
+              charge to be measurable, so it only appears once there is one. */}
+          {currentLeakRate !== undefined && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
+              <NumField
+                label="Target leak rate"
+                suffix="%/yr of charge"
+                value={lf.targetLeakRatePct ?? 0}
+                min={0}
+                step={0.5}
+                hint="The form an F-gas commitment is actually written and audited in. Set above zero and it overrides the relative improvement — leaking at this rate is the promise, whatever this year happened to be."
+                onChange={(v) => updateSystemAction(system.id, "leakFix", { targetLeakRatePct: v > 0 ? v : undefined })}
+              />
+              <p className="text-xs text-ink-soft tabular-nums">
+                Leaking <span className="font-semibold text-ink">{currentLeakRate.toFixed(1)}%</span> of a {fmtNum(system.chargeKg ?? 0, 0)} kg charge today
+                {lf.targetLeakRatePct != null && lf.targetLeakRatePct > 0 && (
+                  <> · a {lf.targetLeakRatePct}% target is a <span className="font-semibold text-ink">{effectiveLeakImprovementPct(system, lf).toFixed(0)}%</span> cut</>
+                )}
+              </p>
+            </div>
+          )}
           <p className="text-xs text-ink-soft mt-3 tabular-nums">
             Top-up {fmtNum(system.toppedUpKg, 1)} kg/yr → <span className="font-semibold text-ink">{fmtNum(newTopUpKg, 1)} kg/yr</span>
             {gasSaving > 0 && <> · saves <span className="font-semibold text-brand-600">{fmtMoney(gasSaving)}/yr</span> in gas top-ups</>}
@@ -1260,6 +1301,33 @@ function SystemActionCard({ system }: { system: RefrigerationSystem }) {
             </p>
           )}
           <p className="text-[11px] text-ink-faint mt-2">{leakFixTip()}</p>
+        </ActionRow>
+
+        <ActionRow
+          title="Cut the charge"
+          sub="Lower-charge system"
+          icon={Snowflake}
+          color="#5B8DEF"
+          enabled={!!cr?.enabled}
+          onToggle={() => updateSystemAction(system.id, "chargeReduction", { enabled: !cr?.enabled })}
+          info="Microchannel coils, a distributed architecture or a secondary loop hold less refrigerant. Less mass in the system is less mass that can ever leak — separate from how well it is maintained, which is why it stacks with leak fixing rather than replacing it."
+          className="max-lg:border-t max-lg:border-line/70 max-lg:mt-4 max-lg:pt-4 lg:border-l lg:border-line/70 lg:pl-7"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 items-end">
+            <SliderField label="Charge reduction" value={cr?.reductionPct ?? 0} min={0} max={80} suffix="%" accent="#5B8DEF" onChange={(v) => updateSystemAction(system.id, "chargeReduction", { reductionPct: v })} hint="How much less refrigerant the replacement system holds." />
+            <NumField label="Target year" hint="The year the replacement is complete." value={cr?.targetYear ?? 2030} min={2021} onChange={(v) => updateSystemAction(system.id, "chargeReduction", { targetYear: Math.max(2021, Math.min(2050, v)) })} />
+          </div>
+          <Collapsible title="Advanced">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <NumField label="Replacement CAPEX" hint="Cost of the lower-charge equipment, over and above what a like-for-like replacement would have cost." value={cr?.capex ?? 0} step={100_000} suffix={CURRENCY} onChange={(v) => updateSystemAction(system.id, "chargeReduction", { capex: v })} />
+              <NumField label="Start year" hint="The year the replacement begins." value={cr?.startYear ?? 2027} step={1} min={2021} onChange={(v) => updateSystemAction(system.id, "chargeReduction", { startYear: Math.max(2021, Math.min(2050, v)) })} />
+            </div>
+          </Collapsible>
+          {system.chargeKg == null && (
+            <p className="text-[11px] text-ink-faint mt-3">
+              No installed charge recorded for this system — the reduction still applies to the leaked mass, but the kg it represents cannot be shown.
+            </p>
+          )}
         </ActionRow>
       </div>
       <p className="text-[11px] text-ink-faint mt-3">Carbon price is set once in <strong>Global assumptions</strong> below and applied across the scenario.</p>

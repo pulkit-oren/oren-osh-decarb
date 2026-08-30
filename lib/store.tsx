@@ -15,7 +15,7 @@ import { compute, type ComputeResult } from "./model";
 import { baselineScope1, type BaselineResult } from "./model/baseline";
 import type {
   AssetActions, CombustionAsset, CombustionByYear, EfficiencyAction, ElectrifyAction, FlexFuelAction, FuelSwitchAction,
-  GasSwitchAction, GlobalAssumptions, LeakFixAction, LeverSettings, RefrigerationByYear,
+  ChargeReductionAction, GasSwitchAction, GlobalAssumptions, LeakFixAction, LeverSettings, RefrigerationByYear,
   RefrigerationSystem, Scenario, SystemActions,
 } from "./model/types";
 import { defaultActions, defaultSystemActions } from "./model/segments";
@@ -54,7 +54,7 @@ interface StoreShape {
 
   setSettings: (updater: (prev: LeverSettings) => LeverSettings) => void;
   updateAction: (assetId: string, lever: "efficiency" | "electrify" | "fuelSwitch" | "flexFuel", patch: Partial<EfficiencyAction> & Partial<ElectrifyAction> & Partial<FuelSwitchAction> & Partial<FlexFuelAction>) => void;
-  updateSystemAction: (systemId: string, lever: "gasSwitch" | "leakFix", patch: Partial<GasSwitchAction> & Partial<LeakFixAction>) => void;
+  updateSystemAction: (systemId: string, lever: "gasSwitch" | "leakFix" | "chargeReduction", patch: Partial<GasSwitchAction> & Partial<LeakFixAction> & Partial<ChargeReductionAction>) => void;
   updateAssumptions: (patch: Partial<GlobalAssumptions>) => void;
   resetSettings: () => void;
   saveScenario: (name: string, note?: string) => void;
@@ -98,6 +98,11 @@ function load(key: string): Persisted | null {
 }
 
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+
+/** Seeded the first time the charge-reduction lever is switched on. */
+const DEFAULT_CHARGE_REDUCTION: ChargeReductionAction = {
+  enabled: false, reductionPct: 30, capex: 0, startYear: 2027, targetYear: 2031,
+};
 
 export function ScenarioProvider({
   children,
@@ -315,13 +320,18 @@ export function ScenarioProvider({
       return { ...p, byAsset: { ...p.byAsset, [assetId]: { ...cur, [lever]: { ...cur[lever], ...patch } } as AssetActions } };
     });
   const updateSystemAction = (
-    systemId: string, lever: "gasSwitch" | "leakFix",
-    patch: Partial<GasSwitchAction> & Partial<LeakFixAction>,
+    systemId: string, lever: "gasSwitch" | "leakFix" | "chargeReduction",
+    patch: Partial<GasSwitchAction> & Partial<LeakFixAction> & Partial<ChargeReductionAction>,
   ) =>
     setSettingsState((p) => {
       const cur = p.bySystem[systemId];
       if (!cur) return p;
-      return { ...p, bySystem: { ...p.bySystem, [systemId]: { ...cur, [lever]: { ...cur[lever], ...patch } } as SystemActions } };
+      // chargeReduction is optional and absent on every plan saved before it
+      // existed, so spreading `cur[lever]` alone would spread undefined and
+      // leave a lever with no start year, no target year and no capex. Give it
+      // a default the first time it is touched.
+      const existing = cur[lever] ?? DEFAULT_CHARGE_REDUCTION;
+      return { ...p, bySystem: { ...p.bySystem, [systemId]: { ...cur, [lever]: { ...existing, ...patch } } as SystemActions } };
     });
   const updateAssumptions = (patch: Partial<GlobalAssumptions>) =>
     setSettingsState((p) => ({ ...p, assumptions: { ...p.assumptions, ...patch } }));

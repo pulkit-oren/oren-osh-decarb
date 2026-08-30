@@ -21,6 +21,7 @@ import { applyRefrigerant } from "./levers";
 import { applyAssetActions, electrifyCapexFor } from "./segments";
 import { validateScope1 } from "./feasibility";
 import { gridFactorFn } from "./grid";
+import { effectiveLeakImprovementPct, validateCharge, validateTargetableSystems } from "./refrigerant-charge";
 import { buildTrajectory, targetLine } from "./trajectory";
 import type {
   CombustionAsset,
@@ -224,29 +225,44 @@ export function compute(
     const acts = s.bySystem[sys.id];
     if (!acts) continue;
     const gasOn = acts.gasSwitch.enabled && acts.gasSwitch.transitionPct > 0;
-    const leakOn = acts.leakFix.enabled && acts.leakFix.leakImprovementPct > 0;
-    if (!gasOn && !leakOn) continue;
+    // Resolved here, not read raw: a target leak RATE (the form a commitment is
+    // written in) outranks a relative improvement whenever the system records
+    // an installed charge. One translation, above the physics.
+    const leakPct = effectiveLeakImprovementPct(sys, acts.leakFix);
+    const leakOn = leakPct > 0;
+    const chargeCut = acts.chargeReduction;
+    const chargeOn = !!chargeCut?.enabled && chargeCut.reductionPct > 0;
+    const chargeReductionPct = chargeOn ? chargeCut!.reductionPct : 0;
+    if (!gasOn && !leakOn && !chargeOn) continue;
 
-    // Leak fix first (operational before capital); the gas switch takes the increment.
-    const leakPct = leakOn ? acts.leakFix.leakImprovementPct : 0;
+    // Leak fix and charge reduction first (they change the leaked MASS); the
+    // gas switch takes the increment on what is left.
     const base = refrigerantCO2e(sys);
-    const leakOnly = applyRefrigerant(sys, { transitionPct: 0, altRefrigerant: acts.gasSwitch.altRefrigerant, leakImprovementPct: leakPct });
-    const both = applyRefrigerant(sys, { transitionPct: gasOn ? acts.gasSwitch.transitionPct : 0, altRefrigerant: acts.gasSwitch.altRefrigerant, leakImprovementPct: leakPct });
+    const leakOnly = applyRefrigerant(sys, { transitionPct: 0, altRefrigerant: acts.gasSwitch.altRefrigerant, leakImprovementPct: leakPct, chargeReductionPct });
+    const both = applyRefrigerant(sys, { transitionPct: gasOn ? acts.gasSwitch.transitionPct : 0, altRefrigerant: acts.gasSwitch.altRefrigerant, leakImprovementPct: leakPct, chargeReductionPct });
     refAbateLeak += base - leakOnly.newFugitiveT;
     refAbateGas += leakOnly.newFugitiveT - both.newFugitiveT;
 
     if (leakOn) {
-      refGasSavingOpex += sys.toppedUpKg * (acts.leakFix.leakImprovementPct / 100) * sys.gasCostPerKg;
+      refGasSavingOpex += sys.toppedUpKg * (leakPct / 100) * sys.gasCostPerKg;
       refCapex += acts.leakFix.capex ?? 0;
       refStart = Math.min(refStart, acts.leakFix.startYear);
       refEnd = Math.max(refEnd, acts.leakFix.targetYear);
+    }
+    if (chargeOn) {
+      // Less charge means less gas bought to replace what leaks, on top of
+      // whatever the leak fix already saved.
+      refGasSavingOpex += sys.toppedUpKg * (1 - leakPct / 100) * (chargeReductionPct / 100) * sys.gasCostPerKg;
+      refCapex += chargeCut!.capex;
+      refStart = Math.min(refStart, chargeCut!.startYear);
+      refEnd = Math.max(refEnd, chargeCut!.targetYear);
     }
     if (gasOn) {
       // The switched share still leaks and still needs top-ups — at the ALT
       // gas's price and (smaller) charge. Cheap naturals often turn the gas
       // switch into a running saving; premium HFO blends into a cost.
       const gShare = acts.gasSwitch.transitionPct / 100;
-      const topUpAfterLeak = sys.toppedUpKg * (1 - leakPct / 100);
+      const topUpAfterLeak = sys.toppedUpKg * (1 - leakPct / 100) * (1 - chargeReductionPct / 100);
       const altFactor = getRefrigerant(acts.gasSwitch.altRefrigerant);
       const altPrice = acts.gasSwitch.altGasPricePerKg ?? refrigerantPricePerKg(acts.gasSwitch.altRefrigerant);
       refAltGasSpend += gShare * topUpAfterLeak * altFactor.volAdj * altPrice;
@@ -393,7 +409,11 @@ export function compute(
     trajectory,
     biogenicT,
     scope2SpillFullT,
-    warnings: validateScope1(assets, s),
+    warnings: [
+      ...validateScope1(assets, s),
+      ...validateCharge(systems),
+      ...validateTargetableSystems(systems, s.bySystem),
+    ],
     kpis: {
       reduction2030: baseTotalT > 0 ? (y2030.bau - y2030.net) / baseTotalT : 0,
       reduction2050: baseTotalT > 0 ? (y2050.bau - y2050.net) / baseTotalT : 0,

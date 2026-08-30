@@ -212,6 +212,7 @@ export const MANUFACTURING: DemoCompany = {
       refrigerant: "R410A",
       bu: "Chakan Forging Plant",
       toppedUpKg: [252, 240],
+      chargeKg: 2750,
       gasCostPerKg: 1200,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 60, altRefrigerant: "R454B", retrofitCapex: 9_500_000, startYear: 2027, targetYear: 2031 },
@@ -225,6 +226,7 @@ export const MANUFACTURING: DemoCompany = {
       refrigerant: "R407C",
       bu: "Hosur Machining Plant",
       toppedUpKg: [182, 175],
+      chargeKg: 1200,
       gasCostPerKg: 900,
       actions: {
         gasSwitch: { enabled: true, transitionPct: 65, altRefrigerant: "R290", retrofitCapex: 7_200_000, startYear: 2026, targetYear: 2030 },
@@ -238,6 +240,7 @@ export const MANUFACTURING: DemoCompany = {
       refrigerant: "R32",
       bu: "Pune Corporate Office",
       toppedUpKg: [62, 60],
+      chargeKg: 720,
       gasCostPerKg: 1200,
       actions: {
         gasSwitch: { enabled: false, transitionPct: 0, altRefrigerant: "R454B", retrofitCapex: 0, startYear: 2029, targetYear: 2033 },

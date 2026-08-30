@@ -208,3 +208,13 @@ export function useScope2(): Scope2StoreShape {
   if (!v) throw new Error("useScope2 must be used within Scope2Provider");
   return v;
 }
+
+/** Scope 2 state when this tree has it, null when it does not.
+ *
+ *  For features that ENHANCE a Scope 1 screen with cross-scope context but must
+ *  not make it depend on the Scope 2 provider — the app mounts both, a Scope 1
+ *  unit test mounts one, and a cross-scope hint is not worth making that test
+ *  set up a second store. Mirrors useOptionalAssumptions in lib/store.tsx. */
+export function useOptionalScope2(): Scope2StoreShape | null {
+  return useContext(Ctx);
+}
