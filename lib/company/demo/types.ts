@@ -100,6 +100,8 @@ export interface DemoFacilitySpec {
   roofSpaceM2: number;
   peakLoadKw: number;
   irradiance: number;
+  /** INR per kVA per month on contract demand. */
+  demandChargePerKvaMonth?: number;
   loadSplit: LoadSplit;
   facilityType?: FacilityTypeId;
   isolated?: boolean;

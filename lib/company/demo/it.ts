@@ -237,12 +237,13 @@ export const IT_SERVICES: DemoCompany = {
       roofSpaceM2: 34_000,
       peakLoadKw: 14_500,
       irradiance: 1500,
+      demandChargePerKvaMonth: 390,
       loadSplit: { lightingPct: 18, motorPct: 14, hvacPct: 55 },
       facilityType: "office",
       existingSolarKwp: 2500,
       actions: {
         efficiency: { enabled: true, ledPct: 100, motorPct: 45, bmsPct: 95, ledCapex: 14_000_000, motorCapex: 18_000_000, bmsCapex: 32_000_000, startYear: 2026, targetYear: 2029 },
-        generation: { enabled: true, solarKwp: 3400, batteryKwh: 8000, exportMode: "netMetering", solarCapexPerKw: 44_000, batteryCapexPerKwh: 25_000, subsidyPct: 0, startYear: 2026, targetYear: 2030 },
+        generation: { enabled: true, solarKwp: 3400, batteryKwh: 8000, exportMode: "netMetering", peakShavingKw: 1_800, solarCapexPerKw: 44_000, batteryCapexPerKwh: 25_000, subsidyPct: 0, startYear: 2026, targetYear: 2030 },
       },
     },
     {
@@ -364,6 +365,14 @@ export const IT_SERVICES: DemoCompany = {
     greenTariffPremiumPerKwh: 0.6,
     recPricePerKwh: 0.45,
     re100Exclusion: false,
+    // Karnataka / Telangana campuses. IT parks often negotiate a lighter
+    // stack than heavy industry, and banking matters more to a 24x7 load.
+    openAccessCharges: {
+      crossSubsidySurchargePerKwh: 0.85,
+      additionalSurchargePerKwh: 0.15,
+      wheelingChargePerKwh: 0.4,
+      bankingLossPct: 4,
+    },
     startYear: 2026,
     targetYear: 2029,
   },

@@ -152,6 +152,7 @@ function facilityForYear(spec: DemoFacilitySpec, yearIdx: 0 | 1): Facility {
     name: spec.name,
     annualLoadKwh: spec.kwh[yearIdx],
     tariffPerKwh: spec.tariffPerKwh,
+    demandChargePerKvaMonth: spec.demandChargePerKvaMonth,
     loadSplit: { ...spec.loadSplit },
     roofSpaceM2: spec.roofSpaceM2,
     peakLoadKw: spec.peakLoadKw,

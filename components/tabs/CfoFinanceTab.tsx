@@ -10,6 +10,7 @@ import { Card, CardHeader } from "../ui/Card";
 import { KpiCard } from "../ui/KpiCard";
 import { HowTo } from "../ui/HowTo";
 import { MaccChart } from "../charts/MaccChart";
+import { SensitivityPanel } from "./SensitivityPanel";
 
 export function CfoFinanceTab() {
   const { result, settings } = useScenario();
@@ -172,6 +173,7 @@ export function CfoFinanceTab() {
           </>
         )}
       </Card>
+      <SensitivityPanel />
     </div>
   );
 }

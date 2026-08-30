@@ -20,6 +20,11 @@ export interface Facility {
   name: string;
   annualLoadKwh: number; // total grid draw for the FY
   tariffPerKwh: number;
+  /** Demand charge on contract demand, INR per kVA per month. An Indian HT
+   *  bill is energy PLUS demand, and no lever here touched the second half —
+   *  which is what actually pays for a battery, through peak shaving. Absent
+   *  ⇒ zero, i.e. energy-only, exactly as before. */
+  demandChargePerKvaMonth?: number;
   loadSplit: LoadSplit;
   roofSpaceM2: number; // physical cap for solar sizing
   peakLoadKw: number; // battery-sizing context (display guardrail, not computed)
@@ -65,6 +70,10 @@ export interface GenerationAction {
   enabled: boolean;
   solarKwp: number; // hard-capped at roofSpaceM2 / M2_PER_KW
   batteryKwh: number;
+  /** Billed demand the battery is dispatched to shave, kW. Earns
+   *  demandChargePerKvaMonth x 12 and abates NO carbon — shifting a peak moves
+   *  when you draw, not how much. Absent ⇒ 0. */
+  peakShavingKw?: number;
   exportMode: ExportMode;
   solarCapexPerKw: number;
   batteryCapexPerKwh: number;
@@ -80,6 +89,20 @@ export interface FacilityActions {
 
 /* ---------- Portfolio-wide procurement ---------- */
 
+/** The regulated charges bolted onto every open-access kilowatt-hour in India.
+ *  See lib/scope2/model/open-access.ts. All optional, all defaulting to zero,
+ *  so a plan written before this existed prices exactly as it did. */
+export interface OpenAccessCharges {
+  /** Cross-subsidy surcharge, INR/kWh — the largest and most volatile part. */
+  crossSubsidySurchargePerKwh: number;
+  /** Additional surcharge for the discom's stranded cost, INR/kWh. */
+  additionalSurchargePerKwh: number;
+  /** Wheeling / transmission, INR/kWh. */
+  wheelingChargePerKwh: number;
+  /** Share of banked energy not returned (%), bought back at the grid tariff. */
+  bankingLossPct: number;
+}
+
 export interface ProcurementSettings {
   enabled: boolean;
   ppaPct: number; // 0..100 of addressable load
@@ -89,6 +112,10 @@ export interface ProcurementSettings {
   greenTariffPremiumPerKwh: number;
   recPricePerKwh: number;
   re100Exclusion: boolean; // deduct isolated load from the denominator
+  /** Charged on the PPA share only. A green tariff is a discom product over the
+   *  same connection and a REC is an unbundled certificate — neither wheels an
+   *  electron, so neither pays the stack. Absent ⇒ no charges. */
+  openAccessCharges?: OpenAccessCharges;
   startYear: number;
   targetYear: number;
 }

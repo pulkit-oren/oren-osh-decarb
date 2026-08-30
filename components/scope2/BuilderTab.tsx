@@ -34,6 +34,8 @@ import { LeverImpactList } from "@/components/ui/LeverImpactList";
 import { ScenarioList } from "@/components/ui/ScenarioList";
 import { diffFlat, diffLeverMaps, type DiffRow } from "@/lib/scenario-diff";
 import { financeAssumptionsFrom, programmeMetrics, S2_LIFETIME_YEARS, summariseLever } from "@/lib/finance";
+import { EMPTY_STACK } from "@/lib/scope2/model/open-access";
+import type { OpenAccessCharges } from "@/lib/scope2/model/types";
 
 /* ============================================================
    Router
@@ -621,6 +623,13 @@ function SolarCard({ facilityId }: { facilityId: string }) {
               onChange={(v) => updateFacilityAction(f.id, "generation", { batteryKwh: v })}
             />
             <NumField
+              label="Peak shaved (kW)"
+              hint="Billed demand the battery is dispatched to hold down. Earns the demand charge every month and abates NO carbon — shifting a peak changes when you draw, not how much. In India this is often the larger half of why a battery gets approved."
+              value={gen.peakShavingKw ?? 0} min={0}
+              footer={f.demandChargePerKvaMonth ? `at ₹${f.demandChargePerKvaMonth}/kVA/month` : "no demand charge recorded for this site"}
+              onChange={(v) => updateFacilityAction(f.id, "generation", { peakShavingKw: v })}
+            />
+            <NumField
               label="Solar CAPEX / kW"
               value={gen.solarCapexPerKw}
               onChange={(v) => updateFacilityAction(f.id, "generation", { solarCapexPerKw: v })}
@@ -663,6 +672,11 @@ function SolarCard({ facilityId }: { facilityId: string }) {
 
 function ProcurementScreen({ onBack }: { onBack?: () => void }) {
   const { levers, result, updateProcurement } = useScope2();
+  // The stack is optional on the settings, so edit through a resolved copy —
+  // patching an absent object would drop the three fields not being edited.
+  const oa = levers.procurement.openAccessCharges ?? EMPTY_STACK;
+  const setOa = (patch: Partial<OpenAccessCharges>) =>
+    updateProcurement({ openAccessCharges: { ...oa, ...patch } });
   const p = levers.procurement;
   // The certificate price is a SHARED assumption, not a procurement field. Both
   // hooks return undefined when this tab is mounted without the Scope 1 store,
@@ -736,6 +750,31 @@ function ProcurementScreen({ onBack }: { onBack?: () => void }) {
                 label="Green tariff premium / kWh"
                 value={p.greenTariffPremiumPerKwh}
                 onChange={(v) => updateProcurement({ greenTariffPremiumPerKwh: v })}
+              />
+              <NumField
+                label="Cross-subsidy surcharge / kWh"
+                hint="Levied by the state commission when an HT consumer leaves the discom. The largest and most volatile part of the open-access stack, and the reason two plants in two states face very different PPA economics."
+                value={oa.crossSubsidySurchargePerKwh} min={0} step={0.1}
+                onChange={(v) => setOa({ crossSubsidySurchargePerKwh: v })}
+              />
+              <NumField
+                label="Additional surcharge / kWh"
+                hint="Recovers the discom's stranded fixed cost. Comes and goes with its own tariff filings."
+                value={oa.additionalSurchargePerKwh} min={0} step={0.1}
+                onChange={(v) => setOa({ additionalSurchargePerKwh: v })}
+              />
+              <NumField
+                label="Wheeling / transmission / kWh"
+                hint="Cost of using the network to move the power."
+                value={oa.wheelingChargePerKwh} min={0} step={0.1}
+                onChange={(v) => setOa({ wheelingChargePerKwh: v })}
+              />
+              <NumField
+                label="Banking loss"
+                suffix="%"
+                hint="Share of banked energy not returned. Bought back from the discom at the grid tariff, so it is priced against the tariff rather than the strike."
+                value={oa.bankingLossPct} min={0} step={0.5}
+                onChange={(v) => setOa({ bankingLossPct: v })}
               />
               <NumField
                 label="REC price / kWh"

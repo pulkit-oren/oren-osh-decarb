@@ -182,6 +182,14 @@ export function FacilityDetailContent({ f, year, locationT }: { f: Facility; yea
             <div className="text-[11px] uppercase tracking-wide text-ink-faint font-bold mb-3">Cost & emissions</div>
             <div className="grid grid-cols-2 gap-3">
               <NumField label="Tariff (₹/kWh)" value={f.tariffPerKwh} onChange={(v) => updateFacility(year, f.id, { tariffPerKwh: v })} />
+              {/* The other half of an Indian HT bill. Nothing reduced it until
+                  peak shaving existed, so a battery's business case was missing
+                  the part that usually pays for it. */}
+              <NumField
+                label="Demand charge (₹/kVA/month)"
+                value={f.demandChargePerKvaMonth ?? 0}
+                onChange={(v) => updateFacility(year, f.id, { demandChargePerKvaMonth: v > 0 ? v : undefined })}
+              />
               <NumField label="Grid EF (kgCO₂e/kWh)" value={f.gridEf} onChange={(v) => updateFacility(year, f.id, { gridEf: v })} />
             </div>
             <p className="text-[11px] text-ink-faint mt-2 flex items-center gap-1.5">

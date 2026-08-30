@@ -124,7 +124,7 @@ export function computeScope2(
   const draws: FacilityDraw[] = [];
   const existingByFacility: Record<string, number> = {};
   let effAbateT = 0, effCapex = 0, effSaving = 0;
-  let genAbateT = 0, genCapex = 0, genOnSiteSaving = 0, genExportSaving = 0;
+  let genAbateT = 0, genCapex = 0, genOnSiteSaving = 0, genExportSaving = 0, genDemandSaving = 0;
   let effStart = Infinity, effEnd = -Infinity, genStart = Infinity, genEnd = -Infinity;
 
   for (const f of facilities) {
@@ -140,7 +140,7 @@ export function computeScope2(
     const existCovered = Math.min(existingCoveredKwh(f) + (contractCov[f.id] ?? 0), gen.gridDrawKwh);
     existingByFacility[f.id] = existCovered;
     if (!isContractRecord(f)) {
-      draws.push({ id: f.id, gridDrawKwh: Math.max(0, gen.gridDrawKwh - existCovered), gridEf: f.gridEf, isolated: f.isolated });
+      draws.push({ id: f.id, gridDrawKwh: Math.max(0, gen.gridDrawKwh - existCovered), gridEf: f.gridEf, isolated: f.isolated, tariffPerKwh: f.tariffPerKwh });
     }
 
     if (acts.efficiency.enabled && eff.savedKwh > 0) {
@@ -155,6 +155,10 @@ export function computeScope2(
       genCapex += gen.capex;
       genOnSiteSaving += gen.usedOnSiteKwh * f.tariffPerKwh;
       genExportSaving += gen.opexSaving - gen.usedOnSiteKwh * f.tariffPerKwh;
+      // Carries no tonnes: shaving a peak changes WHEN you draw, not how much.
+      // It belongs in the business case all the same — in India it is often
+      // the larger half of why the battery gets approved.
+      genDemandSaving += gen.demandSaving;
       genStart = Math.min(genStart, acts.generation.startYear);
       genEnd = Math.max(genEnd, acts.generation.targetYear);
     }
@@ -229,9 +233,10 @@ export function computeScope2(
     mk("efficiency", "Energy efficiency", 4, effAbateT, effCapex, -effSaving, effR, [
       { label: "Avoided grid electricity", amount: -effSaving, kind: "elec" },
     ]),
-    mk("generation", "On-site generation", 0, genAbateT, genCapex, -(genOnSiteSaving + genExportSaving), genR, [
+    mk("generation", "On-site generation", 0, genAbateT, genCapex, -(genOnSiteSaving + genExportSaving + genDemandSaving), genR, [
       { label: "Avoided grid electricity", amount: -genOnSiteSaving, kind: "elec" },
       { label: "Export credits", amount: -genExportSaving, kind: "elec" },
+      { label: "Demand-charge saving (peak shaving)", amount: -genDemandSaving, kind: "elec" },
     ]),
     mk("procurement", "Renewable procurement", 3, procAbateT, 0, proc.annualCost, procR, [
       { label: "PPA strike delta", amount: proc.costParts.ppa, kind: "elec" },

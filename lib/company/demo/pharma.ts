@@ -274,12 +274,13 @@ export const PHARMA: DemoCompany = {
       roofSpaceM2: 42_000,
       peakLoadKw: 7200,
       irradiance: 1650,
+      demandChargePerKvaMonth: 410,
       loadSplit: { lightingPct: 12, motorPct: 62, hvacPct: 18 },
       facilityType: "factory",
       existingSolarKwp: 3000,
       actions: {
         efficiency: { enabled: true, ledPct: 90, motorPct: 55, bmsPct: 70, ledCapex: 9_500_000, motorCapex: 42_000_000, bmsCapex: 18_000_000, startYear: 2026, targetYear: 2030 },
-        generation: { enabled: true, solarKwp: 4200, batteryKwh: 6000, exportMode: "netMetering", solarCapexPerKw: 42_000, batteryCapexPerKwh: 24_000, subsidyPct: 0, startYear: 2026, targetYear: 2029 },
+        generation: { enabled: true, solarKwp: 4200, batteryKwh: 6000, exportMode: "netMetering", peakShavingKw: 900, solarCapexPerKw: 42_000, batteryCapexPerKwh: 24_000, subsidyPct: 0, startYear: 2026, targetYear: 2029 },
       },
     },
     {
@@ -376,6 +377,13 @@ export const PHARMA: DemoCompany = {
     greenTariffPremiumPerKwh: 0.75,
     recPricePerKwh: 0.45,
     re100Exclusion: false,
+    // Gujarat / Telangana blend — a lighter stack than Maharashtra's.
+    openAccessCharges: {
+      crossSubsidySurchargePerKwh: 0.95,
+      additionalSurchargePerKwh: 0.2,
+      wheelingChargePerKwh: 0.3,
+      bankingLossPct: 2,
+    },
     startYear: 2026,
     targetYear: 2030,
   },

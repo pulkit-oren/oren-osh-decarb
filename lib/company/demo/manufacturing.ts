@@ -260,12 +260,13 @@ export const MANUFACTURING: DemoCompany = {
       roofSpaceM2: 38_000,
       peakLoadKw: 9500,
       irradiance: 1550,
+      demandChargePerKvaMonth: 475,
       loadSplit: { lightingPct: 10, motorPct: 68, hvacPct: 12 },
       facilityType: "factory",
       existingSolarKwp: 2200,
       actions: {
         efficiency: { enabled: true, ledPct: 95, motorPct: 60, bmsPct: 55, ledCapex: 8_200_000, motorCapex: 56_000_000, bmsCapex: 14_000_000, startYear: 2026, targetYear: 2030 },
-        generation: { enabled: true, solarKwp: 3800, batteryKwh: 5000, exportMode: "netMetering", solarCapexPerKw: 41_000, batteryCapexPerKwh: 23_000, subsidyPct: 0, startYear: 2026, targetYear: 2029 },
+        generation: { enabled: true, solarKwp: 3800, batteryKwh: 5000, exportMode: "netMetering", peakShavingKw: 1_200, solarCapexPerKw: 41_000, batteryCapexPerKwh: 23_000, subsidyPct: 0, startYear: 2026, targetYear: 2029 },
       },
     },
     {
@@ -302,6 +303,7 @@ export const MANUFACTURING: DemoCompany = {
       roofSpaceM2: 24_000,
       peakLoadKw: 6200,
       irradiance: 1700,
+      demandChargePerKvaMonth: 350,
       loadSplit: { lightingPct: 12, motorPct: 64, hvacPct: 14 },
       facilityType: "factory",
       existingSolarKwp: 1800,
@@ -362,6 +364,14 @@ export const MANUFACTURING: DemoCompany = {
     greenTariffPremiumPerKwh: 0.7,
     recPricePerKwh: 0.45,
     re100Exclusion: false,
+    // Maharashtra-weighted: the group-captive PPA looks cheap on the strike
+    // alone and is close to break-even once the state's stack is on it.
+    openAccessCharges: {
+      crossSubsidySurchargePerKwh: 1.35,
+      additionalSurchargePerKwh: 0.45,
+      wheelingChargePerKwh: 0.35,
+      bankingLossPct: 2,
+    },
     startYear: 2026,
     targetYear: 2031,
   },
