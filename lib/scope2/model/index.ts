@@ -14,6 +14,7 @@ import {
 } from "@/lib/finance";
 import type { LeverMetrics, OpexPart as FinanceOpexPart, SeriesRow } from "@/lib/finance";
 import { buildTrajectory, targetLine } from "@/lib/model/trajectory";
+import { gridFactorFn } from "@/lib/model/grid";
 import type { GlobalAssumptions, TrajectoryRow, Wedge } from "@/lib/model/types";
 import { defaultFacilityActions } from "../defaults";
 import { baselineScope2, existingCoveredKwh, type Scope2Baseline } from "./baseline";
@@ -254,11 +255,16 @@ export function computeScope2(
   }
 
   const baseTotalT = baseline.totalLocationT;
+  // gridLinked: every tonne on both curves is grid electricity, so the
+  // baseline itself falls as the grid cleans and each wedge is worth less.
+  const gridFactor = gridFactorFn(baseYear, assumptions?.gridEfDeclinePctPerYear);
   const trajectoryLocation = buildTrajectory({
     baseYear, endYear: END_YEAR, baseTotalT, bauGrowth: BAU_GROWTH, wedges: wedgesLocation,
+    gridFactor, gridLinked: true,
   });
   const trajectoryMarket = buildTrajectory({
     baseYear, endYear: END_YEAR, baseTotalT, bauGrowth: BAU_GROWTH, wedges: wedgesMarket,
+    gridFactor, gridLinked: true,
   });
 
   const at = (rows: TrajectoryRow[], y: number) => rows.find((r) => r.year === y) ?? rows[rows.length - 1];

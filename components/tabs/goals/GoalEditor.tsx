@@ -19,6 +19,8 @@ import { NumberField, SelectField, TextField } from "./fields";
 import { AssigneePicker } from "./AssigneePicker";
 import { CalcPanel } from "./CalcPanel";
 import { InitiativeTable } from "./InitiativeTable";
+import { OutputSeries } from "./OutputSeries";
+import { isIntensityGoal } from "@/lib/goals/select";
 
 const SCOPE_OPTS = (Object.keys(SCOPE_LABEL) as GoalScope[]).map((s) => ({ value: s, label: SCOPE_LABEL[s] }));
 const YEAR_OPTS = [...FY_YEARS, 2028, 2029, 2030, 2035, 2040, 2045, 2050].map((y) => ({ value: String(y), label: String(y) }));
@@ -56,6 +58,10 @@ export function GoalEditor({ goal, inv, onBack }: { goal: Goal; inv: Inventories
           <Trash2 size={16} />
         </button>
       </div>
+
+      {/* An intensity goal is a ratio, so it needs its denominator entered
+          before it can be measured at all. */}
+      {isIntensityGoal(goal) && <OutputSeries goal={goal} />}
 
       {/* target definition */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

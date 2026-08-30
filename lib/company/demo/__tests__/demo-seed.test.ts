@@ -148,6 +148,28 @@ describe.each(DEMO_COMPANIES.map((d) => [d.name, d] as const))("%s - dataset int
     }
   });
 
+  it("ships a physically feasible plan, and a duty temperature on every heated source", () => {
+    /* The feasibility gate found four infeasible COPs in this very data when
+       it was first switched on — including a heat-pump COP of 2.8 on a 184 °C
+       steam boiler, which is an electrode boiler and a COP of 1. A demo
+       dataset that trips the product's own guardrail teaches the wrong thing,
+       so the gate holds its own examples to the standard. */
+    const assets = resolveEquipment(resolveCombustion(built.combustion, DEMO_BASE_YEAR));
+    const r = compute(assets, resolveRefrigeration(built.refrigeration, DEMO_BASE_YEAR), built.settings, DEMO_BASE_YEAR);
+    expect(r.warnings).toEqual([]);
+
+    // Every stationary source carrying a thermal end-use records its duty
+    // temperature — otherwise the gate has nothing to check against.
+    const THERMAL = new Set(["boiler", "tfh", "furnace", "kiln", "oven", "dryer", "cooking"]);
+    for (const s of demo.sources) {
+      for (const e of s.equipment) {
+        if (s.category === "stationary" && e.endUse && THERMAL.has(e.endUse)) {
+          expect(e.dutyTempC, `${s.name} / ${e.name} has no duty temperature`).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
   it("saves scenarios that change the ANSWER, not just the settings", () => {
     /* A scenario can differ field-by-field and still model identically. It
        happened: the levers stack efficiency -> electrify -> fuel switch, so a

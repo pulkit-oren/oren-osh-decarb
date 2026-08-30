@@ -289,7 +289,12 @@ export interface SystemActions {
 
 /** Corporate-level assumptions (not per asset). */
 export interface GlobalAssumptions {
-  gridEf: number; // kgCO2e / kWh
+  gridEf: number; // kgCO2e / kWh, base year
+  /** Annual decline in grid carbon intensity, % per year. Optional for old
+   *  saves; defaults to GRID_EF_DECLINE_PCT_DEFAULT. Zero reproduces the old
+   *  frozen-grid behaviour exactly, which is what every save written before
+   *  this field existed was silently assuming. */
+  gridEfDeclinePctPerYear?: number;
   renewableSourcingPct: number; // 0..100, clean share of new electricity
   /** THE certificate price, in Rs per kWh — the unit certificates actually
    *  trade in. Both scopes read this one field: Scope 2's procurement cost is
@@ -348,6 +353,13 @@ export interface TrajectoryConfig {
   wedges: Wedge[];
   /** Optional added Scope 2 load (electrification spillover), full-ramp tonnes/yr. */
   scope2Spill?: { startYear: number; rampYears: number; fullT: number }[];
+  /** Grid carbon intensity in `year` as a multiple of the base year's, from
+   *  lib/model/grid.ts. Absent ⇒ 1 for every year (a grid that never cleans).
+   *  Always applied to `scope2Spill`, which is grid load in either scope. */
+  gridFactor?: (year: number) => number;
+  /** True when the baseline and every wedge are grid electricity — i.e. this is
+   *  the Scope 2 trajectory. Scope 1's fuel baseline must NOT scale. */
+  gridLinked?: boolean;
 }
 
 export interface TrajectoryRow {

@@ -18,8 +18,8 @@ export function GoalsManage({ onCreateNew }: { onCreateNew: () => void }) {
   const s1 = useScenario();
   const s2 = useScope2();
   const esg = useEsg();
-  const { goals, initiatives } = useGoals();
-  const inv: Inventories = { combustion: s1.combustion, refrigeration: s1.refrigeration, facilities: s2.facilities, water: esg.water, waste: esg.waste };
+  const { goals, initiatives, output } = useGoals();
+  const inv: Inventories = { combustion: s1.combustion, refrigeration: s1.refrigeration, facilities: s2.facilities, water: esg.water, waste: esg.waste, output };
 
   const [openId, setOpenId] = useState<string | null>(null);
   const open = goals.find((g) => g.id === openId) ?? null;

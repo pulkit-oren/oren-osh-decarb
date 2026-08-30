@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { facilityGrade } from "@/lib/data-quality";
 import { useScope2 } from "@/lib/scope2/store";
+import { WarningStrip } from "@/components/ui/WarningStrip";
 import { defaultFacilityActions } from "@/lib/scope2/defaults";
 import { facilityTypeProfile } from "@/lib/scope2/model/facility-type";
 import {
@@ -43,7 +44,7 @@ type S2Mode = "facilities" | "procurement";
 /* Per-facility Scope 2 planning + portfolio procurement. The cross-scope
    "Balance to target" dials live one level up in the BuilderHub. */
 export function Scope2BuilderTab({ initialMode, initialFacilityId }: { initialMode?: S2Mode; initialFacilityId?: string } = {}) {
-  const { baseFacilities } = useScope2();
+  const { baseFacilities, result } = useScope2();
   const [mode, setMode] = useState<S2Mode>(initialMode ?? "facilities");
   const [view, setView] = useState<"home" | { facilityId: string }>(initialFacilityId ? { facilityId: initialFacilityId } : "home");
   const [name, setName] = useState("");
@@ -58,6 +59,9 @@ export function Scope2BuilderTab({ initialMode, initialFacilityId }: { initialMo
 
   return (
     <div className="flex flex-col gap-4">
+      {/* validateScope2 has produced these since the module was written and
+          nothing had ever rendered them. */}
+      <WarningStrip warnings={result.warnings} label="Check this plan" />
       <PillNav
         items={[
           { key: "facilities", label: "Plan by source" },

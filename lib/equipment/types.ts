@@ -37,4 +37,10 @@ export interface Equipment {
   remainingLife: number;
   /** Drives lever defaults and feasibility. Absent => unspecified. */
   endUse?: EndUseId;
+  /** Process duty temperature, °C. The field the electrification lever is
+   *  checked against: a COP above ~1.2 means heat recovery, which is
+   *  commercial only to about 165 °C, so this is what separates a heat pump
+   *  from a resistive conversion. Absent => the COP cannot be checked, which
+   *  is itself reported. See lib/model/feasibility.ts. */
+  dutyTempC?: number;
 }

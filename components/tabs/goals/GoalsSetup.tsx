@@ -25,9 +25,9 @@ export function GoalsSetup({ onActivated, initialCategory }: { onActivated: () =
   const s1 = useScenario();
   const s2 = useScope2();
   const esg = useEsg();
-  const { addGoal } = useGoals();
+  const { addGoal, output } = useGoals();
   const assumptions = useOptionalAssumptions();
-  const inv: Inventories = { combustion: s1.combustion, refrigeration: s1.refrigeration, facilities: s2.facilities, water: esg.water, waste: esg.waste };
+  const inv: Inventories = { combustion: s1.combustion, refrigeration: s1.refrigeration, facilities: s2.facilities, water: esg.water, waste: esg.waste, output };
 
   // Deep links from the Data-input Water/Waste screens land straight on the templates.
   const [step, setStep] = useState<Step>(initialCategory ? "template" : "category");

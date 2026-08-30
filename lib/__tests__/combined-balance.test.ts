@@ -44,13 +44,42 @@ describe("combinedReduction2030", () => {
     expect(combinedReduction2030(inp, withEff)).toBeGreaterThan(0.02);
   });
 
-  it("measures at the given targetYear — a later year sees at least the 2030 reduction", () => {
+  it("measures at the given targetYear, and an explicit 2030 matches the default", () => {
     const withEff = { ...ZERO, s2: { ...ZERO.s2, efficiencyPct: 100 } };
     const at2030 = combinedReduction2030(inp, withEff);
-    const at2040 = combinedReduction2030({ ...inp, targetYear: 2040 }, withEff);
-    expect(at2040).toBeGreaterThanOrEqual(at2030 - 1e-9);
-    // an explicit 2030 matches the default
     expect(combinedReduction2030({ ...inp, targetYear: 2030 }, withEff)).toBeCloseTo(at2030, 9);
+  });
+
+  it("a later year sees at least the 2030 reduction — ON A GRID THAT NEVER CLEANS", () => {
+    /* This used to be asserted unconditionally, and it was only ever true
+       because the grid factor was frozen. Pinning it to an explicitly frozen
+       grid keeps the ramp invariant (levers keep ramping, so later >= earlier)
+       while leaving the decarbonising case to the test below. */
+    const frozen: CombinedInputs = {
+      ...inp,
+      s1Base: { ...s1Base, assumptions: { ...s1Base.assumptions, gridEfDeclinePctPerYear: 0 } },
+    };
+    const withEff = { ...currentCombinedDials(frozen), s2: { ...ZERO.s2, efficiencyPct: 100 } };
+    const at2030 = combinedReduction2030(frozen, withEff);
+    const at2040 = combinedReduction2030({ ...frozen, targetYear: 2040 }, withEff);
+    expect(at2040).toBeGreaterThanOrEqual(at2030 - 1e-9);
+  });
+
+  it("a decarbonising grid makes a fully-ramped Scope 2 lever abate FEWER tonnes later", () => {
+    /* Not a regression — the point of the grid trajectory. An efficiency lever
+       saves kilowatt-hours, and a kilowatt-hour is worth fewer tonnes every
+       year the grid cleans. By 2040 the same fully-deployed lever is abating
+       measurably less carbon than it did in 2030, which is exactly the fact a
+       frozen grid factor hid. */
+    const decarb: CombinedInputs = {
+      ...inp,
+      s1Base: { ...s1Base, assumptions: { ...s1Base.assumptions, gridEfDeclinePctPerYear: 3.5 } },
+    };
+    const withEff = { ...currentCombinedDials(decarb), s2: { ...ZERO.s2, efficiencyPct: 100 } };
+    const at2030 = combinedReduction2030(decarb, withEff);
+    const at2040 = combinedReduction2030({ ...decarb, targetYear: 2040 }, withEff);
+    expect(at2040).toBeLessThan(at2030);
+    expect(at2040).toBeGreaterThan(0);
   });
 });
 

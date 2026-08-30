@@ -177,6 +177,7 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
   };
 
   const endUseOptions = endUsesFor(entry.category);
+  const isStationary = entry.category === "stationary";
 
   return (
     /* Panel-shaped, not card-shaped: EntryShell supplies the card. Header and
@@ -232,6 +233,7 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
               <th className={TH}>Units</th>
               <th className={TH}>Remaining life</th>
               <th className={TH}>End-use</th>
+              {isStationary && <th className={TH}>Duty temp (°C)</th>}
               <th className={TH}>Volume ({unit})</th>
               <th className={TH}><span className="sr-only">Actions</span></th>
             </tr>
@@ -282,6 +284,18 @@ export function EquipmentSection({ entry, onChange, previousAllocation, hasLever
                     {endUseOptions.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </td>
+                {/* The field the electrification lever is checked against: a COP
+                    above ~1.2 means heat recovery, and heat pumps stop at about
+                    165 °C. Stationary only — a vehicle has no process duty. */}
+                {isStationary && (
+                  <td className="px-2 py-1">
+                    <input
+                      type="number" min={0} max={2000} aria-label="Duty temperature in degrees Celsius" placeholder="—"
+                      value={eq.dutyTempC ?? ""} className={`${NUMCELL} w-24`}
+                      onChange={(e) => patchRow(eq.id, { dutyTempC: numOrUndef(e.target.value) })}
+                    />
+                  </td>
+                )}
                 <td className="px-2 py-1">
                   <input
                     type="number" min={0} aria-label="Volume"

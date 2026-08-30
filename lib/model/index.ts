@@ -19,6 +19,8 @@ import type { LeverMetrics, OpexPart, PriceBasis, SeriesRow } from "@/lib/financ
 import { yearsToTarget } from "./finance";
 import { applyRefrigerant } from "./levers";
 import { applyAssetActions, electrifyCapexFor } from "./segments";
+import { validateScope1 } from "./feasibility";
+import { gridFactorFn } from "./grid";
 import { buildTrajectory, targetLine } from "./trajectory";
 import type {
   CombustionAsset,
@@ -87,6 +89,9 @@ export interface ComputeResult {
   trajectory: TrajectoryRow[];
   biogenicT: number;
   scope2SpillFullT: number;
+  /** Advisory feasibility + sanity warnings. Mirrors Scope2ComputeResult.warnings
+   *  so one UI surface can render both scopes. */
+  warnings: string[];
   kpis: {
     reduction2030: number;
     reduction2050: number;
@@ -366,6 +371,9 @@ export function compute(
   const trajectory = buildTrajectory({
     baseYear, endYear: END_YEAR, baseTotalT, bauGrowth: BAU_GROWTH, wedges,
     scope2Spill: anyElec && scope2SpillFullT > 0 ? [{ startYear: elecR.startYear, rampYears: elecR.rampYears, fullT: scope2SpillFullT }] : [],
+    // NOT gridLinked: Scope 1's baseline and wedges are fuel. Only the spill —
+    // the grid load electrification adds — follows the grid down.
+    gridFactor: gridFactorFn(baseYear, g.gridEfDeclinePctPerYear),
   });
 
   const at = (y: number) => trajectory.find((r) => r.year === y) ?? trajectory[trajectory.length - 1];
@@ -385,6 +393,7 @@ export function compute(
     trajectory,
     biogenicT,
     scope2SpillFullT,
+    warnings: validateScope1(assets, s),
     kpis: {
       reduction2030: baseTotalT > 0 ? (y2030.bau - y2030.net) / baseTotalT : 0,
       reduction2050: baseTotalT > 0 ? (y2050.bau - y2050.net) / baseTotalT : 0,

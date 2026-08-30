@@ -157,11 +157,11 @@ export const IT_SERVICES: DemoCompany = {
       volume: [88_000, 92_000],
       opex: [5_400_000, 5_700_000],
       equipment: [
-        { id: "lpg-foodcourt", name: "Campus food-court kitchens", unitCount: 1, remainingLife: 7, endUse: "cooking" },
+        { id: "lpg-foodcourt", name: "Campus food-court kitchens", unitCount: 1, remainingLife: 7, endUse: "cooking", dutyTempC: 200 },
       ],
       actions: {
         efficiency: { enabled: false, savingPct: 0, capex: 0, startYear: 2026, targetYear: 2030 },
-        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 75, cop: 2.6, tariffPerKwh: 8.4, assetCapex: 8_500_000, startYear: 2026, targetYear: 2030 },
+        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 75, cop: 1.8, tariffPerKwh: 8.4, assetCapex: 8_500_000, startYear: 2026, targetYear: 2030 },
         fuelSwitch: { enabled: false, altFuel: "bioCng", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 92, retrofitCapex: 0, startYear: 2028, targetYear: 2032 },
       },
     },

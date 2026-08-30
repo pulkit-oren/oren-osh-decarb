@@ -63,8 +63,8 @@ export const MANUFACTURING: DemoCompany = {
       volume: [4_880_000, 5_150_000],
       opex: [278_000_000, 292_000_000],
       equipment: [
-        { id: "png-reheat", name: "Reheat furnace #1 (6 TPH)", capacity: 6, operatingHours: 6000, unitCount: 1, remainingLife: 12, endUse: "furnace" },
-        { id: "png-reheat-2", name: "Reheat furnace #2 (4 TPH)", capacity: 4, operatingHours: 5200, unitCount: 1, remainingLife: 8, endUse: "furnace" },
+        { id: "png-reheat", name: "Reheat furnace #1 (6 TPH)", capacity: 6, operatingHours: 6000, unitCount: 1, remainingLife: 12, endUse: "furnace", dutyTempC: 1230 },
+        { id: "png-reheat-2", name: "Reheat furnace #2 (4 TPH)", capacity: 4, operatingHours: 5200, unitCount: 1, remainingLife: 8, endUse: "furnace", dutyTempC: 1180 },
       ],
       actions: {
         efficiency: { enabled: true, savingPct: 18, capex: 46_000_000, startYear: 2026, targetYear: 2029 },
@@ -83,7 +83,7 @@ export const MANUFACTURING: DemoCompany = {
       volume: [812_000, 840_000],
       opex: [54_600_000, 56_300_000],
       equipment: [
-        { id: "fo-heattreat", name: "Continuous hardening furnace (1100 kW)", capacity: 1100, operatingHours: 6000, unitCount: 1, remainingLife: 10, endUse: "oven" },
+        { id: "fo-heattreat", name: "Continuous hardening furnace (1100 kW)", capacity: 1100, operatingHours: 6000, unitCount: 1, remainingLife: 10, endUse: "oven", dutyTempC: 870 },
       ],
       actions: {
         efficiency: { enabled: true, savingPct: 12, capex: 8_500_000, startYear: 2026, targetYear: 2029 },
@@ -102,7 +102,7 @@ export const MANUFACTURING: DemoCompany = {
       volume: [1_720, 1_650],
       opex: [11_600_000, 11_100_000],
       equipment: [
-        { id: "coal-hag", name: "HAG - blasting and paint drying (4 TPH)", capacity: 4, operatingHours: 5800, unitCount: 1, remainingLife: 7, endUse: "dryer" },
+        { id: "coal-hag", name: "HAG - blasting and paint drying (4 TPH)", capacity: 4, operatingHours: 5800, unitCount: 1, remainingLife: 7, endUse: "dryer", dutyTempC: 140 },
       ],
       actions: {
         efficiency: { enabled: true, savingPct: 10, capex: 2_400_000, startYear: 2026, targetYear: 2028 },
@@ -194,11 +194,11 @@ export const MANUFACTURING: DemoCompany = {
       volume: [44_000, 48_000],
       opex: [2_700_000, 3_000_000],
       equipment: [
-        { id: "lpg-cutting", name: "Cutting torches + canteen", unitCount: 1, remainingLife: 9, endUse: "cooking" },
+        { id: "lpg-cutting", name: "Cutting torches + canteen", unitCount: 1, remainingLife: 9, endUse: "cooking", dutyTempC: 210 },
       ],
       actions: {
         efficiency: { enabled: false, savingPct: 0, capex: 0, startYear: 2026, targetYear: 2030 },
-        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 45, cop: 2.5, tariffPerKwh: 8.9, assetCapex: 3_200_000, startYear: 2027, targetYear: 2031 },
+        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 45, cop: 1.8, tariffPerKwh: 8.9, assetCapex: 3_200_000, startYear: 2027, targetYear: 2031 },
         fuelSwitch: { enabled: false, altFuel: "biogas", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 34, retrofitCapex: 0, startYear: 2028, targetYear: 2032 },
       },
     },

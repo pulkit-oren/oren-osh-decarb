@@ -61,12 +61,12 @@ export const PHARMA: DemoCompany = {
       volume: [2_310_000, 2_455_000],
       opex: [124_700_000, 135_000_000],
       equipment: [
-        { id: "png-boilers", name: "IJT boiler #1 (10 TPH)", capacity: 10, operatingHours: 7200, unitCount: 1, remainingLife: 11, endUse: "boiler" },
-        { id: "png-boiler-2", name: "IJT boiler #2 (8 TPH)", capacity: 8, operatingHours: 5400, unitCount: 1, remainingLife: 13, endUse: "boiler" },
+        { id: "png-boilers", name: "IJT boiler #1 (10 TPH)", capacity: 10, operatingHours: 7200, unitCount: 1, remainingLife: 11, endUse: "boiler", dutyTempC: 184 },
+        { id: "png-boiler-2", name: "IJT boiler #2 (8 TPH)", capacity: 8, operatingHours: 5400, unitCount: 1, remainingLife: 13, endUse: "boiler", dutyTempC: 184 },
       ],
       actions: {
         efficiency: { enabled: true, savingPct: 8, capex: 9_000_000, startYear: 2026, targetYear: 2028 },
-        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 35, cop: 2.8, tariffPerKwh: 8.6, assetCapex: 78_000_000, startYear: 2027, targetYear: 2031 },
+        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 35, cop: 1, tariffPerKwh: 8.6, assetCapex: 78_000_000, startYear: 2027, targetYear: 2031 },
         fuelSwitch: { enabled: true, altFuel: "biogas", blendPct: 30, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 32, retrofitCapex: 14_000_000, startYear: 2027, targetYear: 2030 },
       },
     },
@@ -81,7 +81,7 @@ export const PHARMA: DemoCompany = {
       volume: [648_000, 612_000],
       opex: [43_600_000, 41_500_000],
       equipment: [
-        { id: "fo-tfh", name: "TFH - solvent recovery (800 kW)", capacity: 800, operatingHours: 6600, unitCount: 1, remainingLife: 9, endUse: "tfh" },
+        { id: "fo-tfh", name: "TFH - solvent recovery (800 kW)", capacity: 800, operatingHours: 6600, unitCount: 1, remainingLife: 9, endUse: "tfh", dutyTempC: 260 },
       ],
       actions: {
         efficiency: { enabled: true, savingPct: 6, capex: 3_500_000, startYear: 2026, targetYear: 2028 },
@@ -139,7 +139,7 @@ export const PHARMA: DemoCompany = {
       volume: [1_620, 1_880],
       opex: [13_400_000, 15_600_000],
       equipment: [
-        { id: "briquette-boiler", name: "Briquette boiler (6 TPH)", capacity: 6, operatingHours: 6800, unitCount: 1, remainingLife: 12, endUse: "boiler" },
+        { id: "briquette-boiler", name: "Briquette boiler (6 TPH)", capacity: 6, operatingHours: 6800, unitCount: 1, remainingLife: 12, endUse: "boiler", dutyTempC: 175 },
       ],
       actions: {
         efficiency: { enabled: true, savingPct: 7, capex: 2_800_000, startYear: 2026, targetYear: 2029 },
@@ -194,11 +194,11 @@ export const PHARMA: DemoCompany = {
       volume: [112_000, 118_000],
       opex: [6_900_000, 7_300_000],
       equipment: [
-        { id: "lpg-utility", name: "Canteen kitchen + lab burners", unitCount: 1, remainingLife: 8, endUse: "cooking" },
+        { id: "lpg-utility", name: "Canteen kitchen + lab burners", unitCount: 1, remainingLife: 8, endUse: "cooking", dutyTempC: 220 },
       ],
       actions: {
         efficiency: { enabled: false, savingPct: 0, capex: 0, startYear: 2026, targetYear: 2030 },
-        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 60, cop: 2.5, tariffPerKwh: 8.2, assetCapex: 6_500_000, startYear: 2027, targetYear: 2031 },
+        electrify: { enabled: true, unitsToConvert: 0, capacityPct: 60, cop: 1.8, tariffPerKwh: 8.2, assetCapex: 6_500_000, startYear: 2027, targetYear: 2031 },
         fuelSwitch: { enabled: false, altFuel: "biogas", blendPct: 0, efficiencyPenaltyPct: 2, altFuelPricePerUnit: 32, retrofitCapex: 0, startYear: 2027, targetYear: 2032 },
       },
     },

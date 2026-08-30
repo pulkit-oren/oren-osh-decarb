@@ -42,6 +42,7 @@ function equipmentOf(spec: DemoSourceSpec): Equipment[] {
     unitCount: e.unitCount,
     remainingLife: e.remainingLife,
     endUse: e.endUse,
+    dutyTempC: e.dutyTempC,
   }));
 }
 

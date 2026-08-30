@@ -36,15 +36,28 @@ export function rampFraction(year: number, startYear: number, rampYears: number)
 
 export function buildTrajectory(cfg: TrajectoryConfig): TrajectoryRow[] {
   const rows: TrajectoryRow[] = [];
+  // Absent ⇒ 1 for every year, i.e. exactly the frozen-grid behaviour this
+  // function had before, so a caller that passes nothing is unchanged.
+  const gridFactor = cfg.gridFactor ?? (() => 1);
+
   for (let year = cfg.baseYear; year <= cfg.endYear; year++) {
-    const bau = cfg.baseTotalT * Math.pow(1 + cfg.bauGrowth, year - cfg.baseYear);
+    const g = gridFactor(year);
+    // Scope 2's whole baseline is grid electricity, so a cleaning grid lowers
+    // the BAU line itself: the same kWh emit less. Scope 1's baseline is fuel
+    // and is untouched — only its electrification spill is grid-linked.
+    const bau = cfg.baseTotalT * Math.pow(1 + cfg.bauGrowth, year - cfg.baseYear) * (cfg.gridLinked ? g : 1);
+    // The target is a share of the BASE-year total and does not move with the
+    // grid: a science-based line is a commitment, not a forecast.
     const target = targetLine(cfg.baseTotalT, year);
 
     // Stack wedges in array order, capping cumulative abatement at BAU.
     const wedges: Record<string, number> = {};
     let used = 0;
     for (const w of cfg.wedges) {
-      const want = w.fullAbatementT * rampFraction(year, w.startYear, w.rampYears);
+      // A grid-linked wedge saves kWh, and a kWh is worth fewer tonnes each
+      // year. Scope 1 wedges save fuel and are unaffected.
+      const scale = cfg.gridLinked ? g : 1;
+      const want = w.fullAbatementT * scale * rampFraction(year, w.startYear, w.rampYears);
       const room = Math.max(0, bau - used);
       const got = Math.max(0, Math.min(want, room));
       wedges[w.id] = got;
@@ -52,9 +65,12 @@ export function buildTrajectory(cfg: TrajectoryConfig): TrajectoryRow[] {
     }
     const net = Math.max(0, bau - used);
 
+    // Spill is grid load, so it shrinks with the grid factor in BOTH scopes —
+    // this is the term that stops a frozen grid permanently over-charging
+    // electrification for load it adds in 2040.
     let scope2Spill = 0;
     for (const s of cfg.scope2Spill ?? []) {
-      scope2Spill += s.fullT * rampFraction(year, s.startYear, s.rampYears);
+      scope2Spill += s.fullT * g * rampFraction(year, s.startYear, s.rampYears);
     }
 
     rows.push({ year, bau, target, net, scope2Spill, wedges, onTrack: net <= target + 1e-6 });

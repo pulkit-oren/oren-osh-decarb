@@ -42,6 +42,9 @@ export interface DemoEquipmentSpec {
   unitCount: number;
   remainingLife: number;
   endUse?: EndUseId;
+  /** Process duty temperature, °C — what the electrification feasibility gate
+   *  reads. See lib/model/feasibility.ts. */
+  dutyTempC?: number;
   /** Levers for THIS machine. Overrides the source-level default when both
    *  are present. Lever settings are keyed by equipment id, not source id
    *  (resolveEquipment emits one row per equipment, keyed by the machine),

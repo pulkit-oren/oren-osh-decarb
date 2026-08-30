@@ -26,6 +26,13 @@ export interface Inventories {
   /** Environment-pillar annual totals (Data input → Water / Waste). */
   water?: WaterByYear;
   waste?: WasteByYear;
+  /** Year → output (revenue in ₹ crore, or production units) — the DENOMINATOR
+   *  of an intensity goal. Stored on GoalsState since the feature was built;
+   *  until it was threaded through to here, an "emissions intensity" goal was
+   *  scored on absolute tonnes and the word intensity was decoration. A
+   *  growing company can hit an absolute target and miss the intensity one, or
+   *  the reverse, so the two are not interchangeable. */
+  output?: Record<number, number>;
 }
 
 const KJ_PER_KWH = 3600;
@@ -95,8 +102,36 @@ export function solarKwpForYear(inv: Inventories, year: number): number {
   return facilitiesFor(inv, year).reduce((s, f) => s + (f.existingSolarKwp ?? 0), 0);
 }
 
-/** The goal's metric value in a year. */
+/** Goals whose metric is per unit of output rather than absolute. The template
+ *  is the source of truth, not the metric: "emissions intensity" and "absolute
+ *  reduction" both carry metric `emissions_t`, and only the template tells them
+ *  apart. */
+export function isIntensityGoal(goal: Goal): boolean {
+  return goal.templateId === "intensity" || goal.templateId === "water_intensity";
+}
+
+/** The output denominator for a year, or undefined when none is entered.
+ *  Undefined is meaningful: an intensity goal with no output series has no
+ *  value for that year at all, and reporting the absolute quantity instead
+ *  would silently answer a different question. */
+export function outputForYear(inv: Inventories, year: number): number | undefined {
+  const v = inv.output?.[year];
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : undefined;
+}
+
+/** The goal's metric value in a year. For an intensity goal this is per unit
+ *  of output; NaN when the denominator is missing, so callers that forget to
+ *  check `metricHasData` produce an obviously broken number rather than a
+ *  plausible wrong one. */
 export function metricForYear(goal: Goal, inv: Inventories, year: number): number {
+  const raw = rawMetricForYear(goal, inv, year);
+  if (!isIntensityGoal(goal)) return raw;
+  const denom = outputForYear(inv, year);
+  return denom === undefined ? NaN : raw / denom;
+}
+
+/** The absolute quantity, before any intensity denominator. */
+export function rawMetricForYear(goal: Goal, inv: Inventories, year: number): number {
   switch (goal.metric) {
     case "emissions_t": return emissionsForYear(goal.scope, inv, year);
     case "energy_kwh": return energyForYear(goal.scope, inv, year);
@@ -114,6 +149,9 @@ const isWaterMetric = (m: Goal["metric"]) => m.startsWith("water_");
 const isWasteMetric = (m: Goal["metric"]) => m.startsWith("waste_");
 
 function metricHasData(goal: Goal, inv: Inventories, year: number): boolean {
+  // An intensity goal needs BOTH halves of the ratio. Without the denominator
+  // the year is not "zero intensity", it is unknown.
+  if (isIntensityGoal(goal) && outputForYear(inv, year) === undefined) return false;
   if (isWaterMetric(goal.metric)) {
     const w = inv.water?.[year];
     return !!w && (w.withdrawalKl > 0 || w.consumptionKl > 0 || w.dischargeKl > 0);

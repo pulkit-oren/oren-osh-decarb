@@ -28,12 +28,14 @@ import { DetailCard, ToggleSwitch, Stepper, SliderField, NumField, Segmented, Se
 import { groupByBu } from "@/lib/group-by-bu";
 import { suggestAllSettings } from "@/lib/model/suggest-all";
 import { buildPathways } from "@/lib/model/pathways";
+import { GRID_EF_DECLINE_PCT_DEFAULT, gridEfForYear } from "@/lib/model/grid";
 import type { LeverSettings } from "@/lib/model/types";
 import { boardroomVariants } from "@/lib/boardroom-scenarios";
 import { ScenarioCalcPanel } from "./ScenarioCalcPanel";
 import { MiniTrajectory } from "@/components/charts/MiniTrajectory";
 import { LeverImpactList } from "@/components/ui/LeverImpactList";
 import { ScenarioList } from "@/components/ui/ScenarioList";
+import { WarningStrip } from "@/components/ui/WarningStrip";
 import { diffFlat, diffLeverMaps, type DiffRow } from "@/lib/scenario-diff";
 
 type Seg = "mobile" | "stationary" | "refrigerant";
@@ -227,9 +229,13 @@ function SourceBox({ seg, source, onOpen }: { seg: Seg; source: CombustionAsset 
 export function BuilderTab({ initialSeg }: { initialSeg?: Seg } = {}) {
   const [view, setView] = useState<"home" | Seg | { seg: Seg; sourceId: string }>(initialSeg ?? "home");
   const [name, setName] = useState("");
+  // Rendered above every builder screen, not just the home one: a plan is
+  // infeasible wherever you are looking at it from.
+  const { result } = useScenario();
 
   return (
     <div className="flex flex-col gap-4">
+      <WarningStrip warnings={result.warnings} label="Check this plan" />
       {view === "home" ? (
         <ModellerHome onOpen={setView} name={name} setName={setName} />
       ) : typeof view === "string" ? (
@@ -1389,7 +1395,15 @@ function AssumptionsCard({ seg }: { seg: Seg }) {
         ) : (
           <>
             <NumField label="Renewable sourcing" hint="Share of new electricity that is clean (solar/PPA) — cuts the Scope 2 electrification adds." value={a.renewableSourcingPct} step={5} suffix="%" onChange={(v) => updateAssumptions({ renewableSourcingPct: v })} />
-            <NumField label="Grid emission factor" hint="How dirty the local grid is per unit of electricity." value={a.gridEf} step={0.01} suffix="kgCO₂e/kWh" onChange={(v) => updateAssumptions({ gridEf: v })} />
+            <NumField label="Grid emission factor" hint="How dirty the local grid is per unit of electricity, in the base year." value={a.gridEf} step={0.01} suffix="kgCO₂e/kWh" onChange={(v) => updateAssumptions({ gridEf: v })} />
+            <NumField
+              label="Grid decarbonisation"
+              hint="How fast the grid cleans, per year. Set 0 to hold it still — that is what the model assumed before this field existed, and it permanently over-charges electrification for the load it adds in later years."
+              value={a.gridEfDeclinePctPerYear ?? GRID_EF_DECLINE_PCT_DEFAULT}
+              step={0.5} suffix="%/yr"
+              footer={`${a.gridEf} → ${gridEfForYear(a.gridEf, 2030, 2025, a.gridEfDeclinePctPerYear).toFixed(3)} by 2030, ${gridEfForYear(a.gridEf, 2040, 2025, a.gridEfDeclinePctPerYear).toFixed(3)} by 2040`}
+              onChange={(v) => updateAssumptions({ gridEfDeclinePctPerYear: v })}
+            />
             <NumField
               label="REC price"
               hint="Price of a renewable certificate, per kWh — the unit they trade in. Scope 2 procurement and the certificates bought for electrification's added grid load both use this one number."
