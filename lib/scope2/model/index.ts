@@ -25,6 +25,7 @@ import { applyProcurement, type FacilityDraw, type ProcurementResult } from "./p
 import type { Facility, Scope2Levers } from "./types";
 import { validateScope2 } from "./validate";
 import { cfeScore, LOAD_SHAPES, type CfeResult } from "./hourly";
+import { FAMILY_IDX } from "@/lib/model/palette";
 
 export const END_YEAR = 2050;
 export const BAU_GROWTH = 0.01;
@@ -236,15 +237,15 @@ export function computeScope2(
   };
 
   const leverRows = [
-    mk("efficiency", "Energy efficiency", 4, effAbateT, effCapex, -effSaving, effR, [
+    mk("efficiency", "Energy efficiency", FAMILY_IDX.efficiency, effAbateT, effCapex, -effSaving, effR, [
       { label: "Avoided grid electricity", amount: -effSaving, kind: "elec" },
     ]),
-    mk("generation", "On-site generation", 0, genAbateT, genCapex, -(genOnSiteSaving + genExportSaving + genDemandSaving), genR, [
+    mk("generation", "On-site generation", FAMILY_IDX.generation, genAbateT, genCapex, -(genOnSiteSaving + genExportSaving + genDemandSaving), genR, [
       { label: "Avoided grid electricity", amount: -genOnSiteSaving, kind: "elec" },
       { label: "Export credits", amount: -genExportSaving, kind: "elec" },
       { label: "Demand-charge saving (peak shaving)", amount: -genDemandSaving, kind: "elec" },
     ]),
-    mk("procurement", "Renewable procurement", 3, procAbateT, 0, proc.annualCost, procR, [
+    mk("procurement", "Renewable procurement", FAMILY_IDX.procurement, procAbateT, 0, proc.annualCost, procR, [
       { label: "PPA strike delta", amount: proc.costParts.ppa, kind: "elec" },
       { label: "Green tariff premium", amount: proc.costParts.greenTariff, kind: "elec" },
       // A REC price tracks the renewable electricity market it settles against.
@@ -262,7 +263,7 @@ export function computeScope2(
   const wedgesMarket = leverRows.filter((l) => l.abatementT > 0).map(toWedge);
   // Already-contracted renewables sit at full effect from the base year (market-based only).
   if (existingAbateT > 0) {
-    wedgesMarket.unshift({ id: "existing", label: "Already contracted", colorIdx: 6, scope: 2, startYear: baseYear, rampYears: 1, fullAbatementT: existingAbateT });
+    wedgesMarket.unshift({ id: "existing", label: "Already contracted", colorIdx: FAMILY_IDX.contracted, scope: 2, startYear: baseYear, rampYears: 1, fullAbatementT: existingAbateT });
   }
 
   /* ---- 24/7 CFE across the portfolio ----

@@ -37,6 +37,12 @@ import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/selec
 import { CURRENCY } from "@/lib/defaults";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { SectionTabs } from "@/components/ui/SectionTabs";
+import { GapStack, type GapSegment } from "@/components/charts/GapStack";
+import { MaccChart, type MaccLever } from "@/components/charts/MaccChart";
+import { CapitalByYear, type CapitalSeriesLever } from "@/components/charts/CapitalByYear";
+import { FAMILY_IDX } from "@/lib/model/palette";
+import { bioBlendCap, electrifyCap, solarCapNote, type DialCap } from "@/lib/model/dial-caps";
+import { M2_PER_KW } from "@/lib/scope2/model/constants";
 import { cn, fmt, fmtMoney, fmtPerTonne, fmtPayback } from "@/lib/utils";
 
 /* How each basis builds its mix — shown when the card's (i) is clicked. */
@@ -144,7 +150,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const [appliedObj, setAppliedObj] = useState<MixObjective | null>(null);
   const [logicOpen, setLogicOpen] = useState<MixObjective | null>(null);
   const [capexBudget, setCapexBudget] = useState(0); // 0 = no cap
-  const [tab, setTab] = useState<"mixes" | "levers">("levers");
+  const [tab, setTab] = useState<"mixes" | "levers" | "curve">("levers");
   const invalidate = () => { setOptions(null); setAppliedObj(null); setLogicOpen(null); };
   const computeOptions = () => {
     const inp: CombinedInputs = {
@@ -168,9 +174,21 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const soloFacility = facilities.length === 1 ? facilities[0].id : undefined;
   const FACILITIES_FOCUS: LeverFocus = { scope: "s2", mode: "facilities", facilityId: soloFacility };
 
+  /* Computed once per render from the same assets the engine sees, so a
+     ceiling on screen is the ceiling the engine will enforce. */
+  const bioCap = bioBlendCap(assets);
+  const elecCap = electrifyCap(assets);
+  const roofKwp = facilities.reduce((sum, f) => sum + f.roofSpaceM2 / M2_PER_KW, 0);
+  const existingKwp = facilities.reduce((sum, f) => sum + (f.existingSolarKwp ?? 0), 0);
+  const solarCap = solarCapNote(roofKwp, existingKwp);
+
   const LEVER_ROWS: {
     key: string; scope: "s1" | "s2"; label: string; icon: React.ElementType; hint: string;
     value: number; onChange: (v: number) => void; tonnes: number; costNote: string; focus: LeverFocus; place: string;
+    /** What the engine will actually honour — drawn on the track. */
+    cap?: DialCap;
+    /** Levelised cost of this family, for ranking one dial against another. */
+    perTonne?: number;
   }[] = [
     {
       key: "efficiency", scope: "s2", label: "Efficiency", icon: Lightbulb,
@@ -178,6 +196,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       value: d2.efficiencyPct, onChange: (v) => setDial2({ efficiencyPct: v }),
       tonnes: w2["efficiency"] ?? 0, costNote: fmtMoney(lever2("efficiency")?.capex ?? 0),
       focus: FACILITIES_FOCUS, place: "Scope 2 → facilities",
+      perTonne: lever2("efficiency")?.costPerTonne,
     },
     {
       key: "solar", scope: "s2", label: "Solar onsite", icon: Sun,
@@ -185,12 +204,14 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       value: d2.solarPct, onChange: (v) => setDial2({ solarPct: v }),
       tonnes: w2["generation"] ?? 0, costNote: fmtMoney(lever2("generation")?.capex ?? 0),
       focus: FACILITIES_FOCUS, place: "Scope 2 → facilities",
+      cap: solarCap, perTonne: lever2("generation")?.costPerTonne,
     },
     {
       key: "procurement", scope: "s2", label: "Procurement (market)", icon: Landmark,
       hint: "PPAs / green tariff / RECs on the remaining grid draw — moves the market-based number only.",
       value: d2.procurementPct, onChange: (v) => setDial2({ procurementPct: v }),
       tonnes: w2["procurement"] ?? 0, costNote: `${fmtMoney(lever2("procurement")?.annualOpexDelta ?? 0)}/yr`,
+      perTonne: lever2("procurement")?.costPerTonne,
       focus: { scope: "s2", mode: "procurement" }, place: "Scope 2 → Procurement",
     },
     {
@@ -198,6 +219,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       hint: "Drop-in bio blends on sources still burning fuel, capped per asset.",
       value: d1.bioBlendPct, onChange: (v) => setDial1({ bioBlendPct: v }),
       tonnes: w1["fuelSwitch"] ?? 0, costNote: fmtMoney(lever1("fuelSwitch")?.capex ?? 0),
+      cap: bioCap, perTonne: lever1("fuelSwitch")?.costPerTonne,
       focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
     {
@@ -205,6 +227,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       hint: "Gas transition share across cooling systems (leak fixes are set per system).",
       value: d1.refrigPct, onChange: (v) => setDial1({ refrigPct: v }),
       tonnes: w1["refrigerant"] ?? 0, costNote: fmtMoney(lever1("refrigerant")?.capex ?? 0),
+      perTonne: lever1("refrigerant")?.costPerTonne,
       focus: { scope: "s1", seg: "refrigerant" }, place: "Scope 1 → refrigerant",
     },
     {
@@ -212,6 +235,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       hint: "Move feasible fuel use to electricity — the biggest lever, with Scope 2 spill.",
       value: d1.electrifyPct, onChange: (v) => setDial1({ electrifyPct: v }),
       tonnes: w1["electrification"] ?? 0, costNote: fmtMoney(lever1("electrification")?.capex ?? 0),
+      cap: elecCap, perTonne: lever1("electrification")?.costPerTonne,
       focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
     {
@@ -222,6 +246,61 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
   ];
+
+  /* The stack reads the SAME tonnes the dial rows print, so the picture and the
+     numbers under it can never disagree. Colour comes from the lever family, so
+     a band here is the same colour as that family everywhere else. */
+  const FAMILY_OF: Record<string, number> = {
+    efficiency: FAMILY_IDX.efficiency,
+    solar: FAMILY_IDX.generation,
+    procurement: FAMILY_IDX.procurement,
+    bio: FAMILY_IDX.fuelSwitch,
+    refrig: FAMILY_IDX.refrigerant,
+    electrify: FAMILY_IDX.electrify,
+  };
+  const gapSegments: GapSegment[] = LEVER_ROWS
+    .filter((r) => FAMILY_OF[r.key] !== undefined)
+    .map((r) => ({ key: r.key, label: r.label, tonnes: r.tonnes, colorIdx: FAMILY_OF[r.key] }));
+
+  /* Both scopes on ONE curve. They compete for the same capital, so ranking
+     them separately is the one comparison a board never wants.
+     Ids are namespaced by scope because BOTH engines call their first lever
+     "efficiency" — unprefixed, the two would collide as one bar. */
+  const curveLevers: MaccLever[] = [
+    ...s1.result.levers.map((l) => ({ ...l, id: `s1:${l.id}` })),
+    ...s2.result.levers.map((l) => ({ ...l, id: `s2:${l.id}` })),
+  ].map((l) => ({
+    id: l.id, label: l.label, colorIdx: l.colorIdx,
+    enabled: l.enabled, abatementT: l.abatementT, costPerTonne: l.costPerTonne,
+  }));
+
+  /* Where clicking a bar lands. Most map to a dial on this screen; Scope 1
+     efficiency has no dial here (it is set per source) so it opens the fuels
+     segment, which is where it lives. */
+  const rowFocus = (key: string) => LEVER_ROWS.find((r) => r.key === key)?.focus;
+  const CURVE_FOCUS: Record<string, LeverFocus | undefined> = {
+    "s2:efficiency": rowFocus("efficiency"),
+    "s2:generation": rowFocus("solar"),
+    "s2:procurement": rowFocus("procurement"),
+    "s1:fuelSwitch": rowFocus("bio"),
+    "s1:refrigerant": rowFocus("refrig"),
+    "s1:electrification": rowFocus("electrify"),
+    "s1:efficiency": { scope: "s1", seg: fuelSeg },
+  };
+  const openLeverById = (id: string) => {
+    const focus = CURVE_FOCUS[id];
+    if (focus) onOpenLever?.(focus);
+  };
+
+  const capitalLevers: CapitalSeriesLever[] = [
+    ...s1.result.levers.map((l) => ({ ...l, id: `s1:${l.id}` })),
+    ...s2.result.levers.map((l) => ({ ...l, id: `s2:${l.id}` })),
+  ]
+    .filter((l) => l.enabled)
+    .map((l) => ({
+      id: l.id, label: l.label, colorIdx: l.colorIdx,
+      series: l.series.map((r) => ({ year: r.year, capex: r.capex, net: r.net })),
+    }));
 
   const activeLevers = LEVER_ROWS.filter((r) => r.value > 0).length;
   const pctOfRequired = Math.round(allocPct * 100);
@@ -386,10 +465,33 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
     </div>
   );
 
+  /* ── Panel: the cost curve, where the levers are ─────────────────────── */
+  const curvePanel = (
+    <div className="h-full min-h-0 overflow-y-auto p-6">
+      <p className="text-xs text-ink-soft max-w-xl mb-4">
+        Every active lever in both scopes, cheapest first. Width is the tonnes it abates; height is
+        what each of those tonnes costs. Below the line the lever earns money. Click a bar to open it.
+      </p>
+      <MaccChart levers={curveLevers} onSelect={openLeverById} />
+
+      <div className="mt-7 pt-5 border-t border-line/60">
+        <p className="text-[11px] uppercase tracking-wide text-ink-faint font-bold mb-1">When the money lands</p>
+        <p className="text-xs text-ink-soft max-w-xl mb-3">
+          A board approves a number in a year, not a total. Bars are capital out; the line is the
+          cumulative cash position, so its lowest point is the funding that has to exist.
+        </p>
+        <CapitalByYear levers={capitalLevers} />
+      </div>
+    </div>
+  );
+
   /* ── Panel: fine-tune the lever families ─────────────────────────────── */
   const leversPanel = (
     <div className="h-full min-h-0 flex flex-col">
-      <p className="shrink-0 px-6 pt-5 pb-3 text-xs text-ink-soft">
+      <div className="shrink-0 px-6 pt-5 pb-3 border-b border-line/60">
+        <GapStack segments={gapSegments} requiredT={requiredT} targetPct={target} targetYear={year} />
+      </div>
+      <p className="shrink-0 px-6 pt-3 pb-3 text-xs text-ink-soft">
         Drag a dial to move every matching source, or click a lever to jump straight to where it&rsquo;s planned.
       </p>
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-5">
@@ -397,7 +499,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
           {LEVER_ROWS.map((r) => {
             const Icon = r.icon;
             return (
-              <div key={r.key} className="py-3 grid grid-cols-1 md:grid-cols-[minmax(230px,1.2fr)_2fr_auto] gap-x-6 gap-y-2 items-center">
+              <div key={r.key} className="py-3 grid grid-cols-1 md:grid-cols-[minmax(210px,1.1fr)_2fr_auto] gap-x-6 gap-y-2 items-center">
                 <button
                   onClick={() => onOpenLever?.(r.focus)}
                   className="group flex items-center gap-2.5 text-left"
@@ -413,19 +515,51 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
                     <span className="block text-[11px] text-ink-soft">{r.hint}</span>
                   </span>
                 </button>
-                <span className="flex items-center gap-3">
-                  <input
-                    type="range" min={0} max={100} step={1} value={r.value}
-                    aria-label={`${r.label} dial`}
-                    onChange={(e) => r.onChange(Number(e.target.value))}
-                    style={{ accentColor: "var(--color-brand-500)" }}
-                    className="w-full cursor-pointer"
-                  />
-                  <span className="text-sm font-bold text-ink tabular-nums w-12 text-right shrink-0">{r.value}<span className="text-xs font-medium text-ink-faint">%</span></span>
+                <span className="flex flex-col gap-1">
+                  <span className="flex items-center gap-3">
+                    <span className="relative flex-1">
+                      <input
+                        type="range" min={0} max={100} step={1} value={r.value}
+                        aria-label={`${r.label} dial`}
+                        aria-describedby={r.cap?.reason ? `cap-${r.key}` : undefined}
+                        onChange={(e) => r.onChange(Number(e.target.value))}
+                        style={{ accentColor: "var(--color-brand-500)" }}
+                        className="w-full cursor-pointer"
+                      />
+                      {/* The ceiling, drawn on the track it applies to. Without
+                          it the dial travels past what the engine honours and
+                          the tonnes simply stop moving, unexplained. */}
+                      {r.cap && r.cap.constrained && r.cap.maxPct < 100 && (
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-amber-500 rounded"
+                          style={{ left: `calc(${r.cap.maxPct}% - 1px)` }}
+                          title={`Engine ceiling — ${r.cap.maxPct}%`}
+                        />
+                      )}
+                    </span>
+                    <span className="text-sm font-bold text-ink tabular-nums w-12 text-right shrink-0">{r.value}<span className="text-xs font-medium text-ink-faint">%</span></span>
+                  </span>
+                  {r.cap?.reason && (r.cap.constrained || r.value > 0) && (
+                    <span
+                      id={`cap-${r.key}`}
+                      className={cn(
+                        "text-[10.5px] leading-snug",
+                        r.cap.maxPct < 100 && r.value > r.cap.maxPct ? "text-amber-700 font-medium" : "text-ink-faint",
+                      )}
+                    >
+                      {r.cap.maxPct < 100 && r.value > r.cap.maxPct
+                        ? `Held at ${r.cap.maxPct}% — ${r.cap.reason}`
+                        : r.cap.reason}
+                    </span>
+                  )}
                 </span>
                 <div className="flex items-center gap-5 text-right justify-end">
                   <div className="w-24"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">By {year}</div><div className="text-sm font-extrabold tabular-nums text-brand-600">{r.tonnes > 0.05 ? `−${fmt(r.tonnes)} t` : "—"}</div></div>
-                  <div className="w-24"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Cost</div><div className="text-sm font-extrabold tabular-nums text-ink">{r.costNote}</div></div>
+                  {/* Ranking six levers means ranking them by value, and this is
+                      the only field that does it. */}
+                  <div className="w-24"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Per tonne</div><div className={cn("text-sm font-extrabold tabular-nums", (r.perTonne ?? 0) < 0 ? "text-brand-600" : "text-ink")}>{r.perTonne != null && Number.isFinite(r.perTonne) && r.tonnes > 0.05 ? `${r.perTonne < 0 ? "−" : ""}${CURRENCY}${fmt(Math.abs(r.perTonne))}` : "—"}</div></div>
+                  <div className="w-24"><div className="text-[9px] uppercase tracking-wide text-ink-faint font-bold">Capital</div><div className="text-sm font-extrabold tabular-nums text-ink">{r.costNote}</div></div>
                 </div>
               </div>
             );
@@ -455,10 +589,11 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
         <SectionTabs
           ariaLabel="Balance sections"
           active={tab}
-          onSelect={(k) => setTab(k as "mixes" | "levers")}
+          onSelect={(k) => setTab(k as "mixes" | "levers" | "curve")}
           tabs={[
             { key: "mixes", label: "Compare mixes", badge: options ? String(options.length) : undefined },
             { key: "levers", label: "Fine-tune levers", badge: String(activeLevers) },
+            { key: "curve", label: "Cost & capital" },
           ]}
         />
         <div
@@ -466,7 +601,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
           key={tab}
           className="panel-in flex-1 min-h-0 rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden"
         >
-          {tab === "mixes" ? mixesPanel : leversPanel}
+          {tab === "mixes" ? mixesPanel : tab === "curve" ? curvePanel : leversPanel}
         </div>
       </div>
 

@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { FAMILY_COLORS } from "@/lib/model/factors";
+import { familyColor } from "@/lib/model/palette";
 import type { ComputeResult } from "@/lib/model";
 import { fmt, fmtK } from "@/lib/utils";
 import { useMounted } from "@/lib/useMounted";
@@ -74,8 +74,8 @@ export function WedgeChart({ result }: { result: ComputeResult }) {
               </linearGradient>
               {wedges.map((w) => (
                 <linearGradient key={w.id} id={`wedge-${w.id}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={FAMILY_COLORS[w.colorIdx]} stopOpacity={0.92} />
-                  <stop offset="100%" stopColor={FAMILY_COLORS[w.colorIdx]} stopOpacity={0.55} />
+                  <stop offset="0%" stopColor={familyColor(w.colorIdx)} stopOpacity={0.92} />
+                  <stop offset="100%" stopColor={familyColor(w.colorIdx)} stopOpacity={0.55} />
                 </linearGradient>
               ))}
             </defs>
@@ -147,7 +147,7 @@ function Legend({
       <LegendItem line dashed color={TARGET_COLOR} label="SBTi 1.5°C target" />
       <LegendItem line color={NET_ON} label="Net emissions" />
       {wedges.map((w) => (
-        <LegendItem key={w.id} color={FAMILY_COLORS[w.colorIdx]} label={w.label} />
+        <LegendItem key={w.id} color={familyColor(w.colorIdx)} label={w.label} />
       ))}
       {hasSpill && <LegendItem line dashed color={SPILL_COLOR} label="Scope 2 spillover" />}
     </div>
@@ -193,7 +193,7 @@ function WedgeTooltip({ active, label, payload, wedges }: TooltipProps) {
       {wedges.map((w) => {
         const v = get(w.id);
         if (!v) return null;
-        return <Row key={w.id} label={w.label} value={v} color={FAMILY_COLORS[w.colorIdx]} />;
+        return <Row key={w.id} label={w.label} value={v} color={familyColor(w.colorIdx)} />;
       })}
     </div>
   );

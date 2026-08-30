@@ -1,4 +1,4 @@
-import { FAMILY_COLORS } from "@/lib/model/factors";
+import { familyColor } from "@/lib/model/palette";
 
 export interface MaccBar {
   id: string; label: string; color: string;
@@ -25,7 +25,7 @@ export function maccLayout(levers: LeverLike[]): { bars: MaccBar[]; totalT: numb
   let x = 0;
   const bars: MaccBar[] = sorted.map((l) => {
     const bar: MaccBar = {
-      id: l.id, label: l.label, color: FAMILY_COLORS[l.colorIdx] ?? "#1F9E5A",
+      id: l.id, label: l.label, color: familyColor(l.colorIdx),
       x, width: l.abatementT, costPerTonne: l.costPerTonne, abatementT: l.abatementT,
     };
     x += l.abatementT;

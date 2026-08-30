@@ -523,13 +523,8 @@ export function defraEF(fuelId: FuelId, year: number = LATEST_DEFRA_YEAR): EFLoo
 }
 
 /** Family colour sequence (warm = hardest to abate → cool = easy win). */
-export const FAMILY_COLORS = [
-  "#F2924A", // 0 amber
-  "#D9774B", // 1 terracotta
-  "#7FA05A", // 2 olive
-  "#3FB76E", // 3 green
-  "#1F9E5A", // 4 emerald
-  "#0F7873", // 5 teal
-  "#2E5E8C", // 6 steel
-  "#5C6BC0", // 7 indigo
-];
+/* Moved to ./palette.ts, which is indexed BY LEVER FAMILY rather than by an
+   arbitrary sequence, and whose six hues are validated for colour-vision
+   separation and contrast in both themes. Re-exported here because every
+   existing consumer imports it from this module. */
+export { FAMILY_COLORS, FAMILY_HUE, FAMILY_IDX, familyColor } from "./palette";

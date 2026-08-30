@@ -18,8 +18,25 @@ function UnpricedNote({ labels }: { labels: string[] }) {
   );
 }
 
-export function MaccChart({ levers }: { levers: ComputeResult["levers"] }) {
-  const active = levers.filter((l) => l.enabled && l.abatementT > 0);
+/** The only fields the curve needs. Widened from ComputeResult["levers"] so the
+ *  same chart can draw a COMBINED curve — Scope 1 and Scope 2 levers ranked
+ *  against each other, which is how they compete for the same capital. */
+export interface MaccLever {
+  id: string;
+  label: string;
+  colorIdx: number;
+  enabled: boolean;
+  abatementT: number;
+  costPerTonne: number;
+}
+
+export function MaccChart({ levers, onSelect }: {
+  levers: MaccLever[] | ComputeResult["levers"];
+  /** Click a bar to open the lever that produced it. Omitted ⇒ the chart is
+   *  read-only, which is what the reporting tabs want. */
+  onSelect?: (leverId: string) => void;
+}) {
+  const active = (levers as MaccLever[]).filter((l) => l.enabled && l.abatementT > 0);
   const { bars, totalT, maxCost, minCost, unpriced } = maccLayout(active);
   if (bars.length === 0) {
     return (
@@ -47,10 +64,39 @@ export function MaccChart({ levers }: { levers: ComputeResult["levers"] }) {
           const x = xScale(b.x), w = Math.max(1, xScale(b.x + b.width) - x - 1);
           const yTop = b.costPerTonne >= 0 ? yOf(b.costPerTonne) : zeroY;
           const h = Math.max(1, Math.abs(yOf(b.costPerTonne) - zeroY));
+          const clickable = !!onSelect;
           return (
-            <rect key={b.id} x={x} y={yTop} width={w} height={h} fill={b.color} opacity={b.costPerTonne < 0 ? 0.85 : 0.7} rx={2}>
-              <title>{`${b.label}: ${CURRENCY}${fmtPerTonne(b.costPerTonne)}/t · ${fmt(b.abatementT)} t`}</title>
+            <rect
+              key={b.id} x={x} y={yTop} width={w} height={h} fill={b.color}
+              opacity={b.costPerTonne < 0 ? 0.85 : 0.7} rx={2}
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              style={clickable ? { cursor: "pointer" } : undefined}
+              aria-label={clickable ? `Open ${b.label}` : undefined}
+              onClick={clickable ? () => onSelect(b.id) : undefined}
+              onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(b.id); } } : undefined}
+            >
+              <title>{`${b.label}: ${CURRENCY}${fmtPerTonne(b.costPerTonne)}/t · ${fmt(b.abatementT)} t${clickable ? " — click to open" : ""}`}</title>
             </rect>
+          );
+        })}
+        {/* Direct labels on the bars wide enough to carry one. Everything in
+            this chart used to be hover-only, and a board pack is a screenshot. */}
+        {bars.map((b) => {
+          const x = xScale(b.x), w = xScale(b.x + b.width) - x;
+          if (w < 54) return null;
+          const yTop = b.costPerTonne >= 0 ? yOf(b.costPerTonne) : zeroY;
+          const h = Math.abs(yOf(b.costPerTonne) - zeroY);
+          const cy = yTop + h / 2;
+          return (
+            <text
+              key={`lbl-${b.id}`} x={x + w / 2} y={h > 22 ? cy + 3 : yTop - 4}
+              fontSize="9" textAnchor="middle" pointerEvents="none"
+              fill={h > 22 ? "#FFFFFF" : "var(--color-ink-soft)"}
+              fontWeight="600"
+            >
+              {b.label}
+            </text>
           );
         })}
         {/* axes captions */}

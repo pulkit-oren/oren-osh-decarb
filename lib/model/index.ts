@@ -21,6 +21,7 @@ import { applyRefrigerant } from "./levers";
 import { applyAssetActions, electrifyCapexFor } from "./segments";
 import { validateScope1 } from "./feasibility";
 import { gridFactorFn } from "./grid";
+import { FAMILY_IDX } from "./palette";
 import { effectiveLeakImprovementPct, validateCharge, validateTargetableSystems } from "./refrigerant-charge";
 import { buildTrajectory, targetLine } from "./trajectory";
 import type {
@@ -360,13 +361,13 @@ export function compute(
   };
 
   const leverRows = [
-    mk("efficiency", "Energy efficiency", 7, effAbate, effCapex, -effOpexSaving, effR, effParts),
+    mk("efficiency", "Energy efficiency", FAMILY_IDX.efficiency, effAbate, effCapex, -effOpexSaving, effR, effParts),
     // The only lever whose money and physics denominators differ: it buys RECs
     // for the grid load it adds, so those tonnes are not abatement it can claim.
-    mk("electrification", "Electrification", 5, elecAbate, elecCapexTotal, elecOpexDelta, elecR, elecParts,
+    mk("electrification", "Electrification", FAMILY_IDX.electrify, elecAbate, elecCapexTotal, elecOpexDelta, elecR, elecParts,
       elecAbate - scope2SpillFullT),
-    mk("fuelSwitch", "Fuel switch", 2, fuelAbate, fuelCapex, fuelOpexDelta, fuelR, fuelParts),
-    mk("refrigerant", "Refrigerant", 1, refAbate, refCapex, refOpexDelta, refR, refParts),
+    mk("fuelSwitch", "Fuel switch", FAMILY_IDX.fuelSwitch, fuelAbate, fuelCapex, fuelOpexDelta, fuelR, fuelParts),
+    mk("refrigerant", "Refrigerant", FAMILY_IDX.refrigerant, refAbate, refCapex, refOpexDelta, refR, refParts),
   ];
 
   const wedges: Wedge[] = leverRows
@@ -374,14 +375,17 @@ export function compute(
     .map((l) => ({ id: l.id, label: l.label, colorIdx: l.colorIdx, scope: 1, startYear: l.startYear, rampYears: l.rampYears, fullAbatementT: l.abatementT }));
 
   const segments: SegmentImpact[] = [
-    { key: "eff-mobile", label: "Efficiency · Mobile", abatementT: effMobileT, colorIdx: 7 },
-    { key: "eff-stationary", label: "Efficiency · Stationary", abatementT: effStationaryT, colorIdx: 4 },
-    { key: "elec-mobile", label: "Electrification · Mobile", abatementT: elecMobile, colorIdx: 5 },
-    { key: "elec-stationary", label: "Electrification · Stationary", abatementT: elecStationary, colorIdx: 6 },
-    { key: "fuel-mobile", label: "Fuel switch · Mobile", abatementT: fuelMobile, colorIdx: 2 },
-    { key: "fuel-stationary", label: "Fuel switch · Stationary", abatementT: fuelStationary, colorIdx: 3 },
-    { key: "ref-leak", label: "Refrigerant · Leak fix", abatementT: refAbateLeak, colorIdx: 1 },
-    { key: "ref-gas", label: "Refrigerant · Gas switch", abatementT: refAbateGas, colorIdx: 0 },
+    /* Family picks the hue; the mobile/stationary (or leak/gas) split picks the
+       deeper step of that same hue. Eight wedges, six hues, and a reader can
+       still see at a glance that two of them are the same family. */
+    { key: "eff-mobile", label: "Efficiency · Mobile", abatementT: effMobileT, colorIdx: FAMILY_IDX.efficiencyDeep },
+    { key: "eff-stationary", label: "Efficiency · Stationary", abatementT: effStationaryT, colorIdx: FAMILY_IDX.efficiency },
+    { key: "elec-mobile", label: "Electrification · Mobile", abatementT: elecMobile, colorIdx: FAMILY_IDX.electrifyDeep },
+    { key: "elec-stationary", label: "Electrification · Stationary", abatementT: elecStationary, colorIdx: FAMILY_IDX.electrify },
+    { key: "fuel-mobile", label: "Fuel switch · Mobile", abatementT: fuelMobile, colorIdx: FAMILY_IDX.fuelSwitchDeep },
+    { key: "fuel-stationary", label: "Fuel switch · Stationary", abatementT: fuelStationary, colorIdx: FAMILY_IDX.fuelSwitch },
+    { key: "ref-leak", label: "Refrigerant · Leak fix", abatementT: refAbateLeak, colorIdx: FAMILY_IDX.refrigerantDeep },
+    { key: "ref-gas", label: "Refrigerant · Gas switch", abatementT: refAbateGas, colorIdx: FAMILY_IDX.refrigerant },
   ].filter((x) => x.abatementT > 0);
 
   const trajectory = buildTrajectory({
