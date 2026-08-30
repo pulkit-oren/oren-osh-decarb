@@ -10,6 +10,7 @@ import {
   type Company, type CompanyRegistry,
 } from "./helpers";
 import { seedIfEmpty } from "./seed";
+import { installDemoCompanies } from "./demo";
 
 interface CompanyStoreShape {
   companies: Company[];
@@ -36,6 +37,10 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- one-time hydration from localStorage */
     seedIfEmpty(window.localStorage); // first-ever visit → bake in the Ventive Hospitality dataset
+    // Additive, once per browser: the three sector demo companies. Runs on
+    // EVERY visit, not just an empty one, because seedIfEmpty bails as soon as
+    // any data exists and would therefore never reach a returning user.
+    installDemoCompanies(window.localStorage, Date.now());
     setReg(loadRegistry(window.localStorage));
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
