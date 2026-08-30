@@ -361,6 +361,7 @@ export const IT_SERVICES: DemoCompany = {
     ppaPct: 55,
     greenTariffPct: 10,
     recPct: 20,
+    contractWindPct: 25,
     ppaStrikeDeltaPerKwh: -1.4,
     greenTariffPremiumPerKwh: 0.6,
     recPricePerKwh: 0.45,

@@ -9,6 +9,7 @@ import {
 import { facilityGrade } from "@/lib/data-quality";
 import { useScope2 } from "@/lib/scope2/store";
 import { WarningStrip } from "@/components/ui/WarningStrip";
+import { CfePanel } from "./CfePanel";
 import { defaultFacilityActions } from "@/lib/scope2/defaults";
 import { facilityTypeProfile } from "@/lib/scope2/model/facility-type";
 import {
@@ -74,7 +75,12 @@ export function Scope2BuilderTab({ initialMode, initialFacilityId }: { initialMo
       />
 
       {mode === "procurement" ? (
-        <ProcurementScreen />
+        <>
+          <ProcurementScreen />
+          {/* Sits with procurement because that is where the annual claim is
+              made, and the hourly score is the same claim under a clock. */}
+          <CfePanel />
+        </>
       ) : view === "home" ? (
         <Scope2Home setView={setView} name={name} setName={setName} />
       ) : (

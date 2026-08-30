@@ -360,6 +360,7 @@ export const MANUFACTURING: DemoCompany = {
     ppaPct: 35,
     greenTariffPct: 5,
     recPct: 10,
+    contractWindPct: 35,
     ppaStrikeDeltaPerKwh: -1.2,
     greenTariffPremiumPerKwh: 0.7,
     recPricePerKwh: 0.45,

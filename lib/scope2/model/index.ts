@@ -24,6 +24,7 @@ import { applyGeneration, type GenerationResult } from "./generation";
 import { applyProcurement, type FacilityDraw, type ProcurementResult } from "./procurement";
 import type { Facility, Scope2Levers } from "./types";
 import { validateScope2 } from "./validate";
+import { cfeScore, LOAD_SHAPES, type CfeResult } from "./hourly";
 
 export const END_YEAR = 2050;
 export const BAU_GROWTH = 0.01;
@@ -82,6 +83,11 @@ export interface Scope2ComputeResult {
   trajectoryLocation: TrajectoryRow[];
   trajectoryMarket: TrajectoryRow[];
   warnings: string[];
+  /** 24/7 carbon-free-energy score for the portfolio. Annual coverage and this
+   *  number answer different questions; the gap between them is the storage and
+   *  the wind contract nobody has bought yet. Representative-day only — see
+   *  lib/scope2/model/hourly.ts. */
+  cfe: CfeResult;
   kpis: {
     baseLocationT: number;
     marketBaselineT: number; // location minus electricity already on PPAs/RECs
@@ -259,6 +265,45 @@ export function computeScope2(
     wedgesMarket.unshift({ id: "existing", label: "Already contracted", colorIdx: 6, scope: 2, startYear: baseYear, rampYears: 1, fullAbatementT: existingAbateT });
   }
 
+  /* ---- 24/7 CFE across the portfolio ----
+     A load-weighted blend of the sites' own shapes: shapes are linear, so a
+     blend of them is the portfolio's shape. Contract records are excluded from
+     the load (they are coverage, not consumption) and counted as supply. */
+  function portfolioCfe(): CfeResult {
+    const consuming = facilities.filter((f) => !isContractRecord(f));
+    const loadKwh = consuming.reduce((s2, f) => s2 + perFacility[f.id].gen.gridDrawKwh, 0);
+
+    const blended = new Array(24).fill(0);
+    let weight = 0;
+    for (const f of consuming) {
+      const w = perFacility[f.id].gen.gridDrawKwh;
+      if (w <= 0) continue;
+      const shape = LOAD_SHAPES[f.facilityType ?? "default"] ?? LOAD_SHAPES.default;
+      const total = shape.reduce((a, b) => a + b, 0);
+      for (let h = 0; h < 24; h++) blended[h] += (shape[h] / total) * w;
+      weight += w;
+    }
+    if (weight > 0) for (let h = 0; h < 24; h++) blended[h] /= weight;
+
+    const onsiteKwh = consuming.reduce((s2, f) => s2 + perFacility[f.id].gen.usedOnSiteKwh, 0);
+    const batteryKwh = consuming.reduce(
+      (s2, f) => s2 + (levers.byFacility[f.id]?.generation.batteryKwh ?? 0), 0,
+    );
+    const contractedKwh = proc.coveredKwh
+      + Object.values(existingByFacility).reduce((a, b) => a + b, 0);
+
+    return cfeScore({
+      loadKwh,
+      solarKwh: onsiteKwh,
+      contractedKwh,
+      contractWindPct: levers.procurement.contractWindPct,
+      batteryKwh,
+      // The blend is passed by overriding the default shape below.
+      facilityType: undefined,
+      loadShape: weight > 0 ? blended : undefined,
+    });
+  }
+
   const baseTotalT = baseline.totalLocationT;
   // gridLinked: every tonne on both curves is grid electricity, so the
   // baseline itself falls as the grid cleans and each wedge is worth less.
@@ -292,6 +337,7 @@ export function computeScope2(
     trajectoryLocation,
     trajectoryMarket,
     warnings: validateScope2(facilities, levers),
+    cfe: portfolioCfe(),
     kpis: {
       baseLocationT: baseTotalT,
       marketBaselineT: baseline.marketBaselineT,

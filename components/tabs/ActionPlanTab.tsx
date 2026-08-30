@@ -18,6 +18,7 @@ import { CURRENCY } from "@/lib/defaults";
 import { cn, fmt, fmtMoney, pct, fmtPerTonne, fmtPayback, paybackHint } from "@/lib/utils";
 import { groupByBu } from "@/lib/group-by-bu";
 import type { ComputeResult } from "@/lib/model";
+import { VariancePanel } from "./VariancePanel";
 import { Card, CardHeader } from "../ui/Card";
 import { HowTo } from "../ui/HowTo";
 import { InfoTip } from "../ui/InfoTip";
@@ -267,6 +268,7 @@ export function ActionPlanTab() {
           </span>
         </div>
       </Card>
+      <VariancePanel />
     </div>
   );
 }

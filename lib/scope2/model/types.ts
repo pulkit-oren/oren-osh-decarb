@@ -112,6 +112,11 @@ export interface ProcurementSettings {
   greenTariffPremiumPerKwh: number;
   recPricePerKwh: number;
   re100Exclusion: boolean; // deduct isolated load from the denominator
+  /** Share of the contracted volume that is WIND rather than solar, 0..100.
+   *  Invisible to annual accounting and decisive for an hourly score: wind in
+   *  India is night-biased, which is exactly where a solar-only portfolio
+   *  fails a 24/7 match. Absent ⇒ treated as all solar. */
+  contractWindPct?: number;
   /** Charged on the PPA share only. A green tariff is a discom product over the
    *  same connection and a REC is an unbundled certificate — neither wheels an
    *  electron, so neither pays the stack. Absent ⇒ no charges. */

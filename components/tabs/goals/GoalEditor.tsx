@@ -20,6 +20,8 @@ import { AssigneePicker } from "./AssigneePicker";
 import { CalcPanel } from "./CalcPanel";
 import { InitiativeTable } from "./InitiativeTable";
 import { OutputSeries } from "./OutputSeries";
+import { BoundaryNote } from "./BoundaryNote";
+import { baseValueFor } from "@/lib/goals/select";
 import { isIntensityGoal } from "@/lib/goals/select";
 
 const SCOPE_OPTS = (Object.keys(SCOPE_LABEL) as GoalScope[]).map((s) => ({ value: s, label: SCOPE_LABEL[s] }));
@@ -58,6 +60,9 @@ export function GoalEditor({ goal, inv, onBack }: { goal: Goal; inv: Inventories
           <Trash2 size={16} />
         </button>
       </div>
+
+      {/* A goal whose name claims more than this model measures says so. */}
+      {goal.metric === "emissions_t" && <BoundaryNote goal={goal} scope12T={baseValueFor(goal, inv)} />}
 
       {/* An intensity goal is a ratio, so it needs its denominator entered
           before it can be measured at all. */}

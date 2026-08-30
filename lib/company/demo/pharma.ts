@@ -373,6 +373,7 @@ export const PHARMA: DemoCompany = {
     ppaPct: 30,
     greenTariffPct: 10,
     recPct: 15,
+    contractWindPct: 20,
     ppaStrikeDeltaPerKwh: -0.9,
     greenTariffPremiumPerKwh: 0.75,
     recPricePerKwh: 0.45,
