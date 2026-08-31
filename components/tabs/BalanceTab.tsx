@@ -380,7 +380,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
 
       {/* The premises this mix set was built on, stated rather than editable —
           there is one place each of these is typed, and it is not here. */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl2 border border-line/70 bg-surface-muted px-4 py-2.5 text-[11px] text-ink-soft">
+      <div data-testid="premise-strip" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl2 border border-line/70 bg-surface-muted px-4 py-2.5 text-[11px] text-ink-soft">
         <span><strong className="text-ink tabular-nums">{target}%</strong> by <strong className="text-ink tabular-nums">{year}</strong></span>
         <span aria-hidden="true" className="text-ink-faint">·</span>
         <span>

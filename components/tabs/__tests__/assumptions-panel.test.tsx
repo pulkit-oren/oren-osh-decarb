@@ -96,6 +96,10 @@ describe("Compare mixes states its premise", () => {
     // The Change premises button is part of the premise strip.
     const changeButton = screen.getByRole("button", { name: /change premises/i });
     expect(changeButton).toBeTruthy();
+    // Scope the BAU check to the premise strip to avoid ambiguity with explanatory text.
+    // The strip must display the BAU rate in the format "BAU X.X %/yr".
+    const stripElement = screen.getByTestId("premise-strip");
+    expect(stripElement.textContent).toMatch(/BAU\s+[\d.]+\s+%\/yr/);
     fireEvent.click(changeButton);
     // We land on Assumptions.
     expect(screen.getByLabelText("BAU growth override")).toBeTruthy();
@@ -105,5 +109,23 @@ describe("Compare mixes states its premise", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
     expect(screen.getByRole("button", { name: /Suggest mixes/ })).toBeTruthy();
+  });
+
+  it("reflects the ?? precedence chain: override > derived > 1", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
+    const stripElement = screen.getByTestId("premise-strip");
+    // No override set: should show derived rate and include "(from your data)" qualifier.
+    expect(stripElement.textContent).toContain("(from your data)");
+    // Set a distinctive override value that no derived rate would coincidentally equal.
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+    const overrideInput = screen.getByLabelText("BAU growth override") as HTMLInputElement;
+    fireEvent.change(overrideInput, { target: { value: "7.3" } });
+    // Return to Compare mixes and verify the override is now displayed.
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
+    const stripAfterOverride = screen.getByTestId("premise-strip");
+    // The strip must show the override value and must NOT show "(from your data)".
+    expect(stripAfterOverride.textContent).toContain("7.3");
+    expect(stripAfterOverride.textContent).not.toContain("(from your data)");
   });
 });
