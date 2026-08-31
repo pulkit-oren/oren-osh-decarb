@@ -196,7 +196,8 @@ interface DriverMeta {
   edit: CapexEditTarget | null;
 }
 
-/* Declaration order IS display order. */
+/* Declaration order IS display order: Scope 2 equipment, then Scope 1
+   equipment, then the one line that costs no capital. */
 export const CAPEX_DRIVERS = {
   "s2-led":            { label: "LED lighting",                  scope: 2, leverId: "efficiency",      edit: { kind: "s2-facility", action: "efficiency", field: "ledCapex" } },
   "s2-motor":          { label: "Motors / VFD",                   scope: 2, leverId: "efficiency",      edit: { kind: "s2-facility", action: "efficiency", field: "motorCapex" } },
@@ -204,7 +205,6 @@ export const CAPEX_DRIVERS = {
   "s2-solar":          { label: "Rooftop solar",                  scope: 2, leverId: "solar", unitLabel: "kW",  rateLabel: "per kW",   edit: { kind: "s2-facility", action: "generation", field: "solarCapexPerKw" } },
   "s2-battery":        { label: "Battery",                        scope: 2, leverId: "solar", unitLabel: "kWh", rateLabel: "per kWh",  edit: { kind: "s2-facility", action: "generation", field: "batteryCapexPerKwh" } },
   "s2-solar-subsidy":  { label: "Solar subsidy",                  scope: 2, leverId: "solar",           edit: { kind: "s2-facility", action: "generation", field: "subsidyPct" } },
-  "s2-procurement":    { label: "Green electricity",              scope: 2, leverId: "procurement", alwaysShow: true, edit: null },
   "s1-efficiency":     { label: "Efficiency package",             scope: 1, leverId: "efficiency",      edit: { kind: "s1-asset", action: "efficiency", field: "capex" } },
   "s1-ev":             { label: "Electric vehicles",              scope: 1, leverId: "electrification", unitLabel: "vehicles", rateLabel: "per vehicle", edit: { kind: "s1-asset", action: "electrify", field: "assetCapex" } },
   "s1-heatpump":       { label: "Heat pumps / electric boilers",  scope: 1, leverId: "electrification", edit: { kind: "s1-asset", action: "electrify", field: "assetCapex" } },
@@ -214,6 +214,9 @@ export const CAPEX_DRIVERS = {
   "s1-ldar":           { label: "Leak-fix / LDAR programme",      scope: 1, leverId: "refrigerant",     edit: { kind: "s1-system", action: "leakFix", field: "capex" } },
   "s1-charge-cut":     { label: "Charge reduction",               scope: 1, leverId: "refrigerant",     edit: { kind: "s1-system", action: "chargeReduction", field: "capex" } },
   "s1-gas-retrofit":   { label: "Gas-switch retrofit",            scope: 1, leverId: "refrigerant",     edit: { kind: "s1-system", action: "gasSwitch", field: "retrofitCapex" } },
+  // LAST deliberately: the only line that is not capital, so it reads as a
+  // footer under the equipment rather than interrupting it mid-table.
+  "s2-procurement":    { label: "Green electricity",              scope: 2, leverId: "procurement", alwaysShow: true, edit: null },
 } as const satisfies Record<string, DriverMeta>;
 
 export type CapexDriverId = keyof typeof CAPEX_DRIVERS;
@@ -686,7 +689,6 @@ Create `lib/scope2/model/__tests__/capex-lines-s2.test.ts`:
 import { describe, expect, it } from "vitest";
 import { computeScope2 } from "../index";
 import { sumCapexLines } from "@/lib/model/capex";
-import { DEFAULT_FINANCE_ASSUMPTIONS } from "@/lib/finance/assumptions";
 import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import type { Facility, Scope2Levers } from "../types";
 
