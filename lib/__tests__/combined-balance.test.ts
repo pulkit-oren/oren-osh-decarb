@@ -131,15 +131,51 @@ describe("suggestMixOptions — three bases, ordered trade-offs", () => {
     expect(byId.opexSaving.kpis.annualOpexDelta).toBeLessThanOrEqual(byId.costPerTonne.kpis.annualOpexDelta + 1e-6);
   });
 
-  it("a CAPEX budget adds a fourth, honestly-capped option", () => {
-    const withBudget = suggestMixOptions(inp, 0.5, { capexBudget: 500_000 });
-    expect(withBudget).toHaveLength(4);
-    const b = withBudget.find((o) => o.objective === "budget")!;
-    expect(b.kpis.totalCapex).toBeLessThanOrEqual(500_000 + 1e-6);
-    // an aggressive target under a tight cap reports itself as budget-capped
-    if (!b.met) expect(b.budgetLimited).toBe(true);
-    // without a budget the fourth option doesn't appear
+  /* A CAPEX budget is a constraint on every basis, not a basis of its own. It
+     used to be modelled as a fourth objective whose rankKey was byte-identical
+     to costPerTonne's, which meant the other three ignored the cap: at a
+     500,000 budget "Cheapest overall" came back at 273,514,545 — 547x over —
+     beside a fourth card that honoured it. Three cards, all capped. */
+  it("a CAPEX budget caps EVERY basis, and never adds a fourth card", () => {
+    for (const capexBudget of [500_000, 5_000_000, 50_000_000, 500_000_000]) {
+      const capped = suggestMixOptions(inp, 0.5, { capexBudget });
+      expect(capped).toHaveLength(3);
+      expect(capped.map((o) => o.objective)).toEqual(["costPerTonne", "capex", "opexSaving"]);
+      for (const o of capped) {
+        // The displayed CAPEX is the number the gate enforced (F4 divergence).
+        expect(o.kpis.totalCapex, `${o.objective} @ ${capexBudget}`).toBeLessThanOrEqual(capexBudget + 1e-6);
+        // budgetLimited means the cap held the mix SHORT — never both at once.
+        if (o.budgetLimited) expect(o.met).toBe(false);
+      }
+    }
     expect(suggestMixOptions(inp, 0.12)).toHaveLength(3);
+  });
+
+  /* Leak fixes ride along with every mix unconditionally, so their capital is a
+     floor no cap can decline. A cap below that floor is not satisfiable by any
+     mix; the engine says so rather than reporting a spend it did not honour. */
+  it("a cap below the unavoidable floor is reported, not silently honoured", () => {
+    // target 0 means the walk never runs, so this IS the floor.
+    const floor = suggestMixOptions(inp, 0, { capexBudget: 1 })[0].kpis.totalCapex;
+    expect(floor).toBeGreaterThan(0);
+
+    const [tight] = suggestMixOptions(inp, 0.5, { capexBudget: 1 });
+    expect(tight.met).toBe(false);
+    expect(tight.budgetLimited).toBe(true);
+    // it spends the floor and not a rupee more — the walk added nothing
+    expect(tight.kpis.totalCapex).toBeCloseTo(floor, 6);
+
+    // one rupee above the floor is a satisfiable cap, and is enforced exactly
+    const [justAbove] = suggestMixOptions(inp, 0.5, { capexBudget: floor + 1 });
+    expect(justAbove.kpis.totalCapex).toBeLessThanOrEqual(floor + 1 + 1e-6);
+  });
+
+  it("a cap loose enough to never bind leaves every mix identical to the uncapped one", () => {
+    const uncapped = suggestMixOptions(inp, 0.5);
+    const capped = suggestMixOptions(inp, 0.5, { capexBudget: 1e12 });
+    expect(capped.map((o) => o.kpis.totalCapex)).toEqual(uncapped.map((o) => o.kpis.totalCapex));
+    expect(capped.map((o) => o.achieved)).toEqual(uncapped.map((o) => o.achieved));
+    expect(capped.every((o) => o.budgetLimited === false)).toBe(true);
   });
 
   it("leak fixes ride along with every applied mix", () => {

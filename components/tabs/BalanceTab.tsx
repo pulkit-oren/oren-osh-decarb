@@ -62,12 +62,11 @@ const MIX_LOGIC: Record<MixObjective, string[]> = {
     "Families are ranked by yearly OPEX change per tonne — biggest running-cost saving first.",
     "After the target is met, every self-funding lever (one that saves money each year) is raised to 100%: more reduction AND more savings. The payback figure shows the capital price of that choice.",
   ],
-  budget: [
-    "Same ranking as Cheapest overall, but every 10% step is checked against your CAPEX budget.",
-    "A step that would bust the cap is reverted, and cheaper families further down the list are tried instead.",
-    "The mix may stop below the target — the badge shows the best reduction reachable inside the envelope.",
-  ],
 };
+/* The cap is a constraint on all three bases, not a basis of its own — so it
+   reads as an extra line under whichever card is open, not a fourth card. */
+const BUDGET_LOGIC_LINE =
+  "Every 10% step is then checked against your CAPEX budget. A step that would bust the cap is reverted, and cheaper families further down the list are tried instead — so the mix may stop below the target, and the badge says so.";
 const LOGIC_FOOTER =
   "Every mix also switches leak fixes on (near-zero cost, pure savings), and when electrification rises, renewable sourcing for the new load follows the procurement level so the added electricity arrives green.";
 
@@ -392,11 +391,11 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
 
       {!options ? (
         <p className="text-xs text-ink-faint rounded-xl2 border border-dashed border-line px-4 py-8 text-center">
-          Prices each lever with the real model ({CURRENCY}/t, CAPEX/t, OPEX/t) and builds one mix per basis — {capexBudget > 0 ? "four bases with your budget cap" : "three bases"} — so you see the trade-off before anything changes.
+          Prices each lever with the real model ({CURRENCY}/t, CAPEX/t, OPEX/t) and builds one mix per basis — three bases{capexBudget > 0 ? ", every one of them inside your budget cap" : ""} — so you see the trade-off before anything changes.
         </p>
       ) : (
         <>
-          <div className={cn("grid gap-4 sm:grid-cols-2", options.length >= 4 ? "2xl:grid-cols-4" : "2xl:grid-cols-3")}>
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {options.map((o) => {
               const showLogic = logicOpen === o.objective;
               const applied = appliedObj === o.objective;
@@ -428,6 +427,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
                     <div className="px-4 pb-3 flex-1">
                       <ul className="text-[11px] text-ink-soft leading-relaxed list-disc pl-4 space-y-1.5">
                         {MIX_LOGIC[o.objective].map((line, i) => <li key={i}>{line}</li>)}
+                        {capexBudget > 0 && <li>{BUDGET_LOGIC_LINE}</li>}
                       </ul>
                       <p className="text-[10px] text-ink-faint mt-2 leading-relaxed">{LOGIC_FOOTER}</p>
                     </div>

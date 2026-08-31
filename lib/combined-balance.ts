@@ -8,6 +8,15 @@
    objective, then raised greedily until the target is met. Every
    suggested mix also switches leak fixes on — near-zero cost, pure
    savings. Pure: no React.
+
+   A CAPEX budget is a CONSTRAINT, not a fourth basis. It used to be
+   modelled as one — a `budget` objective whose rankKey was byte-identical
+   to `costPerTonne`'s — so it was never a distinct way of choosing levers,
+   only the cheapest basis with a ceiling. The cost of that framing was that
+   the other three bases ignored the ceiling entirely: enter ₹50 L and
+   "Cheapest overall" still came back at ₹27 Cr, 55x over, sitting beside a
+   fourth card that honoured it. Now the cap is orthogonal — every basis is
+   built inside it — and there are three bases whether or not one is set.
    ============================================================ */
 
 import { compute } from "@/lib/model";
@@ -33,7 +42,7 @@ export interface CombinedInputs {
   targetYear?: number;
 }
 
-export type MixObjective = "costPerTonne" | "capex" | "opexSaving" | "budget";
+export type MixObjective = "costPerTonne" | "capex" | "opexSaving";
 
 export interface MixKpis {
   totalCapex: number;
@@ -52,8 +61,16 @@ export interface MixOption {
   dials: CombinedDials;
   achieved: number; // combined market-based reduction at 2030 (fraction)
   met: boolean;
-  /** True when the CAPEX budget stopped the mix before the target. */
-  budgetLimited?: boolean;
+  /** True when the CAPEX budget stopped the mix before the target — so exactly
+   *  when the badge should read "budget-capped" rather than "best reachable".
+   *  A cap that bound mid-walk but was still overtaken by a cheaper family
+   *  further down the ranking did not limit the mix, and does not set this.
+   *
+   *  Also true when the cap sits below the mix's unavoidable floor (leak fixes
+   *  plus whatever the base settings already commit), which no mix can come in
+   *  under — so `kpis.totalCapex` may exceed the cap in that one case, and only
+   *  that one. */
+  budgetLimited: boolean;
   kpis: MixKpis;
 }
 
@@ -106,10 +123,27 @@ export function combinedReduction2030(inp: CombinedInputs, d: CombinedDials): nu
  *  and the same assumptions, so one `programmeMetrics` call over the union is
  *  the whole answer. If that precondition ever breaks, its discount-factor
  *  guard throws rather than quietly returning an order-dependent number. */
-function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): MixKpis {
-  // Every lever with money attached, not just those with tonnes (F4).
-  const costed = [...r1.levers, ...r2.levers]
+/** Every lever with money attached, not just those with tonnes (F4). */
+function costedLevers(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>) {
+  return [...r1.levers, ...r2.levers]
     .filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
+}
+
+/** The programme's total capital, on exactly the basis the option card shows.
+ *
+ *  The budget gate used to compute its own: `Σ capex over levers with
+ *  abatementT > 0`. That is F4 rebuilt inside the suggester — the same filter
+ *  priceFamily's comment says was removed for dropping capex that buys no
+ *  tonnes. So capital on a zero-abatement lever (solar added after procurement
+ *  has already zeroed the market-based factor; a gas swap with no GWP gain) was
+ *  invisible to the cap and visible on the card, and a capped mix could display
+ *  a CAPEX figure above its own cap. One function, one basis, no divergence. */
+function totalCapexOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): number {
+  return programmeMetrics(costedLevers(r1, r2).map((l) => l.series)).totalCapex;
+}
+
+function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): MixKpis {
+  const costed = costedLevers(r1, r2);
   const programme = programmeMetrics(costed.map((l) => l.series));
   return {
     totalCapex: programme.totalCapex,
@@ -178,8 +212,7 @@ function rankKey(p: FamilyPrice, objective: MixObjective): [number, number] {
   switch (objective) {
     case "capex": return [p.capexPerTonne, p.costPerTonne];
     case "opexSaving": return [p.opexPerTonne, p.costPerTonne]; // most-saving (most negative) first
-    case "costPerTonne":
-    case "budget": return [p.costPerTonne, p.capexPerTonne]; // budget = cheapest-first within the cap
+    case "costPerTonne": return [p.costPerTonne, p.capexPerTonne];
   }
 }
 
@@ -202,11 +235,22 @@ function greedyMix(
   };
   const measure = (d: CombinedDials) => {
     const { r1, r2 } = results(inp, d, true); // suggested mixes always include leak fixes
-    const active = [...r1.levers, ...r2.levers].filter((l) => l.abatementT > 0);
-    return { reduction: reductionOf(r1, r2, inp.targetYear), capex: active.reduce((s, l) => s + l.capex, 0) };
+    // The SAME capital the card will show, so the gate and the KPI cannot
+    // disagree about whether a mix fits its budget.
+    return { reduction: reductionOf(r1, r2, inp.targetYear), capex: totalCapexOf(r1, r2) };
   };
+  /* The FLOOR: what a mix costs before any family is raised. Leak fixes ride
+     along unconditionally (near-zero cost, pure savings) and the base settings
+     may already carry spend, so this is capital no cap can decline — the walk
+     below can only ever add to it. A cap below the floor is therefore not
+     satisfiable by any mix, and is reported as budget-capped rather than
+     silently honoured; every cap at or above it is enforced exactly. */
   let m = measure(dials);
-  let budgetLimited = false;
+  const floorCapex = m.capex;
+  // Infinity, not a null check at each use site: an absent budget is an
+  // unbounded one, and `> Infinity` is false for every finite spend.
+  const cap = capexBudget != null && capexBudget > 0 ? capexBudget : Infinity;
+  let capBound = cap < floorCapex;
 
   const greenElectrify = (d: CombinedDials, f: FamilyKey): CombinedDials =>
     f.scope === 1 && f.key === "electrifyPct"
@@ -220,11 +264,12 @@ function greedyMix(
       // Green the electricity that electrification adds, in step with procurement.
       dials = greenElectrify(withDial(dials, f, v), f);
       const next = measure(dials);
-      // Budget mode: a step that busts the CAPEX cap is reverted; cheaper
-      // families further down the ranking may still fit.
-      if (objective === "budget" && capexBudget != null && next.capex > capexBudget) {
+      // A step that busts the CAPEX cap is reverted; cheaper families further
+      // down the ranking may still fit. Applies to EVERY basis — a ceiling on
+      // capital is a fact about the plan, not a way of ranking levers.
+      if (next.capex > cap) {
         dials = prev;
-        budgetLimited = true;
+        capBound = true;
         break;
       }
       m = next;
@@ -235,34 +280,49 @@ function greedyMix(
   // "Best OPEX saving" means MAXIMIZE savings subject to the target, not just
   // reach it: raise every self-funding lever (negative OPEX per tonne) fully —
   // more reduction, more savings; the payback column shows the capital price.
+  // Checked lever-by-lever against the cap: raising them all and measuring once
+  // would throw away every affordable raise the moment one of them busts.
   if (objective === "opexSaving") {
-    let changed = false;
     for (const { f, p } of ranked) {
-      if (p.opexPerTonne < 0) { dials = greenElectrify(withDial(dials, f, 100), f); changed = true; }
+      if (p.opexPerTonne >= 0) continue;
+      const raised = greenElectrify(withDial(dials, f, 100), f);
+      const next = measure(raised);
+      if (next.capex > cap) continue; // the target is already met; this was extra
+      dials = raised;
+      m = next;
     }
-    if (changed) m = measure(dials);
   }
 
-  return { dials, achieved: m.reduction, order: ranked.map((x) => `${x.f.scope === 1 ? "S1" : "S2"}:${x.f.key}`), budgetLimited };
+  return {
+    dials,
+    achieved: m.reduction,
+    order: ranked.map((x) => `${x.f.scope === 1 ? "S1" : "S2"}:${x.f.key}`),
+    // Only a cap that actually held the mix SHORT limited it. Reporting a cap
+    // that bound mid-walk and was then overtaken by a cheaper family would
+    // badge a target-meeting mix as budget-capped.
+    budgetLimited: capBound && m.reduction < target,
+  };
 }
 
-/** Single-objective suggest (cheapest ₹/t by default). */
-export function suggestCombinedMix(inp: CombinedInputs, target: number, objective: MixObjective = "costPerTonne") {
-  return greedyMix(inp, target, objective);
+/** Single-objective suggest (cheapest ₹/t by default), optionally inside a
+ *  CAPEX ceiling. */
+export function suggestCombinedMix(
+  inp: CombinedInputs, target: number, objective: MixObjective = "costPerTonne", capexBudget?: number,
+) {
+  return greedyMix(inp, target, objective, capexBudget);
 }
 
 const OPTION_META: Record<MixObjective, { label: string; blurb: string }> = {
   costPerTonne: { label: "Cheapest overall", blurb: "Lowest ₹ per tonne — the balanced default." },
   capex: { label: "Lowest CAPEX", blurb: "Least upfront capital — leans procurement and blends before new kit." },
   opexSaving: { label: "Best OPEX saving", blurb: "Savings-maximizing — every self-funding lever at full, plus leak fixes; the payback column shows the capital price." },
-  budget: { label: "Within CAPEX budget", blurb: "Cheapest tonnes first, never exceeding your capital envelope — the question boards actually ask." },
 };
 
-/** The three bases (plus a budget-capped fourth when a CAPEX budget is given),
- *  each scored with the real model. */
+/** The three bases, each scored with the real model, each built inside the
+ *  CAPEX ceiling when one is given. Always three: the cap constrains every
+ *  basis rather than adding one of its own. */
 export function suggestMixOptions(inp: CombinedInputs, target: number, opts?: { capexBudget?: number }): MixOption[] {
   const objectives: MixObjective[] = ["costPerTonne", "capex", "opexSaving"];
-  if (opts?.capexBudget != null && opts.capexBudget > 0) objectives.push("budget");
   return objectives.map((objective) => {
     const { dials, achieved, budgetLimited } = greedyMix(inp, target, objective, opts?.capexBudget);
     const { r1, r2 } = results(inp, dials, true);
@@ -272,7 +332,7 @@ export function suggestMixOptions(inp: CombinedInputs, target: number, opts?: { 
       dials,
       achieved,
       met: achieved >= target - 1e-9,
-      budgetLimited: objective === "budget" ? budgetLimited : undefined,
+      budgetLimited,
       kpis: kpisOf(r1, r2),
     };
   });
