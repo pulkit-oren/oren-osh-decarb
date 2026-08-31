@@ -43,3 +43,7 @@ next-env.d.ts
 dev.log
 
 .vercel
+
+# claude code worktrees + sdd scratch (git-ignored working state)
+/.claude/worktrees/
+/.superpowers/
