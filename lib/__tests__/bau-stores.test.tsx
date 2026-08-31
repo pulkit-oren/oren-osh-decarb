@@ -12,8 +12,14 @@ function Probe() {
   const s2 = useScope2();
   return (
     <>
-      <span data-testid="s1-derived">{s1.derivedBau ? s1.derivedBau.pct.toFixed(4) : "null"}</span>
-      <span data-testid="s2-derived">{s2.derivedBau ? s2.derivedBau.pct.toFixed(4) : "null"}</span>
+      {/* Ten decimals, not four: the third `it` block below recomputes its
+          expected `bau2035` from this DOM text, compounded over 10 years and
+          compared with `toBeCloseTo(..., 4)`. Truncating pct at 4 decimals
+          here would inject ~4e-5 of error that compounding amplifies past the
+          ±0.00005 tolerance — failing a CORRECT implementation. Do not "tidy"
+          this back down. */}
+      <span data-testid="s1-derived">{s1.derivedBau ? s1.derivedBau.pct.toFixed(10) : "null"}</span>
+      <span data-testid="s2-derived">{s2.derivedBau ? s2.derivedBau.pct.toFixed(10) : "null"}</span>
       <span data-testid="s1-span">{s1.derivedBau ? `${s1.derivedBau.fromYear}-${s1.derivedBau.toYear}` : "null"}</span>
       <span data-testid="s1-bau-base">
         {s1.result.trajectory.find((r) => r.year === s1.baseYear)!.bau.toFixed(6)}
