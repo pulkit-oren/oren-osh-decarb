@@ -5,6 +5,24 @@
 **Builds on:** the same-day fix making the CAPEX cap orthogonal to mix objective
 (`lib/combined-balance.ts`, uncommitted at time of writing)
 
+**Amendment 1 (same day, after Deliverable 1 shipped and Deliverable 2's Scope 1
+engine landed):** four decisions in this spec are superseded. The rows and
+sections concerned are marked *(amended)* and state both the original and the
+replacement — a spec that quietly rewrites itself is worse than one that
+disagrees with its own history in public.
+
+| Superseded | Was | Now | Where |
+|---|---|---|---|
+| D-c | Line-level rate edit flattens every source | Scales sources proportionally, preserving the spread | §5.4 |
+| D-e | One BAU growth rate per scope | One rate for both scopes, derived from year-wise actuals | §6.2 |
+| §6.1 | Growth lives in a fourth top-level tab | Growth lives in a fourth section tab inside Balance to target | §6.1 |
+| §6.2 | Growth rate is typed, defaults 1.0, unchanged until touched | Growth rate is derived from the year-wise inventories and auto-adopted | §6.2 |
+
+Deliverables 1 and 2 are otherwise unchanged. Plan
+`docs/superpowers/plans/2026-08-31-capex-lines-engine.md` (2a of 2) remains the
+authority for the engine and is unaffected except that it now has one more
+consumer.
+
 ---
 
 ## 1. Why this exists
@@ -56,9 +74,9 @@ Recorded because each closes a fork that was genuinely open.
 |---|---|---|
 | D-a | Reduction is measured on the **level basis** | Every framework (SBTi, BRSR, any public commitment) means "emissions end up X% below base year". Two of three subsystems already do this; Balance-to-target is the outlier |
 | D-b | Capital is rationed on **peak single-year spend** | A capital committee approves an annual envelope, not a lifetime total |
-| D-c | Editing a rate on a card **writes globally and permanently** | One price, one truth. Consistent with `deriveDials`, which exists so two views can never drift |
+| D-c *(amended)* | Editing a rate **writes globally and permanently**, and **scales the line's sources proportionally** rather than flattening them | One price, one truth — consistent with `deriveDials`, which exists so two views can never drift. Amended on the flattening half: `groupCapexLines` already computes a quantity-weighted average and flags `mixed`, so a line edit can hit that average exactly while leaving per-source ratios intact. Flattening silently discards per-asset prices entered in the scope screens, and the line still reads back the number typed either way — so the destructive option buys nothing |
 | D-d | Editing re-prices instantly; **never re-ranks on its own** | A plan reorganising itself under the cursor is unusable. Re-ranking is a deliberate act behind a button |
-| D-e | BAU growth is **one rate per scope** | Matches the two constants already present. Production and electricity load do not grow at the same rate |
+| D-e *(amended)* | BAU growth is **one rate for both scopes**, **derived** from the year-wise inventories | Was one rate per scope, typed. Two independently-typed rates were two controls with no evidence behind either number. The app already holds FY2021→FY2027 inventories and reads only the base year, so a CAGR off that history is better evidence than any typed default. Both scopes' derived rates are still *displayed* separately, so divergence stays visible; per-scope overrides become a later increment |
 | D-f | Breakdown **expands in place**; no slide-over drawer | The result rail must stay visible — `BalanceTab.tsx:1-24` states that as the redesign's whole purpose |
 | D-g | **No frontier chart** | Considered and rejected: a single curve collapses the three strategic postures the cards exist to distinguish, and "frontier" would claim an optimality the greedy walk does not have |
 
@@ -211,12 +229,22 @@ with the discount rate in force, never as the headline.
 
 ### 5.4 Edit behaviour
 
-1. Rate edit writes to **every source in that line** (D-c), and to the same
-   field the Scope 1 / Scope 2 builder tabs bind. **It overwrites any per-source
-   values already set**, including ones set from the builder tabs — that is what
-   a line-level edit means. The `▸` expander is the way to set a rate without
-   flattening the others, and the `mixed` marker is the warning that flattening
-   would lose information.
+1. *(amended)* Rate edit writes to **every source in that line** (D-c), into the
+   same field the Scope 1 / Scope 2 builder tabs bind — but **proportionally**:
+   each source's rate is multiplied by `typed / currentWeightedAverage`, so the
+   line's quantity-weighted average becomes exactly the number typed and the
+   per-source spread survives. Nine trucks at ₹35 L and ₹48 L stay
+   cheap-and-expensive relative to each other.
+
+   The original decision here was to overwrite every source with the typed rate.
+   That is what made the `▸` per-source expander necessary and the `mixed` marker
+   a warning. Under proportional scaling `mixed` is no longer a hazard flag, only
+   a statement that the figure shown is an average, and the expander becomes a
+   convenience rather than the escape hatch from a destructive edit.
+
+   Guards: a line whose current weighted average is 0 cannot be scaled (there is
+   no ratio) — such a line sets its sources to the typed rate directly, which is
+   flattening a set of zeros and loses nothing. A typed 0 sets every source to 0.
 2. Card totals recompute immediately. Dials do not move (D-d).
 3. A notice appears: *"Prices changed. This plan is re-priced, but the lever
    ranking still uses the old prices."* with `[ Re-suggest with new prices ]`.
@@ -230,6 +258,14 @@ with the discount rate in force, never as the headline.
 One card open at a time. The open card expands to the full width of the work
 pane; the other two collapse to single-line bars retaining label, capital,
 reduction and Apply. The result rail is untouched.
+
+*(amended)* **The card breakdown is read-only; editing lives on the Assumptions
+tab** (§6.4.3). Both render the same `capexLines`, so the card still answers the
+complaint this deliverable exists for — the cards state a total and explain
+nothing — while there is exactly one place a price can be typed. Two editable
+surfaces over one field is not drift, but it is two sets of edit affordances,
+provenance markers and reset controls to build and keep consistent, for no
+reader benefit. The re-suggest notice (§5.4.3) fires wherever the edit happened.
 
 ### 5.6 Also in this deliverable
 
@@ -262,43 +298,152 @@ reduction and Apply. The result rail is untouched.
 
 ---
 
-## 6. Deliverable 3 — Growth & baseline tab
+## 6. Deliverable 3 — the Assumptions sub-tab
 
-### 6.1 Placement
+### 6.1 Placement *(amended)*
 
-A fourth top-level tab in `components/tabs/BuilderHub.tsx:26-28`, after
-*Scope 2*, labelled **"Growth & baseline"**. Not a sub-tab of Balance to
-target: the rate is a premise for both scopes and for Goals.
+A **fourth section tab inside Balance to target**, first in the row:
 
-### 6.2 Contents
+```
+Assumptions | Compare mixes | Fine-tune levers | Cost & capital
+```
 
-- **Two inputs** — Scope 1 growth %/yr, Scope 2 growth %/yr. Both default to
-  1.0, so behaviour is unchanged until touched.
-- **Chart** — reuse `components/charts/WedgeChart.tsx` (BAU / target / net /
-  wedges, already used in four places). No new chart component.
-- **Year-by-year table** — per year: BAU tonnes, planned net tonnes, committed
-  target level. This is the "year-on-year BAU allocation" in numbers.
-- **Live consequence line** — *"At 3% Scope 1 growth, business-as-usual reaches
-  8,010 t by 2030 instead of 6,900 t — 1,110 t more to remove."*
+`SectionTabs` in `components/tabs/BalanceTab.tsx:594-600` gains the entry. The
+default landing tab stays `levers`, so opening Balance to target looks exactly
+as it does today.
+
+This reverses the original placement — a fourth top-level tab in
+`BuilderHub.tsx`, with the note *"Not a sub-tab of Balance to target: the rate is
+a premise for both scopes and for Goals."* That reasoning conflated **reach**
+with **location**. The reach is unchanged: one `GlobalAssumptions` field, shared
+by both scopes and by Goals (§6.3). What changes is where it is typed — and every
+input on this screen is an input to *Compare mixes*, whose verdict (required cut,
+allocated, gap, progress) lives in the result rail. `BalanceTab.tsx:1-24` states
+that keeping that rail beside the controls that move it is the entire purpose of
+the layout; a top-level tab is the one placement that loses it.
+
+### 6.2 BAU growth is derived, not typed blind *(amended)*
+
+The original spec had the user type a growth rate against nothing. The app
+already holds year-wise inventories — `CombustionByYear`, `RefrigerationByYear`,
+`FacilitiesByYear`, FY2021→FY2027 on the shipped defaults — and reads exactly
+one of them, the base year. A rate derived from that history is better evidence
+than any typed default.
+
+New pure module `lib/model/bau.ts`:
+
+```
+actualSeries(combustionByYear, refrigerationByYear, facilitiesByYear)
+  → { year, s1T, s2T, totalT }[]           // every year that has an inventory
+
+deriveBauGrowth(series, baseYear)
+  → { pct, fromYear, toYear, years } | null
+```
+
+- `actualSeries` calls `baselineScope1()` and `baselineScope2()` per year — the
+  **baseline** functions only, never the lever engine. Cheap, and structurally
+  incapable of being mistaken for a plan. `baselineScope2` needs no assumptions
+  argument: each `Facility` carries its own `gridEf`.
+- `deriveBauGrowth` returns the **CAGR from the first year with data to the base
+  year**: `(base / first) ** (1 / (baseYear − firstYear)) − 1`, as a percent.
+  It returns `null` when there are fewer than two years, when the first total is
+  not positive, or when the base year itself has no data — every one of which is
+  a real state on a part-filled inventory, and none of which may yield a number.
+- **One rate for both scopes** (amends D-e). Both scopes' derived rates are
+  *displayed* side by side so divergence stays visible, but a single value drives
+  both trajectories.
+- Years **after** the base year that hold inventories are plotted as actual
+  points against the BAU line — a plan-vs-outcome read for free, and the reason
+  the series is not truncated at the base year. They do not affect the derived
+  rate, which ends at the base year by definition.
 
 ### 6.3 Plumbing
 
-`TrajectoryConfig.bauGrowth` (`model/types.ts:378`) is **already a parameter**.
-Work is confined to sourcing its value:
+`TrajectoryConfig.bauGrowth` (`model/types.ts:378`) is already a parameter, so
+the work is confined to sourcing its value.
 
-1. Add `bauGrowthS1Pct`, `bauGrowthS2Pct` to `GlobalAssumptions`, default 1.0.
-2. Thread to the three `buildTrajectory` call sites: `model/index.ts:391`,
-   `scope2/model/index.ts:312`, `scope2/model/index.ts:316`.
-3. Delete both `BAU_GROWTH` constants (B6).
+1. `GlobalAssumptions` gains `bauGrowthPct?: number` — **one** field, in percent
+   (2.5 means 2.5 %/yr). Absent means "use the derived rate". `??` not `||`: a
+   user who sets growth to 0 means 0, and a flat BAU is a legitimate premise.
+2. `compute()` and `computeScope2()` each gain a `bauGrowthFallbackPct?`
+   parameter. Resolution order, identical in both:
+   `assumptions.bauGrowthPct ?? fallback ?? 1`. The fallback exists because the
+   engines are pure and receive only the base year's inventory; derivation needs
+   every year, so it happens in the stores and is injected.
+3. Both stores derive once in a `useMemo` over their year maps and pass it down.
+4. Delete both `BAU_GROWTH` constants (B6). No reader of a hardcoded growth value
+   survives.
+5. **Auto-adoption.** With no `bauGrowthPct` set, the derived rate applies
+   immediately — roughly 2.5 %/yr on the shipped fixture, against today's 1 %.
+   This **moves every number in the app** on first load: required cut, gap, mix
+   badges, Goals, CEO overview. That is deliberate — 1 % was a constant nobody
+   chose — and §4.2 already establishes that a BAU above the base year makes the
+   level basis require *more*. §6.5 pins the regression guard that proves the old
+   numbers are still reachable.
 
-### 6.4 Tests
+### 6.4 Screen contents
 
-- Growth 0 reproduces a flat BAU; 1% reproduces today's numbers exactly
-  (regression guard on the default).
-- Scope 1 and Scope 2 rates move their own scope's BAU and not the other's.
-- Raising Scope 1 growth increases `requiredT` by exactly `ΔBAU(y)` (ties D3 to
-  D1's §4.2 identity).
-- Deleting the constants leaves no reader of a hardcoded growth value.
+Four sections in the work pane. The result rail is untouched.
+
+**6.4.1 Business as usual.** The derived rate with its span (`2.5 %/yr ·
+FY2021 → FY2025`), both scopes' derived rates beneath it, an override input plus
+slider, and a reset-to-derived control that **clears** `bauGrowthPct` rather than
+writing the derived number into it — so the field stays live as the inventory
+grows. A consequence line in the §4.4 register: *"At 2.5 %/yr, business-as-usual
+reaches 8,010 t by 2030 instead of 6,900 t — 1,110 t more to remove."*
+
+Chart: new `components/charts/BauChart.tsx` — actual points for every year with
+data, the BAU line at the rate in force, and the derived line dashed behind it
+when an override differs. `WedgeChart` is **not** reused, though the original
+spec said to: it plots one BAU against a plan's wedges, and this chart's subject
+is two BAU lines against history. Bending it would cost more than the ~80 lines
+of recharts this needs, and would put a wedge stack on a screen that has no plan
+on it.
+
+**6.4.2 Mix inputs.** The CAPEX budget box moves here as its single home. Note
+that by then it is the **peak single-year** capital cap, not the lifetime total:
+B5 / §5.6 re-bases it in plan 2a Task 5. If §6 is built before that task lands,
+the box moves as-is and is re-based in place — what must not happen is this
+screen growing a second budget field on a different basis from the one in
+*Compare mixes*.
+
+Target percentage and year stay in the pinned band above the tabs — already
+always visible — and are echoed read-only. *Compare mixes* keeps the Suggest button and
+gains a one-line premise strip (`50 % by 2030 · cap ₹50 Cr · BAU 2.5 %/yr`) that
+links back here.
+
+**6.4.3 CAPEX rates.** The editable table over `result.capexLines` from **both**
+scopes, per §5.2 presentation rules and §5.4 as amended. This is the only place a
+rate is typed (§5.5 as amended). Requires plan 2a Tasks 2 and 4 to have landed —
+Scope 1's contributions are uncommitted and Scope 2's are not yet written.
+
+**6.4.4 Running costs & finance.** The `GlobalAssumptions` fields currently
+reachable only via Scope 1 → segment → *Assumptions*
+(`components/tabs/BuilderTab.tsx:1562`): discount rate, the three escalations,
+maintenance share, EV and heat-pump maintenance ratios, REC price, carbon price,
+grid EF and its decline. Same state, same writer — a second **surface**, not a
+second copy, which is the distinction `lib/store.tsx:406` exists to enforce.
+
+### 6.5 Tests
+
+- CAGR: known series → known rate; one year → `null`; first total 0 → `null`;
+  base year absent from the series → `null`.
+- A year *after* the base year appears in `actualSeries` and does not move the
+  derived rate.
+- `assumptions.bauGrowthPct` overrides the derived rate; clearing it restores the
+  derived rate rather than a frozen copy of it.
+- Growth 0 gives a flat BAU.
+- **Regression guard on auto-adoption:** with `bauGrowthPct = 1` set explicitly,
+  every pre-amendment trajectory number is reproduced exactly. This is what makes
+  deleting the constants safe.
+- One rate moves **both** scopes' BAU — the inverse of the superseded per-scope
+  test, which must be deleted rather than left passing vacuously.
+- Raising growth increases `requiredT` by exactly `ΔBAU(y)`, tying this to §4.2.
+- Editing a mixed-rate line: per-source ratios are preserved and the line's
+  weighted average equals the typed rate (the §5.4 amendment).
+- Editing a line whose weighted average is 0 sets every source to the typed rate.
+- `invalidate()` fires on a growth change and on a capex-rate change, so a stale
+  mix set can never sit beside changed premises.
 
 ---
 
@@ -306,19 +451,39 @@ Work is confined to sourcing its value:
 
 Named so they are not smuggled in: any frontier or efficient-frontier chart; a
 true optimizer replacing the greedy walk; per-mix price sandboxes; per-year
-growth overrides (the `goals/select.ts` milestone-interpolation pattern is the
-route if wanted later); scenario export; per-business-unit targets.
+per-year growth overrides (the `goals/select.ts` milestone-interpolation pattern is the
+route if wanted later — note that Amendment 1 brings the year-wise *actual* series
+in scope as the source of the derived rate, which is not the same thing as letting a
+user set a different growth rate for each future year); scenario export; per-business-unit targets.
 
 ---
 
-## 8. Build order
+## 8. Build order *(amended)*
 
-1. **Deliverable 1** — level basis. Everything depends on it being right.
-2. **Deliverable 2** — CAPEX breakdown. The main ask.
-3. **Deliverable 3** — Growth & baseline. Requires 1, or its chart contradicts
-   the Goals tab on screen.
+| # | Deliverable | State |
+|---|---|---|
+| 1 | Level basis | **Shipped** — commit `76b0eb9` |
+| 2a | CAPEX lines engine | **In progress** — plan `2026-08-31-capex-lines-engine.md`. Task 1 committed (`b54266b`); Task 2 (Scope 1 pushes) uncommitted in the working tree; Tasks 3–5 (peak-year capital + cost-to-own, Scope 2 pushes, mixes carry their lines) not started |
+| 2b | CAPEX breakdown in the mix cards | Not started. Read-only after the §5.5 amendment, which shrinks it |
+| 3 | The Assumptions sub-tab (§6) | Not started |
 
-Each is independently shippable and independently testable.
+Ordering constraints, rather than a straight sequence:
+
+- **3's BAU half depends only on 1**, which has shipped. §6.1–§6.3 and §6.4.1–2
+  can be built now, and are the part the user asked for first.
+- **3's CAPEX-rates table (§6.4.3) depends on 2a Tasks 2 and 4** — it renders
+  `capexLines` for *both* scopes, and Scope 2 emits none yet. Building the table
+  against Scope 1 alone would ship a table that silently omits solar, battery and
+  LED: the largest lines in most plans.
+- **2b is now optional and should be resequenced after 3**, not before it. Under
+  the §5.5 amendment the cards carry a read-only breakdown while every edit
+  affordance lives on the Assumptions tab, so most of 2b's original surface area
+  (in-place editing, provenance markers, reset controls, the per-source expander)
+  moves to 3. Building 2b first would build that surface twice.
+
+Recommended sequence: **finish 2a → 3 → 2b**.
+
+Each remains independently testable.
 
 ---
 
