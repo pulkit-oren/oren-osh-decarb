@@ -34,6 +34,38 @@ corrections to §6, both found by trying to write the code.
 Neither changes what the user sees or controls — one adjustable rate, both
 scopes' derived rates displayed — only where the arithmetic happens.
 
+**Amendment 3 (after the whole-branch review, on the user's instruction):** the
+derived rate is measured **like-for-like**, not on total emissions.
+
+| Superseded | Was | Now | Where |
+|---|---|---|---|
+| §6.2 | CAGR between two endpoint years of **total** emissions | CAGR between the same two endpoint years, restricted to the sources present in **both** of them | §6.2 |
+
+The measurement was reading a change in *coverage* as growth. On the shipped
+fixture both scopes gain a source inside the 2021→2025 span — Petrol LCVs and an
+Island resort, both FY2023 — and the total-basis CAGR projected those additions
+forward forever:
+
+| | total basis | like-for-like |
+|---|---|---|
+| Scope 1 | 2.84 %/yr | **2.01 %/yr** |
+| Scope 2 | **7.46 %/yr** | **2.11 %/yr** |
+
+Two things mark this as the correct basis rather than merely a smaller number.
+The two scopes converge to within 0.1pp, which is the expected signature of a
+fixture driven by one shared volume ramp (`lib/defaults.ts` `trend()` is
+`1 + 0.025 × (year − 2025)`). And §6.3 of this spec predicted "roughly 2.5 %/yr"
+— like-for-like lands there; the total basis did not.
+
+The governing analogy is **same-store sales**: a retailer that opened a third
+shop reports growth for the shops it had in both periods, and reports the opening
+separately. Opening a site is not a growth rate, and neither is closing one —
+removals are excluded by the same intersection, with no special case.
+
+Consequences recorded, because this is the second time these figures moved:
+required cut at 50 % by 2030 falls from 3,964 t back to roughly 3,100 t. That is
+the honest number once a coverage change stops being counted as growth.
+
 ---
 
 ## 1. Why this exists
@@ -360,6 +392,24 @@ deriveBauGrowth(series, baseYear)
   It returns `null` when there are fewer than two years, when the first total is
   not positive, or when the base year itself has no data — every one of which is
   a real state on a part-filled inventory, and none of which may yield a number.
+- *(Amendment 3)* Those two endpoint totals are **restricted to the sources
+  present in both endpoint years**. `deriveBauGrowth` keeps owning endpoint
+  SELECTION and is unchanged; the per-scope entry points `deriveScope1Bau` /
+  `deriveScope2Bau` take the span it chose and recompute the two totals on the
+  shared sources. Scope 1 intersects its combustion assets and its refrigeration
+  systems against their own id spaces separately, since an id is not unique
+  across the two lists.
+- *(Amendment 3)* `DerivedGrowth` carries `basis: "like-for-like" | "total"`,
+  `keptCount`, and the NAMES of sources `joined` or `left` mid-span, so the rate
+  is auditable on screen rather than merely asserted. When the restricted basis
+  cannot carry a rate — an empty intersection, or a non-positive restricted first
+  total — the total basis is returned with `basis: "total"`. It is NOT allowed to
+  fall to the 1 % floor there: that would replace a flawed measurement with an
+  invented one, and the `basis` field exists so the difference is visible.
+- *(Amendment 3)* `scope1ActualSeries` / `scope2ActualSeries` keep returning
+  **true totals**, and the chart keeps plotting them. Only the rate is measured
+  like-for-like — the emissions really were what they were, and rewriting history
+  so the picture matches the rate would be the wrong repair.
 - **One rate for both scopes** (amends D-e) — meaning one *control*. Amendment 2
   splits where the arithmetic happens, because a single combined CAGR cannot be
   computed in either store: it needs Scope 1's fuel inventory and Scope 2's
@@ -414,8 +464,12 @@ the work is confined to sourcing its value.
 
 Four sections in the work pane. The result rail is untouched.
 
-**6.4.1 Business as usual.** The derived rate with its span (`2.5 %/yr ·
-FY2021 → FY2025`), both scopes' derived rates beneath it, an override input plus
+**6.4.1 Business as usual.** The derived rate with its span (`2.1 %/yr ·
+FY2021 → FY2025`) and, per Amendment 3, **the basis it was measured on** — how
+many sources it covers and the name of anything excluded, e.g. "measured on the 2
+facilities present in both FY2021 and FY2025; Island resort joined mid-span and
+is excluded". Without that line the number cannot be audited. Both scopes' derived
+rates beneath it, an override input plus
 slider, and a reset-to-derived control that **clears** `bauGrowthPct` rather than
 writing the derived number into it — so the field stays live as the inventory
 grows. A consequence line in the §4.4 register: *"At 2.5 %/yr, business-as-usual
@@ -469,6 +523,12 @@ second copy, which is the distinction `lib/store.tsx:406` exists to enforce.
 
 - CAGR: known series → known rate; one year → `null`; first total 0 → `null`;
   base year absent from the series → `null`.
+- *(Amendment 3)* A source joining mid-span is excluded from the rate, and so is
+  one leaving. **No boundary change reproduces the total-basis rate at full
+  precision** — the no-op guard that proves the intersection only ever removes
+  an artefact. An empty intersection falls back to `basis: "total"`, never to 1.
+  And the shipped fixture is pinned: Scope 1 ≈ 2.01 %/yr, Scope 2 ≈ 2.11 %/yr,
+  both like-for-like, naming Petrol LCVs and Island resort as excluded.
 - A year *after* the base year appears in `actualSeries` and does not move the
   derived rate.
 - `assumptions.bauGrowthPct` overrides the derived rate; clearing it restores the
