@@ -351,6 +351,11 @@ export interface GlobalAssumptions {
   elecEscalationPct?: number;
   /** Growth for everything else (RECs, maintenance). Defaults 0. */
   otherEscalationPct?: number;
+  /** Business-as-usual activity growth, PERCENT per year — 2.5 means 2.5%/yr.
+   *  Absent means "use the rate derived from the year-wise inventories", which
+   *  the store passes to the engine; absent from both means 1. Optional so old
+   *  saves parse, and `??`-resolved so an explicit 0 stays a flat BAU. */
+  bauGrowthPct?: number;
 }
 
 export interface LeverSettings {

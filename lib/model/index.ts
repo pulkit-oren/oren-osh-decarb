@@ -7,6 +7,7 @@
 
 import { baselineScope1, refrigerantCO2e } from "./baseline";
 import { FAMILY_COLORS, getRefrigerant, refrigerantPricePerKg } from "./factors";
+import { resolveBauGrowthPct } from "@/lib/bau";
 import {
   financeAssumptionsFrom,
   recCostPerTonneFrom,
@@ -34,7 +35,6 @@ import type {
 
 export const BASE_YEAR = 2025;
 export const END_YEAR = 2050;
-export const BAU_GROWTH = 0.01;
 
 /** One named running-cost component — now owned by `@/lib/finance`, which is
  *  what builds the cashflow series from it. Re-exported under the same name so
@@ -120,6 +120,10 @@ export function compute(
   systems: RefrigerationSystem[],
   s: LeverSettings,
   baseYear: number = BASE_YEAR,
+  /** The rate derived from the year-wise inventories, injected by the store.
+   *  The engine is pure and sees only the base year, so it cannot derive this
+   *  itself. Overridden by `assumptions.bauGrowthPct` when that is set. */
+  bauGrowthFallbackPct?: number,
 ): ComputeResult {
   const baseline = baselineScope1(assets, systems);
   const baseTotalT = baseline.totalT;
@@ -389,7 +393,9 @@ export function compute(
   ].filter((x) => x.abatementT > 0);
 
   const trajectory = buildTrajectory({
-    baseYear, endYear: END_YEAR, baseTotalT, bauGrowth: BAU_GROWTH, wedges,
+    baseYear, endYear: END_YEAR, baseTotalT,
+    bauGrowth: resolveBauGrowthPct(g.bauGrowthPct, bauGrowthFallbackPct) / 100,
+    wedges,
     scope2Spill: anyElec && scope2SpillFullT > 0 ? [{ startYear: elecR.startYear, rampYears: elecR.rampYears, fullT: scope2SpillFullT }] : [],
     // NOT gridLinked: Scope 1's baseline and wedges are fuel. Only the spill —
     // the grid load electrification adds — follows the grid down.
