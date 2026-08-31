@@ -32,6 +32,8 @@ This plan implements **§6.1, §6.2, §6.3, §6.4.1, §6.4.2, §6.4.4** and the 
 - **Test command:** `npx vitest run <path>`. Typecheck: `npx tsc --noEmit`. Lint: `npx eslint <paths>`. All three clean before each commit.
 - **No new dependencies.** recharts is already present.
 - **Currency symbol** comes from `CURRENCY` in `lib/defaults.ts`; never hardcode `₹`.
+- **This is Next 16.2.9 / React 19.2.4, and `AGENTS.md` warns its APIs may differ from your training data.** Read `node_modules/next/dist/docs/01-app/03-api-reference/01-directives/use-client.md` before writing either component. That said, the exposure here is small by construction: every file this plan touches is already a `"use client"` component, and the new ones use nothing but `useState` / `useMemo`, recharts, and Tailwind classes — no server components, routing, data fetching, or Next API surface. If you find yourself reaching for a Next API, stop and read the docs for it first.
+- **`react-hooks/set-state-in-effect` is enforced** and the codebase disables it line-by-line with a stated reason (see `BalanceTab.tsx:113-121`). This plan needs no effects at all — derived values are `useMemo`, not `useState` + `useEffect`. If you write an effect, you have taken a wrong turn.
 
 ## Worktree
 
