@@ -28,6 +28,7 @@ import { allIds, migrateRefrigeration, migrateSettings, uniqueId } from "./store
 import { resolveEquipment } from "./equipment/resolve";
 import { migrateEquipment, mintFirstEquipment } from "./equipment/migrate";
 import { defaultBasis, reallocateForVolume } from "./equipment/allocate";
+import { deriveBauGrowth, scope1ActualSeries, type DerivedGrowth } from "./bau";
 
 interface StoreShape {
   combustion: CombustionByYear;
@@ -36,6 +37,10 @@ interface StoreShape {
   scenarios: Scenario[];
   selectedYear: number;
   baseYear: number;
+  /** Growth derived from this scope's year-wise inventory, or null when the
+   *  history cannot support one. Displayed by the Assumptions panel and used as
+   *  the engine's fallback — never written into `assumptions`. */
+  derivedBau: DerivedGrowth | null;
   setSelectedYear: (y: number) => void;
   setBaseYear: (y: number) => void;
 
@@ -369,11 +374,28 @@ export function ScenarioProvider({
   const resolvedBaseAssets = useMemo(() => resolveEquipment(baseAssets), [baseAssets]);
   const resolvedSelectedAssets = useMemo(() => resolveEquipment(selectedAssets), [selectedAssets]);
 
-  const result = useMemo(() => compute(resolvedBaseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), settings, baseYear), [resolvedBaseAssets, baseSystems, settings, baseYear]);
+  /* Own scope only (Amendment 2): a combined rate would need the facilities
+     this store does not have, and Scope 2 reads this one optionally precisely
+     because its tabs can mount without it. */
+  const derivedBau = useMemo(
+    () => deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), baseYear),
+    [combustion, refrigeration, baseYear],
+  );
+
+  const result = useMemo(
+    () => compute(
+      resolvedBaseAssets.filter((a) => !a.excluded),
+      baseSystems.filter((s) => !s.excluded),
+      settings,
+      baseYear,
+      derivedBau?.pct,
+    ),
+    [resolvedBaseAssets, baseSystems, settings, baseYear, derivedBau],
+  );
   const selectedBaseline = useMemo(() => baselineScope1(resolvedSelectedAssets.filter((a) => !a.excluded), selectedSystems.filter((s) => !s.excluded)), [resolvedSelectedAssets, selectedSystems]);
 
   const value: StoreShape = {
-    combustion, refrigeration, settings, scenarios, selectedYear, baseYear,
+    combustion, refrigeration, settings, scenarios, selectedYear, baseYear, derivedBau,
     setSelectedYear, setBaseYear,
     addCombustion, delCombustion, updateCombustion, copyCombustion, importCombustion, addCombustionAsset,
     addRefrigeration, addRefrigerationSystem, delRefrigeration, updateRefrigeration, copyRefrigeration,

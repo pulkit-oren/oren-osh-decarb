@@ -22,6 +22,7 @@ import type {
   ProcurementSettings, Scope2Levers, Scope2Scenario,
 } from "./model/types";
 import { allIds, migrateScope2Levers, resolveFacilities, uniqueId } from "./store-helpers";
+import { deriveBauGrowth, scope2ActualSeries, type DerivedGrowth } from "@/lib/bau";
 
 interface Scope2StoreShape {
   facilities: FacilitiesByYear;
@@ -29,6 +30,10 @@ interface Scope2StoreShape {
   scenarios: Scope2Scenario[];
   selectedYear: number;
   baseYear: number;
+  /** Growth derived from this scope's year-wise inventory, or null when the
+   *  history cannot support one. Displayed by the Assumptions panel and used as
+   *  the engine's fallback — never written into `assumptions`. */
+  derivedBau: DerivedGrowth | null;
   setSelectedYear: (y: number) => void;
   setBaseYear: (y: number) => void;
 
@@ -186,14 +191,24 @@ export function Scope2Provider({
   // here silently kept the defaults — F8's discrepancy moved from two module
   // constants to two tabs, and the compiler could not flag it.
   const assumptions = useOptionalAssumptions();
+  const derivedBau = useMemo(
+    () => deriveBauGrowth(scope2ActualSeries(facilities), baseYear),
+    [facilities, baseYear],
+  );
   const result = useMemo(
-    () => computeScope2(baseFacilities.filter((f) => !f.excluded), levers, baseYear, assumptions),
-    [baseFacilities, levers, baseYear, assumptions],
+    () => computeScope2(
+      baseFacilities.filter((f) => !f.excluded),
+      levers,
+      baseYear,
+      assumptions,
+      derivedBau?.pct,
+    ),
+    [baseFacilities, levers, baseYear, assumptions, derivedBau],
   );
   const selectedBaseline = useMemo(() => baselineScope2(selectedFacilities.filter((f) => !f.excluded)), [selectedFacilities]);
 
   const value: Scope2StoreShape = {
-    facilities, levers, scenarios, selectedYear, baseYear,
+    facilities, levers, scenarios, selectedYear, baseYear, derivedBau,
     setSelectedYear, setBaseYear,
     addFacility, addFacilityRecord, delFacility, updateFacility, copyFacilities,
     updateFacilityAction, updateProcurement, setLevers: setLeversState, resetLevers, saveScenario, duplicateScenario, deleteScenario,
