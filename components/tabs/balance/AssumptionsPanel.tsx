@@ -19,12 +19,20 @@ import {
 } from "@/lib/bau";
 import { targetPosition, type CombinedRow } from "@/lib/model/combined";
 import { CURRENCY } from "@/lib/defaults";
+import { FAMILY_COLORS } from "@/lib/model/palette";
 import { NumField } from "@/components/tabs/activity/fields";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { BauChart } from "@/components/charts/BauChart";
-import { fmt } from "@/lib/utils";
+import { SettingCard } from "./SettingCard";
+import { cn, fmt, fmtMoney } from "@/lib/utils";
 
-const H = "text-[10px] uppercase tracking-wide text-ink-faint font-bold";
+/** The slider's usable band. Deliberately narrower than the accepted range
+ *  (`BAU_GROWTH_MIN_PCT`…`BAU_GROWTH_MAX_PCT`): a slider spanning −99.99 to 100
+ *  would put every plausible rate inside two pixels. The number field beside it
+ *  still accepts anything the engines accept, so the slider covers the band you
+ *  would actually drag and typing covers the rest. */
+const SLIDER_MIN_PCT = -5;
+const SLIDER_MAX_PCT = 15;
 
 /** One short line naming the basis a derived rate was measured on — the
  *  number is unauditable without it. `singular`/`plural` name a source in
@@ -71,6 +79,44 @@ export function bauBasisLine(d: DerivedGrowth | null, singular: string, plural: 
     clauses.push(`${left.join(", ")} left before FY${d.toYear} and ${left.length > 1 ? "are" : "is"} excluded`);
   }
   return `${base}. ${clauses.join("; ")}.`;
+}
+
+/** One row of the capital breakdown. `scopeTag` is carried rather than derived
+ *  from `scope` at render time so the two scopes' levers can share one sorted
+ *  list without losing which engine each came from. */
+export interface CapitalRow {
+  id: string;
+  label: string;
+  colorIdx: number;
+  capex: number;
+  annualOpexDelta: number;
+  scopeTag: "S1" | "S2";
+}
+
+/** Both scopes' levers as one list, largest capital first.
+ *
+ *  Exported and pure so the selection rules are assertable without a rendered
+ *  panel: which levers appear is a judgement (see below), and on the shipped
+ *  fixture only Scope 1 levers are active, so the DOM alone cannot exercise the
+ *  zero-capital case.
+ *
+ *  A lever earns a row when it is enabled AND spends capital OR changes the
+ *  yearly bill. Green procurement is the reason for that OR: it commits no
+ *  capital and is not free, and dropping zero-capital lines is how the answer
+ *  to "why is the lowest-CAPEX plan so cheap" went missing. A lever that is
+ *  enabled but costs nothing either way has nothing to say and is left out. */
+export function capitalRowsFrom(
+  s1Levers: readonly { id: string; label: string; colorIdx: number; enabled: boolean; capex: number; annualOpexDelta: number }[],
+  s2Levers: readonly { id: string; label: string; colorIdx: number; enabled: boolean; capex: number; annualOpexDelta: number }[],
+): CapitalRow[] {
+  const merged: CapitalRow[] = [
+    ...s1Levers.map((l) => ({ ...l, scopeTag: "S1" as const })),
+    ...s2Levers.map((l) => ({ ...l, scopeTag: "S2" as const })),
+  ]
+    .filter((l) => l.enabled && (l.capex > 0.5 || Math.abs(l.annualOpexDelta) > 0.5))
+    .map(({ id, label, colorIdx, capex, annualOpexDelta, scopeTag }) =>
+      ({ id, label, colorIdx, capex, annualOpexDelta, scopeTag }));
+  return merged.sort((x, z) => z.capex - x.capex);
 }
 
 export function AssumptionsPanel({
@@ -122,13 +168,65 @@ export function AssumptionsPanel({
     ? derivedPremise.s1Pct.toFixed(1)
     : `${derivedPremise.s1Pct.toFixed(1)} / ${derivedPremise.s2Pct.toFixed(1)}`;
 
-  return (
-    <div className="h-full min-h-0 overflow-y-auto p-6 space-y-7">
-      {/* ── 1. Business as usual ───────────────────────────────────────── */}
-      <section>
-        <div className={H}>1 &middot; Business as usual</div>
+  /* ---- card header summaries: each card's current state, legible folded ---- */
 
-        <div className="mt-2.5 flex flex-wrap items-end gap-x-8 gap-y-3">
+  /* The premise actually in force, through the same resolver the engines use. */
+  const inForce = describeBauPremise(override, s1.derivedBau, s2.derivedBau);
+  /* "derived", not "from your data": the card body already labels the per-scope
+     block "From your data", and two elements carrying the same phrase makes the
+     header ambiguous to read and to query. */
+  const bauProvenance = inForce.overridden
+    ? "your override"
+    : s1.derivedBau || s2.derivedBau
+      ? "derived"
+      : "fallback";
+  const bauSummary = `${
+    inForce.single
+      ? `${inForce.s1Pct.toFixed(1)} %/yr`
+      : `${inForce.s1Pct.toFixed(1)} / ${inForce.s2Pct.toFixed(1)} %/yr`
+  } · ${bauProvenance}`;
+
+  const mixSummary = `${target}% by ${year} · ${capexBudget > 0 ? `cap ${fmtMoney(capexBudget)}` : "no cap"}`;
+
+  /* The two figures that move the most numbers downstream, of the twelve in
+     that card — a discount rate and a fuel escalation reach every ₹/t. */
+  const financeSummary = `WACC ${a.discountRatePct ?? 10}% · fuel +${a.fuelEscalationPct ?? 5}%/yr`;
+
+  /* Where the slider rests. An override is one number and sits exactly where it
+     was put. With none set there is no single "current" rate to point at — the
+     two scopes can be on different derived rates — so it rests on Scope 1's,
+     which is the first of the two rates listed directly above it and the one
+     the placeholder leads with. The slider is a control, not the readout: the
+     per-scope lines beside it are what state the premise. */
+  const sliderPct = override ?? derivedPremise.s1Pct;
+
+  /* ---- where the capital goes ---- */
+
+  /* Both scopes' levers on one list, largest capital first. Read from
+     `result.levers`, which each engine already returns — this is not a second
+     costing pass, and it cannot disagree with the Cost & capital tab.
+
+     A lever that spends nothing but costs something every year still earns a
+     row: green procurement is the answer to "why is the Lowest CAPEX plan so
+     cheap", and dropping zero-capital lines is how that answer went missing
+     before. */
+  const capitalRows = useMemo(
+    () => capitalRowsFrom(s1.result.levers, s2.result.levers),
+    [s1.result.levers, s2.result.levers],
+  );
+
+  const totalCapex = capitalRows.reduce((sum, l) => sum + l.capex, 0);
+  /* Bars are relative to the largest line, not to the total: at a realistic
+     spread the biggest line is a third of the total, so scaling by total would
+     leave every bar short and the comparison hard to read. Floor of 1 keeps a
+     zero-capital-only list from dividing by zero. */
+  const maxCapex = Math.max(1, ...capitalRows.map((l) => l.capex));
+
+  return (
+    <div className="h-full min-h-0 overflow-y-auto p-6 space-y-4">
+      {/* ── Business as usual ──────────────────────────────────────────── */}
+      <SettingCard title="Business as usual" summary={bauSummary}>
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
             <div className="text-[11px] text-ink-soft flex items-center gap-1">
               From your data
@@ -177,6 +275,24 @@ export function AssumptionsPanel({
                 Reset to derived
               </button>
             </span>
+
+            {/* Same premise, second control. Writes through the same setGrowth,
+                so dragging invalidates suggested mixes exactly as typing does. */}
+            <span className="mt-2.5 block">
+              <input
+                type="range"
+                min={SLIDER_MIN_PCT} max={SLIDER_MAX_PCT} step={0.1}
+                aria-label="BAU growth slider"
+                value={sliderPct}
+                onChange={(e) => setGrowth(Number(e.target.value))}
+                className="w-52 cursor-pointer accent-brand-500"
+              />
+              <span className="mt-0.5 flex w-52 justify-between text-[9px] font-bold text-ink-faint">
+                <span>{SLIDER_MIN_PCT}%</span>
+                <span>0%</span>
+                <span>+{SLIDER_MAX_PCT}%</span>
+              </span>
+            </span>
           </label>
         </div>
 
@@ -189,12 +305,11 @@ export function AssumptionsPanel({
         <div className="mt-3">
           <BauChart actuals={actuals} bau={rows} baseYear={s1.baseYear} />
         </div>
-      </section>
+      </SettingCard>
 
-      {/* ── 2. Mix inputs ─────────────────────────────────────────────── */}
-      <section>
-        <div className={H}>2 &middot; Mix inputs</div>
-        <div className="mt-2.5 flex flex-wrap items-end gap-x-8 gap-y-3">
+      {/* ── Mix inputs ─────────────────────────────────────────────────── */}
+      <SettingCard title="Mix inputs" summary={mixSummary}>
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
             <div className="text-[11px] text-ink-soft">Target</div>
             <div className="text-sm font-extrabold tabular-nums text-ink">{target}% by {year}</div>
@@ -218,24 +333,77 @@ export function AssumptionsPanel({
             </span>
           </label>
         </div>
-      </section>
+      </SettingCard>
 
-      {/* ── 3. CAPEX rates — reserved, see the plan's Scope note ───────── */}
-      <section>
-        <div className={H}>3 &middot; CAPEX rates</div>
-        <p className="mt-2 text-[11px] text-ink-faint rounded-xl2 border border-dashed border-line px-4 py-5 max-w-2xl">
-          The editable rate table lands here once both scopes emit their capital
-          lines. Scope 2 does not yet, and a table showing Scope 1 alone would
-          silently omit solar, battery and lighting — usually the largest lines
-          in a plan. Rates stay editable per source in the Scope 1 and Scope 2
-          screens until then.
+      {/* ── Where the capital goes ─────────────────────────────────────── */}
+      <SettingCard
+        title="Where the capital goes"
+        summary={totalCapex > 0 ? fmtMoney(totalCapex) : "no capital committed"}
+        testId="capital-card"
+      >
+        {capitalRows.length === 0 ? (
+          <p className="text-[11px] text-ink-faint">
+            No lever is active yet, so the plan commits no capital. Turn one on in
+            Fine-tune levers and its capital appears here.
+          </p>
+        ) : (
+          <div className="divide-y divide-line/50">
+            {/* The two figures carry opposite meanings and one is often
+                negative, so an unlabelled "₹-5.82 Cr/yr" reads as ambiguous
+                between a cost and a saving. Colour alone was carrying that. */}
+            <div className="flex items-center gap-3 pb-1.5 text-[9px] uppercase tracking-wide font-bold text-ink-faint">
+              <span className="w-36 shrink-0">Lever</span>
+              <span className="w-6 shrink-0" />
+              <span className="flex-1 min-w-8" />
+              <span className="w-24 shrink-0 text-right">Capital</span>
+              <span className="w-24 shrink-0 text-right">Yearly cost</span>
+            </div>
+            {capitalRows.map((row) => (
+              <div key={`${row.scopeTag}:${row.id}`} className="flex items-center gap-3 py-2">
+                <span className="w-36 shrink-0 text-[11px] font-medium text-ink truncate" title={row.label}>
+                  {row.label}
+                </span>
+                <span className="w-6 shrink-0 text-[9px] font-bold text-ink-faint">{row.scopeTag}</span>
+                <span className="flex-1 min-w-8 h-2 rounded-full bg-surface-muted overflow-hidden">
+                  <span
+                    className="block h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.max(row.capex > 0 ? 2 : 0, (row.capex / maxCapex) * 100)}%`,
+                      background: FAMILY_COLORS[row.colorIdx],
+                    }}
+                  />
+                </span>
+                <span
+                  data-capex={row.capex}
+                  className="w-24 shrink-0 text-right text-[11px] font-extrabold tabular-nums text-ink"
+                >
+                  {row.capex > 0.5
+                    ? fmtMoney(row.capex)
+                    : <span className="font-semibold text-ink-faint">no capital</span>}
+                </span>
+                <span className={cn(
+                  "w-24 shrink-0 text-right text-[10px] tabular-nums",
+                  row.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700",
+                )}>
+                  {Math.abs(row.annualOpexDelta) > 0.5 ? `${fmtMoney(row.annualOpexDelta)}/yr` : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-ink-faint leading-relaxed max-w-2xl">
+          Capital per lever family, from the same model the Cost &amp; capital tab
+          reads — so the two cannot disagree. Rates are edited per source in the{" "}
+          <strong className="text-ink-soft">Scope 1</strong> and{" "}
+          <strong className="text-ink-soft">Scope 2</strong> screens; a table for
+          editing each of the sixteen rate drivers here lands once both engines
+          emit their capital lines.
         </p>
-      </section>
+      </SettingCard>
 
-      {/* ── 4. Running costs & finance ────────────────────────────────── */}
-      <section>
-        <div className={H}>4 &middot; Running costs &amp; finance</div>
-        <div className="mt-2.5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/* ── Running costs & finance ────────────────────────────────────── */}
+      <SettingCard title="Running costs & finance" summary={financeSummary}>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <NumField label="Discount rate (WACC)" suffix="%" step={0.5} min={0}
             hint="Discounts every year's cash and tonnes back to the base year — drives ₹/t, NPV and payback."
             value={a.discountRatePct ?? 10}
@@ -288,7 +456,7 @@ export function AssumptionsPanel({
         <p className="mt-3 text-[11px] text-ink-faint">
           These are the same figures the Scope 1 source screens edit — one place, not a copy.
         </p>
-      </section>
+      </SettingCard>
     </div>
   );
 }

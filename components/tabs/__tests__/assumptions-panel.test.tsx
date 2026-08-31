@@ -146,3 +146,115 @@ describe("the rail names its premise", () => {
     expect(screen.getByText(/a rate you set/i)).toBeTruthy();
   });
 });
+
+/* The card treatment: four collapsible cards with live header summaries, a
+   slider beside the growth override, and a capital breakdown where the empty
+   CAPEX-rates placeholder used to be. */
+describe("Assumptions cards", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  const open = () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+  };
+
+  it("titles each card and drops the wizard-style step numbers", () => {
+    open();
+    for (const name of [/Business as usual/i, /Mix inputs/i, /Where the capital goes/i, /Running costs/i]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    // "1 · Business as usual" read like a wizard you progress through; this is
+    // a settings screen you dip into.
+    expect(screen.queryByText(/^1\s*·/)).toBeNull();
+    expect(screen.queryByText(/^4\s*·/)).toBeNull();
+  });
+
+  it("opens every card by default, so nothing surfaced last week is re-hidden", () => {
+    open();
+    expect(screen.getByLabelText("BAU growth override")).toBeTruthy();
+    expect(screen.getByLabelText("CAPEX budget")).toBeTruthy();
+    expect(screen.getByRole("spinbutton", { name: /Discount rate/i })).toBeTruthy();
+  });
+
+  it("collapsing a card hides its body but keeps its summary readable", () => {
+    open();
+    const header = screen.getByRole("button", { name: /Running costs/i });
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(header);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("spinbutton", { name: /Discount rate/i })).toBeNull();
+    // The summary is the point of folding: state stays legible when closed.
+    expect(header.textContent).toMatch(/WACC/i);
+  });
+
+  it("summarises the growth premise in the card header, naming its provenance", () => {
+    open();
+    const header = screen.getByRole("button", { name: /Business as usual/i });
+    /* NOTE on the environment: these tests clear localStorage, so the stores
+       fall back to DEFAULT_COMBUSTION_BY_YEAR / DEFAULT_FACILITIES_BY_YEAR
+       (FY2021-2027) and a rate IS derived — unlike the shipped seed, which
+       carries one year and lands on the 1% fallback. Both branches are covered:
+       derived here, fallback in the unit tests for the summary's inputs. */
+    expect(header.textContent).toMatch(/%\/yr/);
+    expect(header.textContent).toMatch(/derived/i);
+    expect(header.textContent).not.toMatch(/fallback/i);
+
+    fireEvent.change(screen.getByLabelText("BAU growth override"), { target: { value: "7.3" } });
+    expect(header.textContent).toMatch(/7\.3\s*%\/yr/);
+    expect(header.textContent).toMatch(/your override/i);
+    // An override is one rate for both scopes, so the derived pair is gone.
+    expect(header.textContent).not.toMatch(/derived/i);
+  });
+
+  it("summarises the mix inputs, and says when there is no cap", () => {
+    open();
+    const header = screen.getByRole("button", { name: /Mix inputs/i });
+    expect(header.textContent).toMatch(/50%\s*by\s*2030/);
+    expect(header.textContent).toMatch(/no cap/i);
+  });
+
+  it("drives the growth override from a slider as well as the number field", () => {
+    open();
+    const slider = screen.getByLabelText("BAU growth slider") as HTMLInputElement;
+    expect(slider.type).toBe("range");
+    fireEvent.change(slider, { target: { value: "4.5" } });
+    // One premise, two controls: the number field must show what the slider set.
+    expect((screen.getByLabelText("BAU growth override") as HTMLInputElement).value).toBe("4.5");
+    expect(screen.getByRole("button", { name: /Business as usual/i }).textContent).toMatch(/4\.5\s*%\/yr/);
+  });
+
+  it("the slider rests on the rate in force, so it is never blank when unset", () => {
+    open();
+    const slider = screen.getByLabelText("BAU growth slider") as HTMLInputElement;
+    const field = screen.getByLabelText("BAU growth override") as HTMLInputElement;
+    // Unset: the field is empty and its placeholder names the rate(s) that
+    // would apply. The slider must rest on the first of those rather than on
+    // zero, or dragging it would jump the premise from a real value to none.
+    expect(field.value).toBe("");
+    const leading = Number(field.placeholder.split("/")[0].trim());
+    expect(Number.isFinite(leading)).toBe(true);
+    expect(Number(slider.value)).toBeCloseTo(leading, 1);
+  });
+
+  it("lists where the capital goes, largest first, instead of an empty placeholder", () => {
+    open();
+    const card = screen.getByTestId("capital-card");
+    // Real lever families with real capital, not a reserved-for-later notice.
+    expect(card.textContent).toMatch(/Efficiency|Solar|Electrif|refrigerant/i);
+    const amounts = [...card.querySelectorAll("[data-capex]")].map((e) => Number(e.getAttribute("data-capex")));
+    expect(amounts.length).toBeGreaterThan(0);
+    expect([...amounts]).toEqual([...amounts].sort((x, z) => z - x));
+  });
+
+  it("shows each row's own yearly cost change beside its capital", () => {
+    open();
+    // Capital alone does not rank a lever; the running-cost column is why an
+    // expensive lever can still be the cheap one to own.
+    expect(screen.getByTestId("capital-card").textContent).toMatch(/\/yr/);
+  });
+
+  it("still says where per-source rates are edited", () => {
+    open();
+    expect(screen.getByTestId("capital-card").textContent).toMatch(/Scope 1/);
+  });
+});
