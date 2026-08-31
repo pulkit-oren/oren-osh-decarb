@@ -30,7 +30,7 @@ import { useScope2 } from "@/lib/scope2/store";
 import { useGoals } from "@/lib/goals/store";
 import { applyDials, deriveDials, withLeakFixes, type BalanceDials } from "@/lib/model/energy-balance";
 import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/model/energy-balance";
-import { combineTrajectories } from "@/lib/model/combined";
+import { combineTrajectories, targetPosition } from "@/lib/model/combined";
 import { END_YEAR } from "@/lib/model";
 import { suggestMixOptions, type CombinedInputs, type MixObjective, type MixOption } from "@/lib/combined-balance";
 import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/select";
@@ -121,12 +121,14 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
 
   /* ---- combined position vs target ---- */
   const rows = combineTrajectories(s1.result.trajectory, s2.result.trajectoryMarket);
-  const base = rows[0]?.bau ?? 0;
-  const atYear = rows.find((r) => r.year === year) ?? rows[rows.length - 1];
-  const allocatedT = atYear ? atYear.bau - atYear.net : 0;
-  const requiredT = base * (target / 100);
-  const gapT = requiredT - allocatedT;
-  const onTrack = gapT <= 0.5;
+  /* All four rail numbers come from ONE tested function, on the LEVEL basis:
+     "cut X%" means emissions END UP at (1 - X) x the base year — what the Goals
+     tab (`targetValueAt`) and every external framework mean. The inline
+     arithmetic this replaces measured tonnes AVOIDED instead; the two differ by
+     `bau(year) - base`, which was enough to badge a mix "Met" five points short
+     of the level it had committed to. */
+  const { base, bauAtYear, netAtYear, committedLevel, requiredT, allocatedT, gapT, met: onTrack } =
+    targetPosition(rows, year, target);
   const allocPct = requiredT > 0 ? allocatedT / requiredT : 1;
 
   /* ---- derived dials + write-through ---- */
@@ -661,8 +663,9 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
           <div className="h-full overflow-y-auto px-5 py-4">
             <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold mb-3">How this is calculated</div>
             <div className="text-[11px] text-ink-soft space-y-2 leading-relaxed">
-              <p><strong className="text-ink">Required cut</strong> = combined base-year total &times; target = {fmt(base)} t &times; {target}% = <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> by {year}.</p>
-              <p><strong className="text-ink">Allocated</strong> = combined BAU {year} &minus; net {year} = {fmt(atYear?.bau ?? 0)} &minus; {fmt(atYear?.net ?? 0)} = <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>. Progress is allocated &divide; required, capped at 100% — a plan can over-deliver, because suggested mixes move dials in 10% steps (they land just past the target, never exactly on it), the OPEX-saving basis deliberately maximizes every self-funding lever beyond the target, and already-contracted VPPA / I-REC abatement also counts. Each lever row shows its own wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
+              <p>Get emissions down to <strong className="text-ink tabular-nums">{fmt(committedLevel)} t</strong> by {year} — {target}% below the {s1.baseYear} base of {fmt(base)} t.</p>
+              <p>Business-as-usual reaches <strong className="text-ink tabular-nums">{fmt(bauAtYear)} t</strong> by {year}, so <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> has to come out of that path. Your plan takes out <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>, landing at {fmt(netAtYear)} t.</p>
+              <p>A target is a <strong className="text-ink">level</strong>, not a quantity avoided — the same meaning your Goals tab uses. So the tonnes to remove move with business-as-usual: if activity growth outpaces the grid getting cleaner, BAU rises above the base year and there is more to remove than {target}% of it; if the grid cleans faster, less. Progress is allocated &divide; required, capped at 100% — a plan can over-deliver, because suggested mixes move dials in 10% steps (they land just past the target, never exactly on it), the OPEX-saving basis deliberately maximizes every self-funding lever beyond the target, and already-contracted VPPA / I-REC abatement also counts. Each lever row shows its own wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
               <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
               <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>
               <p><strong className="text-ink">Suggested mixes</strong>: each basis card carries its own <Info size={11} className="inline -mt-0.5" /> with the exact ranking and stopping rule it uses.</p>

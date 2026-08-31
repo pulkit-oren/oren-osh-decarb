@@ -2,7 +2,7 @@
    the Scope 2 band, and judges on-track against the summed target. */
 
 import { describe, expect, it } from "vitest";
-import { combineTrajectories } from "../combined";
+import { combineTrajectories, targetPosition, type CombinedRow } from "../combined";
 import type { TrajectoryRow } from "../types";
 
 const row = (year: number, over: Partial<TrajectoryRow>): TrajectoryRow => ({
@@ -43,5 +43,73 @@ describe("combineTrajectories", () => {
   it("only combines years both trajectories cover", () => {
     const rows = combineTrajectories(s1, [row(2030, { bau: 52, net: 20, target: 25 })]);
     expect(rows.map((r) => r.year)).toEqual([2030]);
+  });
+});
+
+/* ── targetPosition ─────────────────────────────────────────────────────────
+   The one place the rail's four numbers are derived. Extracted from BalanceTab
+   so the arithmetic is testable without mounting a component, and so the mix
+   suggester's stop rule can read the SAME committed level the rail displays.
+
+   These tests pin the level basis: "cut 50%" means emissions END UP at half the
+   base year, which is what Goals (targetValueAt) and the trajectory target line
+   already mean. Balance-to-target used to mean "tonnes AVOIDED equal half the
+   base year" — a different quantity whenever BAU has moved off the base year. */
+
+describe("targetPosition", () => {
+  /* Two rows is all the function reads: the base year and the target year. */
+  const at = (base: number, bauAtYear: number, netAtYear: number): CombinedRow[] => [
+    { year: 2025, bau: base, target: base, s1Net: base, s2Net: 0, net: base, onTrack: true },
+    { year: 2030, bau: bauAtYear, target: base * 0.5, s1Net: netAtYear, s2Net: 0, net: netAtYear, onTrack: false },
+  ];
+
+  it("requires the distance from BAU down to the committed level", () => {
+    // Committed level is half of 1,000 = 500. BAU arrives at 1,050.
+    // So 550 t must come out of the BAU path, not 500.
+    const p = targetPosition(at(1_000, 1_050, 1_050), 2030, 50);
+    expect(p.committedLevel).toBeCloseTo(500, 9);
+    expect(p.requiredT).toBeCloseTo(550, 9);
+  });
+
+  it("closes the gap exactly when net lands on the committed level", () => {
+    const onIt = targetPosition(at(1_000, 1_050, 500), 2030, 50);
+    expect(onIt.gapT).toBeCloseTo(0, 9);
+    expect(onIt.met).toBe(true);
+
+    const oneShort = targetPosition(at(1_000, 1_050, 501), 2030, 50);
+    expect(oneShort.gapT).toBeCloseTo(1, 9);
+    expect(oneShort.met).toBe(false);
+  });
+
+  /* The identity that says exactly how much this differs from the old basis.
+     Not decoration: it is the whole size of the defect, and it changes sign. */
+  it("differs from the avoided-tonnes basis by exactly BAU minus base", () => {
+    for (const bauAtYear of [1_050, 1_000, 900]) {
+      const p = targetPosition(at(1_000, bauAtYear, 700), 2030, 50);
+      const avoidedBasisRequired = 1_000 * 0.5;
+      expect(p.requiredT - avoidedBasisRequired).toBeCloseTo(bauAtYear - 1_000, 9);
+    }
+  });
+
+  it("needs LESS removed when BAU has fallen below the base year", () => {
+    // The current default case: the grid factor declines faster than activity
+    // grows, so BAU 2030 sits below the base year and the committed level is
+    // nearer than the old basis implied.
+    const p = targetPosition(at(1_000, 900, 900), 2030, 50);
+    expect(p.requiredT).toBeCloseTo(400, 9);
+    expect(p.requiredT).toBeLessThan(1_000 * 0.5);
+  });
+
+  it("reports allocated tonnes as the distance the plan pulls BAU down", () => {
+    const p = targetPosition(at(1_000, 1_050, 620), 2030, 50);
+    expect(p.allocatedT).toBeCloseTo(430, 9);
+    expect(p.base).toBeCloseTo(1_000, 9);
+    expect(p.bauAtYear).toBeCloseTo(1_050, 9);
+    expect(p.netAtYear).toBeCloseTo(620, 9);
+  });
+
+  it("falls back to the last row when the target year is past the horizon", () => {
+    const p = targetPosition(at(1_000, 1_050, 500), 2099, 50);
+    expect(p.netAtYear).toBeCloseTo(500, 9);
   });
 });

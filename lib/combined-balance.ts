@@ -98,12 +98,26 @@ function results(inp: CombinedInputs, d: CombinedDials, leakFixes: boolean) {
   return { r1, r2 };
 }
 
+/** Fraction BELOW THE BASE YEAR at `targetYear` — the level basis.
+ *
+ *  This returned `(bau(y) - net(y)) / base` — tonnes AVOIDED over base-year
+ *  emissions. That is a different quantity from "emissions ended X% below the
+ *  base year" whenever BAU has moved off the base year, and it is the latter
+ *  that Goals (`targetValueAt`), the trajectory target line, and every external
+ *  framework mean. The two differed by `(bau(y) - base) / base`, which changes
+ *  SIGN depending on whether activity growth or the grid-EF decline wins — so on
+ *  the shipped assumptions the old basis was too harsh, and on a frozen grid it
+ *  was too generous, badging a mix "meets target" some five points short of the
+ *  level it had committed to.
+ *
+ *  Because `greedyMix` stops on this number, fixing it here fixes the stop rule
+ *  and `MixOption.achieved` at the same time. */
 function reductionOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>, targetYear = 2030): number {
   const rows = combineTrajectories(r1.trajectory, r2.trajectoryMarket);
   if (rows.length === 0) return 0;
   const base = rows[0].bau;
   const atTarget = rows.find((r) => r.year === targetYear) ?? rows[rows.length - 1];
-  return base > 0 ? (atTarget.bau - atTarget.net) / base : 0;
+  return base > 0 ? (base - atTarget.net) / base : 0;
 }
 
 /** Combined market-based reduction at the target year for a pair of dial vectors (no leak-fix add-on). */
