@@ -686,7 +686,18 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
             <div className="text-[10px] uppercase tracking-wide text-ink-faint font-bold mb-3">How this is calculated</div>
             <div className="text-[11px] text-ink-soft space-y-2 leading-relaxed">
               <p>Get emissions down to <strong className="text-ink tabular-nums">{fmt(committedLevel)} t</strong> by {year} — {target}% below the {s1.baseYear} base of {fmt(base)} t.</p>
-              <p>Business-as-usual reaches <strong className="text-ink tabular-nums">{fmt(bauAtYear)} t</strong> by {year}, so <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> has to come out of that path. Your plan takes out <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>, landing at {fmt(netAtYear)} t.</p>
+              <p>
+                Business-as-usual reaches <strong className="text-ink tabular-nums">{fmt(bauAtYear)} t</strong> by {year},
+                growing at <strong className="text-ink tabular-nums">{(s1.settings.assumptions.bauGrowthPct ?? s1.derivedBau?.pct ?? 1).toFixed(1)}%/yr</strong>
+                {" — "}
+                {s1.settings.assumptions.bauGrowthPct != null
+                  ? <>a rate you set on the <strong className="text-ink">Assumptions</strong> tab</>
+                  : s1.derivedBau
+                    ? <>from your own year-on-year data, FY{s1.derivedBau.fromYear} to FY{s1.derivedBau.toYear}</>
+                    : <>the fallback, because there is not yet enough year-on-year data to derive one</>}
+                . So <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> has to come out of that path.
+                Your plan takes out <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>, landing at {fmt(netAtYear)} t.
+              </p>
               <p>A target is a <strong className="text-ink">level</strong>, not a quantity avoided — the same meaning your Goals tab uses. So the tonnes to remove move with business-as-usual: if activity growth outpaces the grid getting cleaner, BAU rises above the base year and there is more to remove than {target}% of it; if the grid cleans faster, less. Progress is allocated &divide; required, capped at 100% — a plan can over-deliver, because suggested mixes move dials in 10% steps (they land just past the target, never exactly on it), the OPEX-saving basis deliberately maximizes every self-funding lever beyond the target, and already-contracted VPPA / I-REC abatement also counts. Each lever row shows its own wedge at {year}, from the same model that drives the Action plan and Compare tabs.</p>
               <p>Scope 2 is <strong className="text-ink">market-based</strong>: your entered VPPA / I-REC coverage counts (the &ldquo;Already contracted&rdquo; row), and procurement moves this number only. Electrification adds electricity — the Scope 2 spill — which the renewable-sourcing dial greens.</p>
               <p>Dials are <strong className="text-ink">derived from the per-source levers</strong>: dragging one rewrites the levers of every matching source; editing a source in Scope 1 / Scope 2 moves the dial here. Flex-fuel and per-facility detail stay per-source — set them in the scope tabs.</p>

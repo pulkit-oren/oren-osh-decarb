@@ -129,3 +129,20 @@ describe("Compare mixes states its premise", () => {
     expect(stripAfterOverride.textContent).not.toContain("(from your data)");
   });
 });
+
+describe("the rail names its premise", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  it("states the growth rate and that it came from the data", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    expect(screen.getByText(/growing at/i)).toBeTruthy();
+    expect(screen.getByText(/from your own year-on-year data/i)).toBeTruthy();
+  });
+
+  it("says so when the rate is an override instead", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+    fireEvent.change(screen.getByLabelText("BAU growth override"), { target: { value: "7" } });
+    expect(screen.getByText(/a rate you set/i)).toBeTruthy();
+  });
+});
