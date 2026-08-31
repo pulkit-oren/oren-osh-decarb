@@ -12,11 +12,17 @@ export interface EfficiencyResult {
   residualLoadKwh: number;
   capex: number;
   opexSaving: number;
+  /** The same three products `capex` sums, kept separately so index.ts can
+   *  report them without re-deriving. */
+  capexParts: { led: number; motor: number; bms: number };
 }
 
 export function applyEfficiency(f: Facility, a: EfficiencyAction): EfficiencyResult {
   if (!a.enabled) {
-    return { ledKwh: 0, motorKwh: 0, bmsKwh: 0, savedKwh: 0, residualLoadKwh: f.annualLoadKwh, capex: 0, opexSaving: 0 };
+    return {
+      ledKwh: 0, motorKwh: 0, bmsKwh: 0, savedKwh: 0, residualLoadKwh: f.annualLoadKwh, capex: 0, opexSaving: 0,
+      capexParts: { led: 0, motor: 0, bms: 0 },
+    };
   }
   const { lightingPct, motorPct, hvacPct } = f.loadSplit;
   const otherPct = Math.max(0, 100 - lightingPct - motorPct - hvacPct);
@@ -29,5 +35,12 @@ export function applyEfficiency(f: Facility, a: EfficiencyAction): EfficiencyRes
     residualLoadKwh: f.annualLoadKwh - savedKwh,
     capex: a.ledCapex * (a.ledPct / 100) + a.motorCapex * (a.motorPct / 100) + a.bmsCapex * (a.bmsPct / 100),
     opexSaving: savedKwh * f.tariffPerKwh,
+    // The same three products the capex line above sums, kept separately so
+    // index.ts can report them without re-deriving.
+    capexParts: {
+      led: a.ledCapex * (a.ledPct / 100),
+      motor: a.motorCapex * (a.motorPct / 100),
+      bms: a.bmsCapex * (a.bmsPct / 100),
+    },
   };
 }

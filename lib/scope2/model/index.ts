@@ -16,6 +16,7 @@ import type { LeverMetrics, OpexPart as FinanceOpexPart, SeriesRow } from "@/lib
 import { buildTrajectory, targetLine } from "@/lib/model/trajectory";
 import { gridFactorFn } from "@/lib/model/grid";
 import type { GlobalAssumptions, TrajectoryRow, Wedge } from "@/lib/model/types";
+import { groupCapexLines, type CapexContribution, type CapexLine } from "@/lib/model/capex";
 import { defaultFacilityActions } from "../defaults";
 import { baselineScope2, existingCoveredKwh, type Scope2Baseline } from "./baseline";
 import { contractCoverageByFacility, isContractRecord } from "./instruments";
@@ -89,6 +90,8 @@ export interface Scope2ComputeResult {
    *  the wind contract nobody has bought yet. Representative-day only — see
    *  lib/scope2/model/hourly.ts. */
   cfe: CfeResult;
+  /** Itemised capital, one line per driver. Sums to the levers' total capex. */
+  capexLines: CapexLine[];
   kpis: {
     baseLocationT: number;
     marketBaselineT: number; // location minus electricity already on PPAs/RECs
@@ -131,6 +134,7 @@ export function computeScope2(
 
   /* ---- Pillars 1+2 per facility, in physical order ---- */
   const perFacility: Record<string, { eff: EfficiencyResult; gen: GenerationResult }> = {};
+  const capex: CapexContribution[] = [];
   const draws: FacilityDraw[] = [];
   const existingByFacility: Record<string, number> = {};
   let effAbateT = 0, effCapex = 0, effSaving = 0;
@@ -142,6 +146,16 @@ export function computeScope2(
     const eff = applyEfficiency(f, acts.efficiency);
     const gen = applyGeneration(f, acts.generation, eff.residualLoadKwh);
     perFacility[f.id] = { eff, gen };
+    capex.push(
+      { driverId: "s2-led", sourceId: f.id, amount: eff.capexParts.led },
+      { driverId: "s2-motor", sourceId: f.id, amount: eff.capexParts.motor },
+      { driverId: "s2-bms", sourceId: f.id, amount: eff.capexParts.bms },
+      { driverId: "s2-solar", sourceId: f.id, amount: gen.capexParts.solarGross,
+        quantity: gen.effectiveKwp, rate: acts.generation.solarCapexPerKw },
+      { driverId: "s2-battery", sourceId: f.id, amount: gen.capexParts.batteryGross,
+        quantity: acts.generation.batteryKwh, rate: acts.generation.batteryCapexPerKwh },
+      { driverId: "s2-solar-subsidy", sourceId: f.id, amount: gen.capexParts.subsidy },
+    );
     // Electricity already on PPAs/RECs — the legacy per-facility % plus this
     // facility's share of entered VPPA/I-REC records, capped at the post-lever
     // grid draw. New procurement only addresses what's left, so the two never
@@ -173,6 +187,10 @@ export function computeScope2(
       genEnd = Math.max(genEnd, acts.generation.targetYear);
     }
   }
+
+  // No capital at all — a per-kWh premium instead. It earns a row because it is
+  // the on-screen answer to why the Lowest CAPEX mix is so cheap (spec 5.2).
+  capex.push({ driverId: "s2-procurement", sourceId: "portfolio", amount: 0 });
 
   /* ---- Pillar 3 across the portfolio ---- */
   // The certificate price comes from the shared assumptions, not from the
@@ -343,6 +361,7 @@ export function computeScope2(
     trajectoryMarket,
     warnings: validateScope2(facilities, levers),
     cfe: portfolioCfe(),
+    capexLines: groupCapexLines(capex),
     kpis: {
       baseLocationT: baseTotalT,
       marketBaselineT: baseline.marketBaselineT,

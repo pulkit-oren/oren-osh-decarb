@@ -43,9 +43,11 @@ export const CAPEX_DRIVERS = {
   "s2-led":            { label: "LED lighting",                  scope: 2, leverId: "efficiency",      edit: { kind: "s2-facility", action: "efficiency", field: "ledCapex" } },
   "s2-motor":          { label: "Motors / VFD",                   scope: 2, leverId: "efficiency",      edit: { kind: "s2-facility", action: "efficiency", field: "motorCapex" } },
   "s2-bms":            { label: "Building management system",     scope: 2, leverId: "efficiency",      edit: { kind: "s2-facility", action: "efficiency", field: "bmsCapex" } },
-  "s2-solar":          { label: "Rooftop solar",                  scope: 2, leverId: "solar", unitLabel: "kW",  rateLabel: "per kW",   edit: { kind: "s2-facility", action: "generation", field: "solarCapexPerKw" } },
-  "s2-battery":        { label: "Battery",                        scope: 2, leverId: "solar", unitLabel: "kWh", rateLabel: "per kWh",  edit: { kind: "s2-facility", action: "generation", field: "batteryCapexPerKwh" } },
-  "s2-solar-subsidy":  { label: "Solar subsidy",                  scope: 2, leverId: "solar",           edit: { kind: "s2-facility", action: "generation", field: "subsidyPct" } },
+  // leverId matches Scope2LeverSummary.id ("generation" — see
+  // lib/scope2/model/index.ts), NOT the "solar" wording of the driver labels.
+  "s2-solar":          { label: "Rooftop solar",                  scope: 2, leverId: "generation", unitLabel: "kW",  rateLabel: "per kW",   edit: { kind: "s2-facility", action: "generation", field: "solarCapexPerKw" } },
+  "s2-battery":        { label: "Battery",                        scope: 2, leverId: "generation", unitLabel: "kWh", rateLabel: "per kWh",  edit: { kind: "s2-facility", action: "generation", field: "batteryCapexPerKwh" } },
+  "s2-solar-subsidy":  { label: "Solar subsidy",                  scope: 2, leverId: "generation",           edit: { kind: "s2-facility", action: "generation", field: "subsidyPct" } },
   "s1-efficiency":     { label: "Efficiency package",             scope: 1, leverId: "efficiency",      edit: { kind: "s1-asset", action: "efficiency", field: "capex" } },
   "s1-ev":             { label: "Electric vehicles",              scope: 1, leverId: "electrification", unitLabel: "vehicles", rateLabel: "per vehicle", edit: { kind: "s1-asset", action: "electrify", field: "assetCapex" } },
   "s1-heatpump":       { label: "Heat pumps / electric boilers",  scope: 1, leverId: "electrification", edit: { kind: "s1-asset", action: "electrify", field: "assetCapex" } },

@@ -18,11 +18,17 @@ export interface GenerationResult {
    *  because it carries NO tonnes: it is the half of the business case that
    *  the carbon number cannot see. */
   demandSaving: number;
+  /** The gross solar/battery spend and the subsidy deducted from it, kept
+   *  separately so index.ts can report them without re-deriving `capex`. */
+  capexParts: { solarGross: number; batteryGross: number; subsidy: number };
 }
 
 export function applyGeneration(f: Facility, a: GenerationAction, residualLoadKwh: number): GenerationResult {
   if (!a.enabled || a.solarKwp <= 0) {
-    return { effectiveKwp: 0, solarGenKwh: 0, selfConsumption: 1, usedOnSiteKwh: 0, exportedKwh: 0, gridDrawKwh: residualLoadKwh, capex: 0, opexSaving: 0, demandSaving: 0 };
+    return {
+      effectiveKwp: 0, solarGenKwh: 0, selfConsumption: 1, usedOnSiteKwh: 0, exportedKwh: 0, gridDrawKwh: residualLoadKwh, capex: 0, opexSaving: 0, demandSaving: 0,
+      capexParts: { solarGross: 0, batteryGross: 0, subsidy: 0 },
+    };
   }
   // New solar is capped by the roof headroom LEFT after any existing panels.
   const roofHeadroomKwp = Math.max(0, f.roofSpaceM2 / M2_PER_KW - (f.existingSolarKwp ?? 0));
@@ -50,5 +56,11 @@ export function applyGeneration(f: Facility, a: GenerationAction, residualLoadKw
     capex: (effectiveKwp * a.solarCapexPerKw + a.batteryKwh * a.batteryCapexPerKwh) * (1 - a.subsidyPct / 100),
     opexSaving: usedOnSiteKwh * f.tariffPerKwh + (a.exportMode === "netMetering" ? exportedKwh * f.tariffPerKwh : 0),
     demandSaving,
+    capexParts: {
+      solarGross: effectiveKwp * a.solarCapexPerKw,
+      batteryGross: a.batteryKwh * a.batteryCapexPerKwh,
+      // Negative: a deduction, so the three parts sum to `capex` above.
+      subsidy: -(effectiveKwp * a.solarCapexPerKw + a.batteryKwh * a.batteryCapexPerKwh) * (a.subsidyPct / 100),
+    },
   };
 }
