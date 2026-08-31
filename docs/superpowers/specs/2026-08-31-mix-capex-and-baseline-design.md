@@ -192,7 +192,7 @@ at 2030". After this change it is the **level-basis** fraction below base year,
 and the card badge "best reachable N%" reads on that basis. Update the doc
 comment and the badge's tooltip; a stale comment here is how B1 survived.
 
-### 4.5 Tests
+### 4.6 Tests
 
 - `gapT == 0` ⟺ `net(y) == base × (1 − pct)`, across growth rates 0%, 1%, 5%.
 - `requiredT(level) − requiredT(avoided) == BAU(y) − base` to within 1e-6.
@@ -206,7 +206,9 @@ comment and the badge's tooltip; a stale comment here is how B1 survived.
 
 ### 5.1 The capex drivers — complete enumeration
 
-Eleven, plus one zero-capex line. Nothing else in the model consumes capital.
+Fifteen, plus one zero-capex line. Nothing else in the model consumes capital.
+(An earlier draft of this section said eleven; the tables below have always
+listed fifteen. The count, not the tables, was wrong.)
 
 **Scope 2** (`lib/scope2/`)
 
@@ -231,7 +233,7 @@ Eleven, plus one zero-capex line. Nothing else in the model consumes capital.
 | Fuel-switch retrofit | lump per asset | `fuelSwitch.retrofitCapex` | `index.ts:216` |
 | Flex-fuel conversion | `units × price` | `flexFuel.vehicleCapex` | `index.ts:216` |
 | Leak-fix / LDAR | lump per system | `leakFix.capex` | `index.ts:249` |
-| Charge reduction | lump per system | `chargeCut.capex` | `index.ts:257` |
+| Charge reduction | lump per system | `chargeReduction.capex` | `index.ts:257` |
 | Gas-switch retrofit | lump per system | `gasSwitch.retrofitCapex` | `index.ts:271` |
 
 ### 5.2 Presentation rules
@@ -326,7 +328,7 @@ reader benefit. The re-suggest notice (§5.4.3) fires wherever the edit happened
 ### 5.7 Tests
 
 - Sum of breakdown line amounts == card's `totalCapex`, for every mix, on a
-  fixture exercising all eleven drivers. This is the invariant that stops the
+  fixture exercising all fifteen drivers. This is the invariant that stops the
   breakdown and the total becoming two quantities.
 - `infraCapex` appears exactly once when any electrification is active, and not
   at all when none is.
