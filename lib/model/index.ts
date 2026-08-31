@@ -25,6 +25,7 @@ import { gridFactorFn } from "./grid";
 import { FAMILY_IDX } from "./palette";
 import { effectiveLeakImprovementPct, validateCharge, validateTargetableSystems } from "./refrigerant-charge";
 import { buildTrajectory, targetLine } from "./trajectory";
+import { groupCapexLines, type CapexContribution, type CapexLine } from "./capex";
 import type {
   CombustionAsset,
   LeverSettings,
@@ -86,6 +87,8 @@ export interface ComputeResult {
   baseline: ReturnType<typeof baselineScope1>;
   baseTotalT: number;
   levers: LeverSummary[];
+  /** Itemised capital, one line per driver. Sums to the levers' total capex. */
+  capexLines: CapexLine[];
   segments: SegmentImpact[];
   wedges: Wedge[];
   trajectory: TrajectoryRow[];
@@ -142,6 +145,9 @@ export function compute(
   let fuelNewSpend = 0, fuelDispSpend = 0, fuelCapex = 0;
   let anyElec = false;
   let elecStart = Infinity, elecEnd = -Infinity, fuelStart = Infinity, fuelEnd = -Infinity;
+  /* Pushed from the SAME expressions that accumulate the totals above, so the
+     breakdown and the lever total are one set of additions rather than two. */
+  const capex: CapexContribution[] = [];
 
   for (const a of assets) {
     const acts = s.byAsset[a.id];
@@ -158,6 +164,7 @@ export function compute(
       if (a.category === "mobile") effMobileT += r.efficiencyAbatementT;
       else effStationaryT += r.efficiencyAbatementT;
       effCapex += acts.efficiency.capex;
+      capex.push({ driverId: "s1-efficiency", sourceId: a.id, amount: acts.efficiency.capex });
       // Efficiency cuts VOLUME, so it saves the fuel half only. Crediting the
       // whole bill charged it with maintenance it never touched (F2).
       effOpexSaving += spend.fuel * r.effFraction;
@@ -188,7 +195,17 @@ export function compute(
         ? fa.evMaintenanceRatioPct / 100
         : fa.heatPumpMaintenanceRatioPct / 100;
       elecMaintAddBack += spend.maintenance * r.elecFraction * retainRatio;
-      elecCapex += electrifyCapexFor(a, acts.electrify);
+      const thisElecCapex = electrifyCapexFor(a, acts.electrify);
+      elecCapex += thisElecCapex;
+      if (a.category === "mobile") {
+        const e = acts.electrify;
+        const perUnit = (e.purchaseTiming ?? "replacement") === "replacement"
+          ? e.assetCapex * ((e.replacementPremiumPct ?? 40) / 100)
+          : e.assetCapex;
+        capex.push({ driverId: "s1-ev", sourceId: a.id, amount: thisElecCapex, quantity: e.unitsToConvert, rate: perUnit });
+      } else {
+        capex.push({ driverId: "s1-heatpump", sourceId: a.id, amount: thisElecCapex });
+      }
     }
 
     // Fuel switching covers both the drop-in blend and flex-fuel vehicles —
@@ -219,6 +236,14 @@ export function compute(
       fuelNewSpend += postEffVolume * r.fuelFraction * acts.fuelSwitch.altFuelPricePerUnit;
       fuelCapex += (fuelOn ? acts.fuelSwitch.retrofitCapex : 0)
         + (flexOn ? acts.flexFuel!.unitsToConvert * acts.flexFuel!.vehicleCapex : 0);
+      capex.push({ driverId: "s1-fuel-retrofit", sourceId: a.id, amount: fuelOn ? acts.fuelSwitch.retrofitCapex : 0 });
+      if (flexOn) {
+        capex.push({
+          driverId: "s1-flexfuel", sourceId: a.id,
+          amount: acts.flexFuel!.unitsToConvert * acts.flexFuel!.vehicleCapex,
+          quantity: acts.flexFuel!.unitsToConvert, rate: acts.flexFuel!.vehicleCapex,
+        });
+      }
     }
   }
 
@@ -251,6 +276,7 @@ export function compute(
     if (leakOn) {
       refGasSavingOpex += sys.toppedUpKg * (leakPct / 100) * sys.gasCostPerKg;
       refCapex += acts.leakFix.capex ?? 0;
+      capex.push({ driverId: "s1-ldar", sourceId: sys.id, amount: acts.leakFix.capex ?? 0 });
       refStart = Math.min(refStart, acts.leakFix.startYear);
       refEnd = Math.max(refEnd, acts.leakFix.targetYear);
     }
@@ -259,6 +285,7 @@ export function compute(
       // whatever the leak fix already saved.
       refGasSavingOpex += sys.toppedUpKg * (1 - leakPct / 100) * (chargeReductionPct / 100) * sys.gasCostPerKg;
       refCapex += chargeCut!.capex;
+      capex.push({ driverId: "s1-charge-cut", sourceId: sys.id, amount: chargeCut!.capex });
       refStart = Math.min(refStart, chargeCut!.startYear);
       refEnd = Math.max(refEnd, chargeCut!.targetYear);
     }
@@ -273,6 +300,7 @@ export function compute(
       refAltGasSpend += gShare * topUpAfterLeak * altFactor.volAdj * altPrice;
       refBaseGasDisp += gShare * topUpAfterLeak * sys.gasCostPerKg;
       refCapex += acts.gasSwitch.retrofitCapex;
+      capex.push({ driverId: "s1-gas-retrofit", sourceId: sys.id, amount: acts.gasSwitch.retrofitCapex });
       refStart = Math.min(refStart, acts.gasSwitch.startYear);
       refEnd = Math.max(refEnd, acts.gasSwitch.targetYear);
     }
@@ -303,6 +331,11 @@ export function compute(
   const elecOpexDelta = elecEnergyCost + elecMaintAddBack + scope2SpillFullT * recPerTonne - elecDispFuel - elecDispMaint;
   const fuelOpexDelta = fuelNewSpend - fuelDispSpend;
   const elecCapexTotal = elecCapex + (anyElec ? g.infraCapex : 0);
+  if (anyElec && g.infraCapex !== 0) {
+    // One lump for the whole company, not a share of any asset — which is why it
+    // needs its own row rather than hiding inside Electrification (defect B4).
+    capex.push({ driverId: "s1-charging-infra", sourceId: "portfolio", amount: g.infraCapex });
+  }
 
   const elecParts: OpexPart[] = [
     { label: "New electricity cost", amount: elecEnergyCost, kind: "elec" },
@@ -414,6 +447,7 @@ export function compute(
     baseline,
     baseTotalT,
     levers: leverRows,
+    capexLines: groupCapexLines(capex),
     segments,
     wedges,
     trajectory,
