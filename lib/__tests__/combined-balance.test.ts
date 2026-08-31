@@ -38,7 +38,15 @@ const s2Base: Scope2Levers = {
   },
 };
 
-const inp: CombinedInputs = { assets, systems, s1Base, facilities, s2Base, baseYear: 2025 };
+/* No year-wise inventory behind these fixtures, so there is no rate to derive
+   and both fallbacks are genuinely absent — the engines fall through to their
+   1 %/yr floor, which is what every expectation below was already measured on.
+   Stated explicitly because the fields are REQUIRED: that is what stops a
+   construction site from silently omitting a premise again. */
+const inp: CombinedInputs = {
+  assets, systems, s1Base, facilities, s2Base, baseYear: 2025,
+  s1BauFallbackPct: undefined, s2BauFallbackPct: undefined,
+};
 
 /** Run the real model for a dial set and read its position off the same function
  *  the rail uses. No mocks: this is the engine the screen runs.
@@ -51,8 +59,16 @@ const positionOf = (
 ) => {
   let s1s = applyDials(i.assets, i.systems, i.s1Base, d.s1);
   if (leakFixes) s1s = withLeakFixes(s1s, i.systems);
-  const r1 = compute(i.assets, i.systems, s1s, i.baseYear);
-  const r2 = computeScope2(i.facilities, applyDials2(i.facilities, i.s2Base, d.s2), i.baseYear, s1s.assumptions);
+  /* Fifth argument on both, passed exactly as lib/store.tsx and
+     lib/scope2/store.tsx pass `derivedBau?.pct`. This helper is the RAIL's path,
+     rebuilt independently of combined-balance.ts — which is what lets the
+     invariant test at the bottom of this file catch a suggester that drops the
+     premise the rail states. */
+  const r1 = compute(i.assets, i.systems, s1s, i.baseYear, i.s1BauFallbackPct);
+  const r2 = computeScope2(
+    i.facilities, applyDials2(i.facilities, i.s2Base, d.s2), i.baseYear,
+    s1s.assumptions, i.s2BauFallbackPct,
+  );
   return targetPosition(combineTrajectories(r1.trajectory, r2.trajectoryMarket), year, pct);
 };
 
@@ -313,5 +329,67 @@ describe("the target is a LEVEL, not a quantity avoided", () => {
     const p = positionOf(grown, dials, 50, 2030, false);
     expect(combinedReduction2030({ ...grown, targetYear: 2030 }, dials))
       .toBeCloseTo((p.base - p.netAtYear) / p.base, 6);
+  });
+});
+
+/* ── The invariant this whole branch is about ───────────────────────────────
+   THE GROWTH RATE THE RAIL STATES IS THE RATE THE MIX SUGGESTER USES.
+
+   `results()` called both engines with FOUR arguments, so no derived rate ever
+   reached the suggester: it built and scored every mix on the engines' 1 %/yr
+   floor while the stores ran the rail at 2.84 % (Scope 1) and 7.46 % (Scope 2).
+   `reductionOf` is both the greedy walk's stop rule and `MixOption.achieved`, so
+   all three cards badged "meets target" for plans delivering 25.5 / 30.8 /
+   56.9 % on the app's own premises — Apply, and the rail showed the gap back.
+
+   The fixture below carries DISTINCT, non-1 rates so a dropped fallback cannot
+   coincide with the floor and the two scopes cannot be mistaken for each other. */
+describe("the premise the suggester runs on IS the premise the rail states", () => {
+  const derived: CombinedInputs = { ...inp, s1BauFallbackPct: 3.2, s2BauFallbackPct: 7.4 };
+
+  it("reaches the engines at all — a derived premise moves the measured position", () => {
+    expect(combinedReduction2030(derived, currentCombinedDials(derived)))
+      .not.toBeCloseTo(combinedReduction2030(inp, currentCombinedDials(inp)), 4);
+  });
+
+  it("each scope gets ITS OWN rate, not the other scope's", () => {
+    const swapped: CombinedInputs = { ...inp, s1BauFallbackPct: 7.4, s2BauFallbackPct: 3.2 };
+    expect(combinedReduction2030(derived, currentCombinedDials(derived)))
+      .not.toBeCloseTo(combinedReduction2030(swapped, currentCombinedDials(swapped)), 4);
+  });
+
+  it("every suggested mix's `achieved` equals the rail's own arithmetic on the same premise", () => {
+    const options = suggestMixOptions(derived, 0.4);
+    expect(options).toHaveLength(3);
+    for (const o of options) {
+      // positionOf rebuilds the rail's path from the engines directly, passing
+      // the fallbacks the way the two stores do, then reads `targetPosition` —
+      // the very function the rail calls. Drop either fallback inside
+      // `results()` and these two numbers diverge.
+      const p = positionOf(derived, o.dials, 40);
+      expect(o.achieved, `${o.objective}: achieved vs the rail`)
+        .toBeCloseTo((p.base - p.netAtYear) / p.base, 9);
+      // And the badge agrees with the rail's own verdict — the user-visible
+      // form of the defect: "meets target" on a card, a large gap on the rail.
+      if (o.met) {
+        expect(p.met, `${o.objective}: badged as meeting the target, rail disagrees`).toBe(true);
+      }
+    }
+  });
+
+  it("an explicit override still beats the derived premise, in the suggester too", () => {
+    const overridden: CombinedInputs = {
+      ...derived,
+      s1Base: { ...s1Base, assumptions: { ...s1Base.assumptions, bauGrowthPct: 0 } },
+    };
+    // A flat BAU is a real premise (`??`, not `||`), and it is not either
+    // derived rate — so the measured position must move, and must match the
+    // rail rebuilt on the same override.
+    const dials = currentCombinedDials(overridden);
+    const p = positionOf(overridden, dials, 40, 2030, false);
+    expect(combinedReduction2030(overridden, dials))
+      .toBeCloseTo((p.base - p.netAtYear) / p.base, 9);
+    expect(combinedReduction2030(overridden, dials))
+      .not.toBeCloseTo(combinedReduction2030(derived, currentCombinedDials(derived)), 4);
   });
 });

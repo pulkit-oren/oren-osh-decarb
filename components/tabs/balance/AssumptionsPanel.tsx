@@ -13,7 +13,10 @@
 import { useMemo } from "react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
-import { scope1ActualSeries, scope2ActualSeries, type YearPoint } from "@/lib/bau";
+import {
+  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, describeBauPremise,
+  scope1ActualSeries, scope2ActualSeries, type YearPoint,
+} from "@/lib/bau";
 import { targetPosition, type CombinedRow } from "@/lib/model/combined";
 import { CURRENCY } from "@/lib/defaults";
 import { NumField } from "@/components/tabs/activity/fields";
@@ -58,6 +61,20 @@ export function AssumptionsPanel({
   const setGrowth = (v: number | undefined) => { invalidate(); s1.updateAssumptions({ bauGrowthPct: v }); };
   const pctLabel = (n: number) => `${n >= 0 ? "" : "−"}${Math.abs(n).toFixed(1)} %/yr`;
 
+  /* What the field will fall back to if left blank — BOTH scopes' rates, in the
+     Scope 1 / Scope 2 order the block on the left lists them.
+     It showed Scope 1's derived rate alone, under a hint that says the override
+     applies to both scopes: on the shipped inventories it read `2.8` while
+     Scope 2 was actually running at 7.5. Resolved through the same
+     describeBauPremise the rail uses (override deliberately `undefined` here —
+     this describes the state the field is being compared AGAINST), so a scope
+     with too few years shows the 1.0 %/yr floor it will really use rather than
+     disappearing. */
+  const derivedPremise = describeBauPremise(undefined, s1.derivedBau, s2.derivedBau);
+  const overridePlaceholder = derivedPremise.single
+    ? derivedPremise.s1Pct.toFixed(1)
+    : `${derivedPremise.s1Pct.toFixed(1)} / ${derivedPremise.s2Pct.toFixed(1)}`;
+
   return (
     <div className="h-full min-h-0 overflow-y-auto p-6 space-y-7">
       {/* ── 1. Business as usual ───────────────────────────────────────── */}
@@ -88,13 +105,19 @@ export function AssumptionsPanel({
           <label className="block">
             <span className="text-[11px] text-ink-soft flex items-center gap-1">
               Use instead
-              <InfoTip text="One rate, applied to both scopes. Leave blank to let each scope follow its own history. Zero is a valid premise — a flat business-as-usual." />
+              <InfoTip text={`One rate, applied to both scopes, replacing the per-scope rates on the left. Leave blank to let each scope follow its own history — the greyed-out figure is what is in play now (Scope 1 / Scope 2). Zero is a valid premise: a flat business-as-usual. Accepted range ${BAU_GROWTH_MIN_PCT} to ${BAU_GROWTH_MAX_PCT} %/yr.`} />
             </span>
             <span className="mt-1.5 flex items-center gap-2">
               <input
+                /* min/max bound the SPINNER only — typing past them is still
+                   possible, so the same bounds are enforced where the value is
+                   read, in resolveBauGrowthPct. Following the precedent in
+                   lib/finance/assumptions.ts. Without either, a typed 1000000
+                   was accepted and made every downstream figure meaningless. */
                 type="number" step={0.1}
+                min={BAU_GROWTH_MIN_PCT} max={BAU_GROWTH_MAX_PCT}
                 aria-label="BAU growth override"
-                placeholder={s1.derivedBau ? s1.derivedBau.pct.toFixed(1) : "1.0"}
+                placeholder={overridePlaceholder}
                 value={override ?? ""}
                 onChange={(e) => setGrowth(e.target.value === "" ? undefined : Number(e.target.value))}
                 className="w-24 border border-line rounded-lg px-3 py-2 text-sm bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"

@@ -40,6 +40,26 @@ export interface CombinedInputs {
   baseYear: number;
   /** Year the reduction is measured at (defaults to 2030). */
   targetYear?: number;
+  /** Each scope's business-as-usual growth fallback, in PERCENT — 2.84 means
+   *  2.84 %/yr, NOT a fraction; the engines divide by 100 themselves. This is
+   *  the rate each store derives from its own year-wise inventory
+   *  (`deriveBauGrowth`), and `assumptions.bauGrowthPct` still beats it inside
+   *  the engines.
+   *
+   *  REQUIRED, not optional, and deliberately so. `results()` below used to call
+   *  both engines with four arguments, so no derived rate ever reached the
+   *  suggester: every mix was built on the engines' 1 %/yr floor while the rail
+   *  above the cards annotated the same curve with the derived rate. Because
+   *  `reductionOf` is BOTH the greedy walk's stop rule and `MixOption.achieved`,
+   *  all three cards badged "meets target" for plans that finished far above the
+   *  level the rail was showing — Apply, and the gap reappeared immediately.
+   *
+   *  `number | undefined` as a required property is the point: `undefined` stays
+   *  meaningful ("no derived rate available — fall through to the floor"), but
+   *  the compiler demands the key at every construction site, so the omission
+   *  cannot be made silently a second time. */
+  s1BauFallbackPct: number | undefined;
+  s2BauFallbackPct: number | undefined;
 }
 
 export type MixObjective = "costPerTonne" | "capex" | "opexSaving";
@@ -86,14 +106,16 @@ export function currentCombinedDials(inp: CombinedInputs): CombinedDials {
 function results(inp: CombinedInputs, d: CombinedDials, leakFixes: boolean) {
   let s1Settings = applyDials(inp.assets, inp.systems, inp.s1Base, d.s1);
   if (leakFixes) s1Settings = withLeakFixes(s1Settings, inp.systems);
-  const r1 = compute(inp.assets, inp.systems, s1Settings, inp.baseYear);
+  // Fifth argument on both calls: the growth premise each store derived. Its
+  // absence here was the defect described on `CombinedInputs.s1BauFallbackPct`.
+  const r1 = compute(inp.assets, inp.systems, s1Settings, inp.baseYear, inp.s1BauFallbackPct);
   // Same assumptions the Scope 1 call above just used. Before computeScope2
   // took this argument the two scopes priced capital differently — Scope 1 on
   // the user's discount rate, Scope 2 on a hardcoded 10% (F8) — and this
   // combined view is exactly where that discrepancy was on display.
   const r2 = computeScope2(
     inp.facilities, applyDials2(inp.facilities, inp.s2Base, d.s2), inp.baseYear,
-    s1Settings.assumptions,
+    s1Settings.assumptions, inp.s2BauFallbackPct,
   );
   return { r1, r2 };
 }

@@ -33,11 +33,13 @@ import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/mode
 import { combineTrajectories, targetPosition } from "@/lib/model/combined";
 import { END_YEAR } from "@/lib/model";
 import { suggestMixOptions, type CombinedInputs, type MixObjective, type MixOption } from "@/lib/combined-balance";
+import { describeBauPremise, type DerivedGrowth } from "@/lib/bau";
 import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/select";
 import { CURRENCY } from "@/lib/defaults";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { SectionTabs } from "@/components/ui/SectionTabs";
 import { AssumptionsPanel } from "./balance/AssumptionsPanel";
+import { BauRates } from "./balance/BauRates";
 import { GapStack, type GapSegment } from "@/components/charts/GapStack";
 import { MaccChart, type MaccLever } from "@/components/charts/MaccChart";
 import { CapitalByYear, type CapitalSeriesLever } from "@/components/charts/CapitalByYear";
@@ -132,6 +134,29 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
     targetPosition(rows, year, target);
   const allocPct = requiredT > 0 ? allocatedT / requiredT : 1;
 
+  /* ---- the BAU premise, as the two places that STATE it must state it ----
+     `bauAtYear` above is a COMBINED figure: a Scope 1 curve and a Scope 2 curve
+     growing at two independently derived rates, added year by year. Both the
+     premise strip and the rail used to label it with Scope 1's chain alone.
+     describeBauPremise runs the same resolveBauGrowthPct the engines run, so
+     these are the rates the engines apply, and it reports whether one number
+     covers both scopes (it does exactly when an override is set, or when the
+     two derived rates round to the same 1 dp). */
+  const bauPremise = describeBauPremise(
+    s1.settings.assumptions.bauGrowthPct, s1.derivedBau, s2.derivedBau,
+  );
+  const spanOf = (d: DerivedGrowth | null) => (d ? `FY${d.fromYear} to FY${d.toYear}` : null);
+  const s1Span = spanOf(s1.derivedBau);
+  const s2Span = spanOf(s2.derivedBau);
+  const bauSpan = !s1Span ? s2Span
+    : !s2Span ? s1Span
+      : s1Span === s2Span ? s1Span
+        : `${s1Span} on Scope 1 and ${s2Span} on Scope 2`;
+  /** One scope has years of data and the other does not, so one of the two
+   *  rates above is the fallback rather than anything derived. Said out loud
+   *  because it is otherwise indistinguishable from a derived 1.0 %/yr. */
+  const bauPartlyDerived = (s1.derivedBau == null) !== (s2.derivedBau == null);
+
   /* ---- derived dials + write-through ---- */
   const d1 = deriveDials(assets, systems, s1.settings);
   const d2 = deriveDials2(facilities, s2.levers);
@@ -158,6 +183,11 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
     const inp: CombinedInputs = {
       assets, systems, s1Base: s1.settings, facilities, s2Base: s2.levers,
       baseYear: s1.baseYear, targetYear: year,
+      // The premise the rail states, handed to the suggester so its stop rule
+      // and `achieved` are measured on it too. Percent, not fraction — the
+      // engines divide by 100 themselves.
+      s1BauFallbackPct: s1.derivedBau?.pct,
+      s2BauFallbackPct: s2.derivedBau?.pct,
     };
     setOptions(suggestMixOptions(inp, target / 100, capexBudget > 0 ? { capexBudget } : undefined));
     setAppliedObj(null);
@@ -391,11 +421,8 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
         </span>
         <span aria-hidden="true" className="text-ink-faint">·</span>
         <span>
-          BAU{" "}
-          <strong className="text-ink tabular-nums">
-            {(s1.settings.assumptions.bauGrowthPct ?? s1.derivedBau?.pct ?? 1).toFixed(1)} %/yr
-          </strong>
-          {s1.settings.assumptions.bauGrowthPct == null && " (from your data)"}
+          BAU <BauRates premise={bauPremise} />
+          {!bauPremise.overridden && " (from your data)"}
         </span>
         <button
           type="button"
@@ -688,12 +715,15 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
               <p>Get emissions down to <strong className="text-ink tabular-nums">{fmt(committedLevel)} t</strong> by {year} — {target}% below the {s1.baseYear} base of {fmt(base)} t.</p>
               <p>
                 Business-as-usual reaches <strong className="text-ink tabular-nums">{fmt(bauAtYear)} t</strong> by {year},
-                growing at <strong className="text-ink tabular-nums">{(s1.settings.assumptions.bauGrowthPct ?? s1.derivedBau?.pct ?? 1).toFixed(1)}%/yr</strong>
+                growing at <BauRates premise={bauPremise} />
                 {" — "}
-                {s1.settings.assumptions.bauGrowthPct != null
-                  ? <>a rate you set on the <strong className="text-ink">Assumptions</strong> tab</>
-                  : s1.derivedBau
-                    ? <>from your own year-on-year data, FY{s1.derivedBau.fromYear} to FY{s1.derivedBau.toYear}</>
+                {bauPremise.overridden
+                  ? <>a rate you set on the <strong className="text-ink">Assumptions</strong> tab, which replaces both scopes&rsquo; own history</>
+                  : bauSpan
+                    ? <>
+                        from your own year-on-year data, {bauSpan}
+                        {bauPartlyDerived && <>; the other scope has too few years and falls back</>}
+                      </>
                     : <>the fallback, because there is not yet enough year-on-year data to derive one</>}
                 . So <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> has to come out of that path.
                 Your plan takes out <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>, landing at {fmt(netAtYear)} t.

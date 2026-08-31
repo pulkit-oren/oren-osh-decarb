@@ -25,7 +25,7 @@ interface Col {
 }
 
 export function CompareTab() {
-  const { resolvedBaseAssets, baseSystems, baseYear, scenarios, saveScenario, deleteScenario, result } = useScenario();
+  const { resolvedBaseAssets, baseSystems, baseYear, scenarios, saveScenario, deleteScenario, result, derivedBau } = useScenario();
   const [name, setName] = useState("");
 
   const cols: Col[] = [
@@ -37,7 +37,14 @@ export function CompareTab() {
         name: s.name,
         savedAt: s.savedAt,
         note: s.note,
-        result: compute(resolvedBaseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), s.settings, baseYear),
+        /* Fifth argument: the SAME derived growth premise the store hands the
+           live `result` above. Without it this column recomputed every saved
+           scenario on the engines' 1 %/yr floor, so saving the current plan
+           unchanged produced two identical columns with different BAU
+           sparklines and a different "Of the cut needed by 2030". A scenario
+           that carries its own `assumptions.bauGrowthPct` override still beats
+           this inside the engine — that override was part of what was saved. */
+        result: compute(resolvedBaseAssets.filter((a) => !a.excluded), baseSystems.filter((s) => !s.excluded), s.settings, baseYear, derivedBau?.pct),
       })),
   ];
 
