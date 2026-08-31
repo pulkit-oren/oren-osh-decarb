@@ -146,16 +146,6 @@ export function computeScope2(
     const eff = applyEfficiency(f, acts.efficiency);
     const gen = applyGeneration(f, acts.generation, eff.residualLoadKwh);
     perFacility[f.id] = { eff, gen };
-    capex.push(
-      { driverId: "s2-led", sourceId: f.id, amount: eff.capexParts.led },
-      { driverId: "s2-motor", sourceId: f.id, amount: eff.capexParts.motor },
-      { driverId: "s2-bms", sourceId: f.id, amount: eff.capexParts.bms },
-      { driverId: "s2-solar", sourceId: f.id, amount: gen.capexParts.solarGross,
-        quantity: gen.effectiveKwp, rate: acts.generation.solarCapexPerKw },
-      { driverId: "s2-battery", sourceId: f.id, amount: gen.capexParts.batteryGross,
-        quantity: acts.generation.batteryKwh, rate: acts.generation.batteryCapexPerKwh },
-      { driverId: "s2-solar-subsidy", sourceId: f.id, amount: gen.capexParts.subsidy },
-    );
     // Electricity already on PPAs/RECs — the legacy per-facility % plus this
     // facility's share of entered VPPA/I-REC records, capped at the post-lever
     // grid draw. New procurement only addresses what's left, so the two never
@@ -173,6 +163,15 @@ export function computeScope2(
       effSaving += eff.opexSaving;
       effStart = Math.min(effStart, acts.efficiency.startYear);
       effEnd = Math.max(effEnd, acts.efficiency.targetYear);
+      // Co-located with the effCapex accumulation above so the breakdown and
+      // the total are structurally forced to agree — pushing outside this
+      // gate let a zero-load, fully-priced package report capex the lever
+      // total didn't (fix round 1).
+      capex.push(
+        { driverId: "s2-led", sourceId: f.id, amount: eff.capexParts.led },
+        { driverId: "s2-motor", sourceId: f.id, amount: eff.capexParts.motor },
+        { driverId: "s2-bms", sourceId: f.id, amount: eff.capexParts.bms },
+      );
     }
     if (acts.generation.enabled && gen.usedOnSiteKwh > 0) {
       genAbateT += (gen.usedOnSiteKwh * f.gridEf) / 1000;
@@ -185,6 +184,16 @@ export function computeScope2(
       genDemandSaving += gen.demandSaving;
       genStart = Math.min(genStart, acts.generation.startYear);
       genEnd = Math.max(genEnd, acts.generation.targetYear);
+      // Same reasoning as the efficiency block above: co-located with genCapex
+      // so a zero-residual-load facility with a priced array can't report
+      // capex in the breakdown that the lever total drops.
+      capex.push(
+        { driverId: "s2-solar", sourceId: f.id, amount: gen.capexParts.solarGross,
+          quantity: gen.effectiveKwp, rate: acts.generation.solarCapexPerKw },
+        { driverId: "s2-battery", sourceId: f.id, amount: gen.capexParts.batteryGross,
+          quantity: acts.generation.batteryKwh, rate: acts.generation.batteryCapexPerKwh },
+        { driverId: "s2-solar-subsidy", sourceId: f.id, amount: gen.capexParts.subsidy },
+      );
     }
   }
 

@@ -87,3 +87,57 @@ describe("Scope 2 capexLines", () => {
     expect(proc.edit).toBeNull();
   });
 });
+
+/* Fix round 1: the lever totals are gated on an abatement proxy
+   (`eff.savedKwh > 0`, `gen.usedOnSiteKwh > 0`) that a priced-but-inert
+   package can fail even though its capex is nonzero. The six capex.push
+   calls used to fire unconditionally, so a package like this could report
+   capital in the breakdown that the lever total (correctly, per the gate
+   that already exists) reported as zero. The fix co-locates each push
+   inside the same gate as the matching accumulator — this suite pins that
+   down. Removing the gate itself is explicitly out of scope; see the task-4
+   report. */
+const noProcurement: Scope2Levers["procurement"] = {
+  enabled: false, ppaPct: 0, greenTariffPct: 0, recPct: 0,
+  ppaStrikeDeltaPerKwh: 0, greenTariffPremiumPerKwh: 0, recPricePerKwh: 0,
+  re100Exclusion: false, startYear: 2026, targetYear: 2030,
+};
+
+describe("Scope 2 capexLines — zero-abatement edge cases (fix round 1)", () => {
+  it("drops an efficiency package that spends capital but saves no energy (zero load)", () => {
+    const zeroLoad: Facility[] = [
+      { id: "z1", name: "Zero-load plant", annualLoadKwh: 0, tariffPerKwh: 9, loadSplit: { lightingPct: 15, motorPct: 40, hvacPct: 25 }, roofSpaceM2: 2_000, peakLoadKw: 0, gridEf: 0.71, irradiance: 1400, isolated: false, existingSolarKwp: 0, existingRenewablePct: 0 },
+    ];
+    const r = computeScope2(
+      zeroLoad,
+      { byFacility: { z1: { efficiency: eff({ ledCapex: 750_000 }), generation: gen({ enabled: false }) } }, procurement: noProcurement },
+      2025, DEFAULT_SETTINGS.assumptions,
+    );
+    const effLever = r.levers.find((l) => l.id === "efficiency")!;
+    // Zero load -> savedKwh 0 -> the pre-existing gate reports zero capex for
+    // this lever even though ledCapex is fully priced.
+    expect(effLever.capex).toBe(0);
+    const effLines = r.capexLines.filter((l) => l.leverId === "efficiency");
+    expect(sumCapexLines(effLines)).toBeCloseTo(effLever.capex, 6);
+    // Absent, not an orphaned $0 row.
+    expect(r.capexLines.some((l) => l.driverId === "s2-led")).toBe(false);
+  });
+
+  it("drops a solar array that spends capital but self-consumes nothing (zero residual load)", () => {
+    const zeroResidual: Facility[] = [
+      { id: "z2", name: "Zero-residual plant", annualLoadKwh: 0, tariffPerKwh: 9, loadSplit: { lightingPct: 15, motorPct: 40, hvacPct: 25 }, roofSpaceM2: 2_000, peakLoadKw: 0, gridEf: 0.71, irradiance: 1400, isolated: false, existingSolarKwp: 0, existingRenewablePct: 0 },
+    ];
+    const r = computeScope2(
+      zeroResidual,
+      { byFacility: { z2: { efficiency: eff({ enabled: false }), generation: gen({ solarKwp: 200, batteryKwh: 0, subsidyPct: 0 }) } }, procurement: noProcurement },
+      2025, DEFAULT_SETTINGS.assumptions,
+    );
+    const genLever = r.levers.find((l) => l.id === "generation")!;
+    // Zero load -> residualLoadKwh 0 -> usedOnSiteKwh 0 despite effectiveKwp
+    // being fully priced (roof headroom easily covers 200 kW).
+    expect(genLever.capex).toBe(0);
+    const genLines = r.capexLines.filter((l) => l.leverId === "generation");
+    expect(sumCapexLines(genLines)).toBeCloseTo(genLever.capex, 6);
+    expect(r.capexLines.some((l) => l.driverId === "s2-solar")).toBe(false);
+  });
+});
