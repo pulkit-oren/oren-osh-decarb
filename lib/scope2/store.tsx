@@ -22,7 +22,7 @@ import type {
   ProcurementSettings, Scope2Levers, Scope2Scenario,
 } from "./model/types";
 import { allIds, migrateScope2Levers, resolveFacilities, uniqueId } from "./store-helpers";
-import { deriveBauGrowth, scope2ActualSeries, type DerivedGrowth } from "@/lib/bau";
+import { deriveScope2Bau, type DerivedGrowth } from "@/lib/bau";
 
 interface Scope2StoreShape {
   facilities: FacilitiesByYear;
@@ -192,7 +192,7 @@ export function Scope2Provider({
   // constants to two tabs, and the compiler could not flag it.
   const assumptions = useOptionalAssumptions();
   const derivedBau = useMemo(
-    () => deriveBauGrowth(scope2ActualSeries(facilities), baseYear),
+    () => deriveScope2Bau(facilities, baseYear),
     [facilities, baseYear],
   );
   const result = useMemo(

@@ -16,8 +16,8 @@ import { baselineScope1 } from "./model/baseline";
 import { baselineScope2 } from "./scope2/model/baseline";
 import { resolveCombustion, resolveRefrigeration } from "./yearly";
 import { resolveFacilities } from "./scope2/store-helpers";
-import type { CombustionByYear, RefrigerationByYear } from "./model/types";
-import type { FacilitiesByYear } from "./scope2/model/types";
+import type { CombustionAsset, CombustionByYear, RefrigerationByYear, RefrigerationSystem } from "./model/types";
+import type { Facility, FacilitiesByYear } from "./scope2/model/types";
 
 /** One year's actual emissions, in tonnes CO2e. */
 export type YearPoint = { year: number; totalT: number };
@@ -29,6 +29,16 @@ export interface DerivedGrowth {
   toYear: number;
   /** Compounding years between the endpoints. */
   years: number;
+  /** Which basis the rate was measured on. Absent on the raw `deriveBauGrowth`
+   *  primitive, which has no notion of named sources — only `deriveScope1Bau`
+   *  / `deriveScope2Bau` set it. */
+  basis?: "like-for-like" | "total";
+  /** How many sources the rate is measured on (present in both endpoint years). */
+  keptCount?: number;
+  /** Names of sources that appeared after the first endpoint year — excluded from the rate. */
+  joined?: string[];
+  /** Names of sources that disappeared before the base year — excluded from the rate. */
+  left?: string[];
 }
 
 const yearsOf = (byYear: Record<number, unknown>): number[] =>
@@ -88,6 +98,97 @@ export function deriveBauGrowth(points: YearPoint[], baseYear: number): DerivedG
   if (!Number.isFinite(pct)) return null;
 
   return { pct, fromYear: first.year, toYear: last.year, years };
+}
+
+/* ---------- boundary-aware (like-for-like) derivation ---------- */
+
+/** Which ids are present at both endpoints, and the NAMES of what is not —
+ *  a source that joined after `from` (present in `to`, absent in `from`) or
+ *  left before `to` (present in `from`, absent in `to`). Removals are treated
+ *  exactly like additions: both are just "not in the intersection". */
+function boundary<T extends { id: string; name: string }>(
+  from: T[],
+  to: T[],
+): { kept: Set<string>; joined: string[]; left: string[] } {
+  const fromIds = new Set(from.map((x) => x.id));
+  const toIds = new Set(to.map((x) => x.id));
+  return {
+    kept: new Set([...fromIds].filter((id) => toIds.has(id))),
+    joined: to.filter((x) => !fromIds.has(x.id)).map((x) => x.name),
+    left: from.filter((x) => !toIds.has(x.id)).map((x) => x.name),
+  };
+}
+
+/** Scope 1's rate, measured like-for-like: `deriveBauGrowth` picks the
+ *  endpoints (never reimplemented here), and this recomputes the two totals
+ *  restricted to the source ids present at BOTH of them — so a source that
+ *  joined or left mid-span cannot read as growth. Combustion assets and
+ *  refrigeration systems are two separate id spaces; each is intersected
+ *  against itself and the two reports are combined. Falls back to the
+ *  total-basis result (never to the 1% floor) when the restricted basis
+ *  cannot carry a rate. */
+export function deriveScope1Bau(
+  combustion: CombustionByYear,
+  refrigeration: RefrigerationByYear,
+  baseYear: number,
+): DerivedGrowth | null {
+  const total = deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), baseYear);
+  if (!total) return null;
+  const { fromYear, toYear, years } = total;
+
+  const fromAssets = resolveCombustion(combustion, fromYear).filter((a) => !a.excluded);
+  const toAssets = resolveCombustion(combustion, toYear).filter((a) => !a.excluded);
+  const fromSystems = resolveRefrigeration(refrigeration, fromYear).filter((s) => !s.excluded);
+  const toSystems = resolveRefrigeration(refrigeration, toYear).filter((s) => !s.excluded);
+
+  const assetB = boundary(fromAssets, toAssets);
+  const systemB = boundary(fromSystems, toSystems);
+  const keptCount = assetB.kept.size + systemB.kept.size;
+  const joined = [...assetB.joined, ...systemB.joined];
+  const left = [...assetB.left, ...systemB.left];
+
+  const keepAssets = (rows: CombustionAsset[]) => rows.filter((r) => assetB.kept.has(r.id));
+  const keepSystems = (rows: RefrigerationSystem[]) => rows.filter((r) => systemB.kept.has(r.id));
+  const fromT = baselineScope1(keepAssets(fromAssets), keepSystems(fromSystems)).totalT;
+  const toT = baselineScope1(keepAssets(toAssets), keepSystems(toSystems)).totalT;
+
+  if (keptCount === 0 || !(fromT > 0)) return { ...total, basis: "total", keptCount, joined, left };
+  const pct = (Math.pow(toT / fromT, 1 / years) - 1) * 100;
+  if (!Number.isFinite(pct)) return { ...total, basis: "total", keptCount, joined, left };
+
+  return { pct, fromYear, toYear, years, basis: "like-for-like", keptCount, joined, left };
+}
+
+/** Scope 2's rate, measured like-for-like — same contract as `deriveScope1Bau`,
+ *  over the single facility id space. */
+export function deriveScope2Bau(
+  facilities: FacilitiesByYear,
+  baseYear: number,
+): DerivedGrowth | null {
+  const total = deriveBauGrowth(scope2ActualSeries(facilities), baseYear);
+  if (!total) return null;
+  const { fromYear, toYear, years } = total;
+
+  const fromF = resolveFacilities(facilities, fromYear).filter((f) => !f.excluded);
+  const toF = resolveFacilities(facilities, toYear).filter((f) => !f.excluded);
+  const b = boundary(fromF, toF);
+
+  const keep = (rows: Facility[]) => rows.filter((f) => b.kept.has(f.id));
+  const fromT = baselineScope2(keep(fromF)).totalLocationT;
+  const toT = baselineScope2(keep(toF)).totalLocationT;
+
+  if (b.kept.size === 0 || !(fromT > 0)) {
+    return { ...total, basis: "total", keptCount: b.kept.size, joined: b.joined, left: b.left };
+  }
+  const pct = (Math.pow(toT / fromT, 1 / years) - 1) * 100;
+  if (!Number.isFinite(pct)) {
+    return { ...total, basis: "total", keptCount: b.kept.size, joined: b.joined, left: b.left };
+  }
+
+  return {
+    pct, fromYear, toYear, years,
+    basis: "like-for-like", keptCount: b.kept.size, joined: b.joined, left: b.left,
+  };
 }
 
 /* ---------- bounds ---------- */

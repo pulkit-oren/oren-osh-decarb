@@ -15,7 +15,7 @@ import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import {
   BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, describeBauPremise,
-  scope1ActualSeries, scope2ActualSeries, type YearPoint,
+  scope1ActualSeries, scope2ActualSeries, type DerivedGrowth, type YearPoint,
 } from "@/lib/bau";
 import { targetPosition, type CombinedRow } from "@/lib/model/combined";
 import { CURRENCY } from "@/lib/defaults";
@@ -25,6 +25,38 @@ import { BauChart } from "@/components/charts/BauChart";
 import { fmt } from "@/lib/utils";
 
 const H = "text-[10px] uppercase tracking-wide text-ink-faint font-bold";
+
+/** One short line naming the basis a derived rate was measured on — the
+ *  number is unauditable without it. `noun` is what to call a source in this
+ *  scope ("sources" / "facilities"), matching keptCount's units.
+ *
+ *  `basis` is only ever "total" via deriveScopeNBau's fallback (an empty
+ *  intersection, or a restricted first total that is not positive) — so a
+ *  "total" basis with nothing in `joined`/`left` is the degenerate edge of
+ *  that fallback, not the ordinary no-change case (which is "like-for-like"
+ *  with empty joined/left, handled below). */
+function bauBasisLine(d: DerivedGrowth | null, noun: string): string {
+  if (!d) return "Not enough years of data — falling back to 1 %/yr";
+  const joined = d.joined ?? [];
+  const left = d.left ?? [];
+  const excluded = [...joined, ...left];
+
+  if (d.basis === "total") {
+    return excluded.length > 0
+      ? `measured on all ${noun}; a like-for-like basis was not available`
+      : `measured on all ${noun} — the set did not change`;
+  }
+
+  const count = d.keptCount ?? 0;
+  const base = `measured on the ${count} ${noun} present in both FY${d.fromYear} and FY${d.toYear}`;
+  if (excluded.length === 0) return base;
+
+  const clauses: string[] = [];
+  if (joined.length > 0) clauses.push(`${joined.join(", ")} joined after FY${d.fromYear}`);
+  if (left.length > 0) clauses.push(`${left.join(", ")} left before FY${d.toYear}`);
+  const verb = excluded.length > 1 ? "are" : "is";
+  return `${base}. ${clauses.join("; ")} and ${verb} excluded.`;
+}
 
 export function AssumptionsPanel({
   rows, year, target, capexBudget, setCapexBudget, invalidate,
@@ -91,15 +123,13 @@ export function AssumptionsPanel({
               {s1.derivedBau ? pctLabel(s1.derivedBau.pct) : "—"}
               <span className="text-[11px] font-semibold text-ink-faint ml-2">Scope 1</span>
             </div>
-            <div className="text-sm font-extrabold tabular-nums text-ink mt-0.5">
+            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s1.derivedBau, "sources")}</div>
+
+            <div className="text-sm font-extrabold tabular-nums text-ink mt-3">
               {s2.derivedBau ? pctLabel(s2.derivedBau.pct) : "—"}
               <span className="text-[11px] font-semibold text-ink-faint ml-2">Scope 2</span>
             </div>
-            <div className="text-[11px] text-ink-faint mt-1">
-              {s1.derivedBau
-                ? `FY${s1.derivedBau.fromYear} → FY${s1.derivedBau.toYear}`
-                : "Not enough years of data — falling back to 1 %/yr"}
-            </div>
+            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s2.derivedBau, "facilities")}</div>
           </div>
 
           <label className="block">

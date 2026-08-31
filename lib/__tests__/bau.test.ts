@@ -2,11 +2,28 @@
    and the CAGR that turns it into one growth rate. */
 import { describe, expect, it } from "vitest";
 import {
-  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, deriveBauGrowth, describeBauPremise,
-  resolveBauGrowthPct, scope1ActualSeries, scope2ActualSeries,
+  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, deriveBauGrowth, deriveScope1Bau, deriveScope2Bau,
+  describeBauPremise, resolveBauGrowthPct, scope1ActualSeries, scope2ActualSeries,
   type DerivedGrowth, type YearPoint,
 } from "../bau";
 import { DEFAULT_COMBUSTION_BY_YEAR, DEFAULT_REFRIGERATION_BY_YEAR, DEFAULT_BASE_YEAR } from "../defaults";
+import { DEFAULT_FACILITIES_BY_YEAR, DEFAULT_BASE_YEAR as SCOPE2_DEFAULT_BASE_YEAR } from "../scope2/defaults";
+import type { CombustionAsset, CombustionByYear, RefrigerationByYear, RefrigerationSystem } from "../model/types";
+import type { Facility, FacilitiesByYear } from "../scope2/model/types";
+
+/* Minimal fixture builders — only the fields deriveScope1Bau / deriveScope2Bau's
+   boundary logic actually reads (id, name, the volume that drives the total). */
+const mkAsset = (id: string, name: string, annualVolume: number): CombustionAsset => ({
+  id, name, category: "stationary", fuelType: "diesel", unit: "L", annualVolume, opex: 0,
+});
+const mkSystem = (id: string, name: string, toppedUpKg: number): RefrigerationSystem => ({
+  id, name, systemType: "commercialHVAC", refrigerant: "R410A", toppedUpKg, gasCostPerKg: 0,
+});
+const mkFacility = (id: string, name: string, annualLoadKwh: number): Facility => ({
+  id, name, annualLoadKwh, tariffPerKwh: 1,
+  loadSplit: { lightingPct: 0, motorPct: 0, hvacPct: 0 },
+  roofSpaceM2: 0, peakLoadKw: 0, gridEf: 0.5, irradiance: 1500, isolated: false,
+});
 
 const pts = (m: Record<number, number>): YearPoint[] =>
   Object.entries(m).map(([year, totalT]) => ({ year: Number(year), totalT }));
@@ -161,5 +178,200 @@ describe("scope2ActualSeries", () => {
     const s = scope2ActualSeries({ 2024: [], 2025: [] });
     expect(s.map((p) => p.year)).toEqual([2024, 2025]);
     for (const p of s) expect(p.totalT).toBe(0);
+  });
+});
+
+/* The boundary fix: the CAGR deriveBauGrowth reads off two endpoints is only
+   honest when the source set is the same at both endpoints. Both scope
+   entry points recompute the SAME endpoints (chosen by deriveBauGrowth,
+   never reimplemented) restricted to the ids present at both. */
+describe("deriveScope1Bau — like-for-like across a changed boundary", () => {
+  it("excludes a source that joins mid-span from the rate", () => {
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("a", "Genset", 1000)],
+      2025: [mkAsset("a", "Genset", 1000), mkAsset("b", "Big new source", 500000)],
+    };
+    const refrigeration: RefrigerationByYear = { 2021: [], 2025: [] };
+
+    const total = deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), 2025)!;
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.keptCount).toBe(1);
+    expect(d.joined).toEqual(["Big new source"]);
+    expect(d.left).toEqual([]);
+    // "b" joining swamps the total-basis rate; restricting to "a" alone must
+    // read very differently — this is the whole point of the fix.
+    expect(d.pct).toBeLessThan(total.pct - 10);
+  });
+
+  it("excludes a source that leaves mid-span from the rate, the same way", () => {
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("a", "Genset", 1000), mkAsset("b", "Old plant", 500000)],
+      2025: [mkAsset("a", "Genset", 1000)],
+    };
+    const refrigeration: RefrigerationByYear = { 2021: [], 2025: [] };
+
+    const total = deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), 2025)!;
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.keptCount).toBe(1);
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual(["Old plant"]);
+    // "b" leaving crashes the total-basis rate; "a" alone (unchanged volume)
+    // must read far above it — a closure is excluded exactly like an opening.
+    expect(d.pct).toBeGreaterThan(total.pct + 10);
+  });
+
+  it("is a no-op when the source set does not change: the rate equals the total basis exactly", () => {
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("a", "Genset", 1000), mkAsset("b", "Boiler", 2000)],
+      2025: [mkAsset("a", "Genset", 1500), mkAsset("b", "Boiler", 2600)],
+    };
+    const refrigeration: RefrigerationByYear = {
+      2021: [mkSystem("r1", "Cold store", 40)],
+      2025: [mkSystem("r1", "Cold store", 55)],
+    };
+
+    const total = deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), 2025)!;
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual([]);
+    expect(d.keptCount).toBe(3); // 2 combustion + 1 refrigeration
+    expect(d.pct).toBe(total.pct);
+  });
+
+  it("falls back to the total basis, not to 1, when every source is new", () => {
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("x", "Old-only asset", 1000)],
+      2025: [mkAsset("y", "New-only asset", 2000)],
+    };
+    const refrigeration: RefrigerationByYear = { 2021: [], 2025: [] };
+
+    const total = deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), 2025)!;
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+
+    expect(d.basis).toBe("total");
+    expect(d.keptCount).toBe(0);
+    expect(d.joined).toEqual(["New-only asset"]);
+    expect(d.left).toEqual(["Old-only asset"]);
+    expect(d.pct).toBe(total.pct);
+  });
+
+  it("intersects combustion and refrigeration in their own id spaces — a shared id string does not cross-contaminate", () => {
+    // Both lists use the id "x", but they are different spaces: the
+    // combustion "x" is present in both years (kept); the refrigeration "x" is
+    // present only in 2021 (left). A boundary fix that flattened both id
+    // spaces into one set would wrongly call the refrigeration "x" kept too
+    // (because SOME "x" is present in both years), or wrongly drop the
+    // combustion "x".
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("x", "Shared-id combustion asset", 1000)],
+      2025: [mkAsset("x", "Shared-id combustion asset", 1100)],
+    };
+    const refrigeration: RefrigerationByYear = {
+      2021: [mkSystem("x", "Shared-id refrigeration system", 40)],
+      2025: [],
+    };
+
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+    expect(d.keptCount).toBe(1);
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual(["Shared-id refrigeration system"]);
+  });
+
+  it("reports keptCount, joined and left by name on the shipped fixture", () => {
+    const d = deriveScope1Bau(DEFAULT_COMBUSTION_BY_YEAR, DEFAULT_REFRIGERATION_BY_YEAR, DEFAULT_BASE_YEAR)!;
+    expect(d.joined).toEqual(["Petrol LCVs"]);
+    expect(d.left).toEqual([]);
+    expect(d.keptCount).toBe(5); // genset, boiler, fleet-d + cold, hvac (both refrigeration systems, unchanged every year)
+  });
+
+  // Pinned to 2dp: this is the number the whole fix exists to produce, and a
+  // future regression (e.g. a reintroduced total-basis CAGR) must fail loudly.
+  it("measures the shipped fixture at 2.01 %/yr, like-for-like", () => {
+    const d = deriveScope1Bau(DEFAULT_COMBUSTION_BY_YEAR, DEFAULT_REFRIGERATION_BY_YEAR, DEFAULT_BASE_YEAR)!;
+    expect(d.basis).toBe("like-for-like");
+    expect(d.pct).toBeCloseTo(2.01, 2);
+  });
+});
+
+describe("deriveScope2Bau — like-for-like across a changed boundary", () => {
+  it("excludes a facility that joins mid-span from the rate", () => {
+    const facilities: FacilitiesByYear = {
+      2021: [mkFacility("f1", "Pune plant", 1_000_000)],
+      2025: [mkFacility("f1", "Pune plant", 1_000_000), mkFacility("f2", "Island resort", 5_000_000)],
+    };
+    const total = deriveBauGrowth(scope2ActualSeries(facilities), 2025)!;
+    const d = deriveScope2Bau(facilities, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.keptCount).toBe(1);
+    expect(d.joined).toEqual(["Island resort"]);
+    expect(d.left).toEqual([]);
+    expect(d.pct).toBeLessThan(total.pct - 10);
+  });
+
+  it("excludes a facility that leaves mid-span from the rate, the same way", () => {
+    const facilities: FacilitiesByYear = {
+      2021: [mkFacility("f1", "Pune plant", 1_000_000), mkFacility("f2", "Closed site", 5_000_000)],
+      2025: [mkFacility("f1", "Pune plant", 1_000_000)],
+    };
+    const total = deriveBauGrowth(scope2ActualSeries(facilities), 2025)!;
+    const d = deriveScope2Bau(facilities, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.keptCount).toBe(1);
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual(["Closed site"]);
+    expect(d.pct).toBeGreaterThan(total.pct + 10);
+  });
+
+  it("is a no-op when the facility set does not change: the rate equals the total basis exactly", () => {
+    const facilities: FacilitiesByYear = {
+      2021: [mkFacility("f1", "Pune plant", 1_000_000), mkFacility("f2", "London office", 200_000)],
+      2025: [mkFacility("f1", "Pune plant", 1_100_000), mkFacility("f2", "London office", 230_000)],
+    };
+    const total = deriveBauGrowth(scope2ActualSeries(facilities), 2025)!;
+    const d = deriveScope2Bau(facilities, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual([]);
+    expect(d.keptCount).toBe(2);
+    expect(d.pct).toBe(total.pct);
+  });
+
+  it("falls back to the total basis, not to 1, when every facility is new", () => {
+    const facilities: FacilitiesByYear = {
+      2021: [mkFacility("f1", "Old-only site", 1_000_000)],
+      2025: [mkFacility("f2", "New-only site", 2_000_000)],
+    };
+    const total = deriveBauGrowth(scope2ActualSeries(facilities), 2025)!;
+    const d = deriveScope2Bau(facilities, 2025)!;
+
+    expect(d.basis).toBe("total");
+    expect(d.keptCount).toBe(0);
+    expect(d.joined).toEqual(["New-only site"]);
+    expect(d.left).toEqual(["Old-only site"]);
+    expect(d.pct).toBe(total.pct);
+  });
+
+  it("reports keptCount, joined and left by name on the shipped fixture", () => {
+    const d = deriveScope2Bau(DEFAULT_FACILITIES_BY_YEAR, SCOPE2_DEFAULT_BASE_YEAR)!;
+    expect(d.joined).toEqual(["Island resort"]);
+    expect(d.left).toEqual([]);
+    expect(d.keptCount).toBe(2); // f-pune, f-london
+  });
+
+  // Pinned to 2dp: this is the number the whole fix exists to produce, and a
+  // future regression must fail loudly.
+  it("measures the shipped fixture at 2.11 %/yr, like-for-like", () => {
+    const d = deriveScope2Bau(DEFAULT_FACILITIES_BY_YEAR, SCOPE2_DEFAULT_BASE_YEAR)!;
+    expect(d.basis).toBe("like-for-like");
+    expect(d.pct).toBeCloseTo(2.11, 2);
   });
 });

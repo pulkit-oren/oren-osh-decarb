@@ -28,7 +28,7 @@ import { allIds, migrateRefrigeration, migrateSettings, uniqueId } from "./store
 import { resolveEquipment } from "./equipment/resolve";
 import { migrateEquipment, mintFirstEquipment } from "./equipment/migrate";
 import { defaultBasis, reallocateForVolume } from "./equipment/allocate";
-import { deriveBauGrowth, scope1ActualSeries, type DerivedGrowth } from "./bau";
+import { deriveScope1Bau, type DerivedGrowth } from "./bau";
 
 interface StoreShape {
   combustion: CombustionByYear;
@@ -378,7 +378,7 @@ export function ScenarioProvider({
      this store does not have, and Scope 2 reads this one optionally precisely
      because its tabs can mount without it. */
   const derivedBau = useMemo(
-    () => deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), baseYear),
+    () => deriveScope1Bau(combustion, refrigeration, baseYear),
     [combustion, refrigeration, baseYear],
   );
 
