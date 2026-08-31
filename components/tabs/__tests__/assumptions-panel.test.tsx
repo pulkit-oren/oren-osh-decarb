@@ -76,3 +76,34 @@ describe("Assumptions sub-tab", () => {
     expect(screen.getByRole("spinbutton", { name: /Carbon price/i })).toBeTruthy();
   });
 });
+
+describe("Compare mixes states its premise", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  it("holds no budget input of its own — that lives on Assumptions", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
+    // Exactly one CAPEX budget field exists in the app, and it is not here.
+    expect(screen.queryByLabelText("CAPEX budget")).toBeNull();
+  });
+
+  it("shows the premise strip and links back to Assumptions", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
+    // The premise strip shows "CAPEX cap" and "BAU" metrics. We verify the strip
+    // exists by checking for both the CAPEX cap label and the change premises button.
+    expect(screen.getByText(/CAPEX cap/)).toBeTruthy();
+    // The Change premises button is part of the premise strip.
+    const changeButton = screen.getByRole("button", { name: /change premises/i });
+    expect(changeButton).toBeTruthy();
+    fireEvent.click(changeButton);
+    // We land on Assumptions.
+    expect(screen.getByLabelText("BAU growth override")).toBeTruthy();
+  });
+
+  it("keeps the Suggest button beside the results", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
+    expect(screen.getByRole("button", { name: /Suggest mixes/ })).toBeTruthy();
+  });
+});

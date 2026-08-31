@@ -373,23 +373,37 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
         <p className="text-xs text-ink-soft max-w-md">
           Each basis builds a full mix with the real model — tap <Info size={11} className="inline -mt-0.5" /> on a card to see exactly how it&rsquo;s calculated.
         </p>
-        <div className="ml-auto flex items-center gap-3 flex-wrap">
-          <label className="flex items-center gap-2 text-sm">
-            <span className="text-ink-soft font-medium">CAPEX budget</span>
-            <input
-              type="number" min={0} step={1_000_000}
-              value={capexBudget === 0 ? "" : capexBudget}
-              placeholder="no cap"
-              aria-label="CAPEX budget"
-              onChange={(e) => { invalidate(); setCapexBudget(Math.max(0, Number(e.target.value) || 0)); }}
-              className="w-32 text-right tabular-nums rounded-lg border border-line px-2 py-1.5"
-            />
-            <span className="text-ink-faint text-xs">{CURRENCY}</span>
-          </label>
-          <button onClick={computeOptions} className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-4 py-2 hover:bg-brand-600 transition-colors">
-            <Sparkles size={15} /> Suggest mixes for {target}% by {year}
-          </button>
-        </div>
+        <button onClick={computeOptions} className="ml-auto inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg bg-brand-500 text-white px-4 py-2 hover:bg-brand-600 transition-colors">
+          <Sparkles size={15} /> Suggest mixes for {target}% by {year}
+        </button>
+      </div>
+
+      {/* The premises this mix set was built on, stated rather than editable —
+          there is one place each of these is typed, and it is not here. */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl2 border border-line/70 bg-surface-muted px-4 py-2.5 text-[11px] text-ink-soft">
+        <span><strong className="text-ink tabular-nums">{target}%</strong> by <strong className="text-ink tabular-nums">{year}</strong></span>
+        <span aria-hidden="true" className="text-ink-faint">·</span>
+        <span>
+          CAPEX cap{" "}
+          <strong className="text-ink tabular-nums">
+            {capexBudget > 0 ? fmtMoney(capexBudget) : "none"}
+          </strong>
+        </span>
+        <span aria-hidden="true" className="text-ink-faint">·</span>
+        <span>
+          BAU{" "}
+          <strong className="text-ink tabular-nums">
+            {(s1.settings.assumptions.bauGrowthPct ?? s1.derivedBau?.pct ?? 1).toFixed(1)} %/yr
+          </strong>
+          {s1.settings.assumptions.bauGrowthPct == null && " (from your data)"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setTab("assumptions")}
+          className="ml-auto font-semibold text-brand-700 hover:text-brand-800"
+        >
+          Change premises
+        </button>
       </div>
 
       {!options ? (
