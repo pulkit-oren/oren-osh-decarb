@@ -27,35 +27,50 @@ import { fmt } from "@/lib/utils";
 const H = "text-[10px] uppercase tracking-wide text-ink-faint font-bold";
 
 /** One short line naming the basis a derived rate was measured on — the
- *  number is unauditable without it. `noun` is what to call a source in this
- *  scope ("sources" / "facilities"), matching keptCount's units.
+ *  number is unauditable without it. `singular`/`plural` name a source in
+ *  this scope ("source"/"sources", "facility"/"facilities"); which one is
+ *  used is picked on `keptCount`, so a one-site company reads "the 1
+ *  facility", not "the 1 facilities".
  *
- *  `basis` is only ever "total" via deriveScopeNBau's fallback (an empty
- *  intersection, or a restricted first total that is not positive) — so a
- *  "total" basis with nothing in `joined`/`left` is the degenerate edge of
- *  that fallback, not the ordinary no-change case (which is "like-for-like"
- *  with empty joined/left, handled below). */
-function bauBasisLine(d: DerivedGrowth | null, noun: string): string {
+ *  Guarded on `basis === "like-for-like"` rather than falling through on
+ *  `keptCount ?? 0`: `basis`/`keptCount`/`joined`/`left` are optional on
+ *  `DerivedGrowth` (the bare `deriveBauGrowth` primitive never sets them), so
+ *  an ungated read would print "measured on the 0 sources present in both…"
+ *  for a value that never went through the like-for-like restriction — a
+ *  false statement that would still typecheck. Unreachable today because
+ *  both stores call `deriveScopeNBau`, which always sets `basis`, but the
+ *  guard costs nothing and keeps that true if a caller ever changes. Both
+ *  non-like-for-like branches also cover this defensive case, since an
+ *  absent `basis` carries no exclusion info either. */
+export function bauBasisLine(d: DerivedGrowth | null, singular: string, plural: string): string {
   if (!d) return "Not enough years of data — falling back to 1 %/yr";
-  const joined = d.joined ?? [];
-  const left = d.left ?? [];
-  const excluded = [...joined, ...left];
+  const span = `FY${d.fromYear} to FY${d.toYear}`;
 
-  if (d.basis === "total") {
+  if (d.basis !== "like-for-like") {
+    const excluded = [...(d.joined ?? []), ...(d.left ?? [])];
     return excluded.length > 0
-      ? `measured on all ${noun}; a like-for-like basis was not available`
-      : `measured on all ${noun} — the set did not change`;
+      ? `measured on all ${plural}, ${span}; a like-for-like basis was not available`
+      : `measured on all ${plural}, ${span} — the set did not change`;
   }
 
+  const joined = d.joined ?? [];
+  const left = d.left ?? [];
   const count = d.keptCount ?? 0;
+  const noun = count === 1 ? singular : plural;
   const base = `measured on the ${count} ${noun} present in both FY${d.fromYear} and FY${d.toYear}`;
-  if (excluded.length === 0) return base;
+  if (joined.length === 0 && left.length === 0) return base;
 
+  // Each clause names its own excluded sources AND states that they are
+  // excluded — "Genset joined … ; Boiler left …" sharing one trailing "and
+  // are excluded" reads as applying to the second clause alone.
   const clauses: string[] = [];
-  if (joined.length > 0) clauses.push(`${joined.join(", ")} joined after FY${d.fromYear}`);
-  if (left.length > 0) clauses.push(`${left.join(", ")} left before FY${d.toYear}`);
-  const verb = excluded.length > 1 ? "are" : "is";
-  return `${base}. ${clauses.join("; ")} and ${verb} excluded.`;
+  if (joined.length > 0) {
+    clauses.push(`${joined.join(", ")} joined after FY${d.fromYear} and ${joined.length > 1 ? "are" : "is"} excluded`);
+  }
+  if (left.length > 0) {
+    clauses.push(`${left.join(", ")} left before FY${d.toYear} and ${left.length > 1 ? "are" : "is"} excluded`);
+  }
+  return `${base}. ${clauses.join("; ")}.`;
 }
 
 export function AssumptionsPanel({
@@ -117,19 +132,19 @@ export function AssumptionsPanel({
           <div>
             <div className="text-[11px] text-ink-soft flex items-center gap-1">
               From your data
-              <InfoTip text="Compound annual growth between the earliest financial year you have an inventory for and your base year. Every year is plotted below, so an odd year is visible rather than hidden." />
+              <InfoTip text="Compound annual growth between the earliest financial year you have an inventory for and your base year, restricted to the sources present in BOTH years — a source that joined or left mid-span is named below rather than counted as growth. Every year is plotted below, so an odd year is visible rather than hidden." />
             </div>
             <div className="text-2xl font-extrabold tabular-nums text-ink">
               {s1.derivedBau ? pctLabel(s1.derivedBau.pct) : "—"}
               <span className="text-[11px] font-semibold text-ink-faint ml-2">Scope 1</span>
             </div>
-            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s1.derivedBau, "sources")}</div>
+            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s1.derivedBau, "source", "sources")}</div>
 
             <div className="text-sm font-extrabold tabular-nums text-ink mt-3">
               {s2.derivedBau ? pctLabel(s2.derivedBau.pct) : "—"}
               <span className="text-[11px] font-semibold text-ink-faint ml-2">Scope 2</span>
             </div>
-            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s2.derivedBau, "facilities")}</div>
+            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s2.derivedBau, "facility", "facilities")}</div>
           </div>
 
           <label className="block">

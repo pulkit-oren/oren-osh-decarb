@@ -261,6 +261,46 @@ describe("deriveScope1Bau — like-for-like across a changed boundary", () => {
     expect(d.pct).toBe(total.pct);
   });
 
+  it("falls back to the total basis when the intersection is non-empty but its first-year total is not positive", () => {
+    // "a" is kept (present at both endpoints) but has zero volume at the
+    // FROM year — the restricted first total is 0, not absent. "b" makes the
+    // unrestricted from-year total positive (so deriveBauGrowth still picks
+    // 2021 as fromYear) and then leaves, so it never appears as kept.
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("a", "Kept but zero at first", 0), mkAsset("b", "Left source", 5000)],
+      2025: [mkAsset("a", "Kept but zero at first", 1000)],
+    };
+    const refrigeration: RefrigerationByYear = { 2021: [], 2025: [] };
+
+    const total = deriveBauGrowth(scope1ActualSeries(combustion, refrigeration), 2025)!;
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+
+    expect(d.basis).toBe("total");
+    expect(d.keptCount).toBe(1); // non-empty intersection — "a" is kept
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual(["Left source"]);
+    expect(d.pct).toBe(total.pct);
+  });
+
+  it("filters excluded sources at both endpoints before computing the boundary, matching the series builders", () => {
+    // "b" is excluded at the base year. If the exclusion filter were missing
+    // (or applied only inside scope1ActualSeries and not here), "b" would
+    // show up as a source that JOINED — it is absent at 2021, present at
+    // 2025 — even though it is filtered out of every footprint total.
+    const combustion: CombustionByYear = {
+      2021: [mkAsset("a", "Genset", 1000)],
+      2025: [mkAsset("a", "Genset", 1200), { ...mkAsset("b", "Excluded huge source", 999999), excluded: true }],
+    };
+    const refrigeration: RefrigerationByYear = { 2021: [], 2025: [] };
+
+    const d = deriveScope1Bau(combustion, refrigeration, 2025)!;
+
+    expect(d.basis).toBe("like-for-like");
+    expect(d.keptCount).toBe(1);
+    expect(d.joined).toEqual([]);
+    expect(d.left).toEqual([]);
+  });
+
   it("intersects combustion and refrigeration in their own id spaces — a shared id string does not cross-contaminate", () => {
     // Both lists use the id "x", but they are different spaces: the
     // combustion "x" is present in both years (kept); the refrigeration "x" is
