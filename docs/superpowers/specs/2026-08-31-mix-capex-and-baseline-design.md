@@ -23,6 +23,17 @@ Deliverables 1 and 2 are otherwise unchanged. Plan
 authority for the engine and is unaffected except that it now has one more
 consumer.
 
+**Amendment 2 (while writing the deliverable-3 plan):** two mechanical
+corrections to §6, both found by trying to write the code.
+
+| Superseded | Was | Now | Where |
+|---|---|---|---|
+| §6.2 | One derived rate, from the combined series, drives both scopes | Each scope derives its **own** rate from its own store's series; the single user **override** applies to both | §6.2 |
+| §6.4.1 | Chart draws the derived BAU line dashed behind the live one | Chart draws the live combined BAU from `combineTrajectories`; no second BAU line | §6.4.1 |
+
+Neither changes what the user sees or controls — one adjustable rate, both
+scopes' derived rates displayed — only where the arithmetic happens.
+
 ---
 
 ## 1. Why this exists
@@ -349,9 +360,25 @@ deriveBauGrowth(series, baseYear)
   It returns `null` when there are fewer than two years, when the first total is
   not positive, or when the base year itself has no data — every one of which is
   a real state on a part-filled inventory, and none of which may yield a number.
-- **One rate for both scopes** (amends D-e). Both scopes' derived rates are
-  *displayed* side by side so divergence stays visible, but a single value drives
-  both trajectories.
+- **One rate for both scopes** (amends D-e) — meaning one *control*. Amendment 2
+  splits where the arithmetic happens, because a single combined CAGR cannot be
+  computed in either store: it needs Scope 1's fuel inventory and Scope 2's
+  facilities, each store holds only its own, and Scope 2 reads Scope 1
+  *optionally* (`useOptionalAssumptions`, `lib/store.tsx:402`) precisely because
+  its tabs can mount without it. There is no ancestor where both year-maps exist
+  before the stores do, and writing a derived value into persisted
+  `GlobalAssumptions` to bridge them is the frozen copy §6.5 forbids. So:
+
+  - **No override:** each store derives from its own series and passes its own
+    rate as the fallback. Scope 1's BAU grows at the fuel inventory's CAGR,
+    Scope 2's at the facilities' — which tracks history *more* closely than one
+    blended rate, not less.
+  - **Override set:** the single `bauGrowthPct` applies to both scopes, which is
+    the one-rate behaviour the control promises.
+  - Both derived rates are **displayed** side by side, so divergence stays
+    visible. The implied *combined* rate may also be shown, but only labelled as
+    an outcome — never as the driver, because when no override is set it is not
+    driving anything.
 - Years **after** the base year that hold inventories are plotted as actual
   points against the BAU line — a plan-vs-outcome read for free, and the reason
   the series is not truncated at the base year. They do not affect the derived
@@ -370,7 +397,9 @@ the work is confined to sourcing its value.
    `assumptions.bauGrowthPct ?? fallback ?? 1`. The fallback exists because the
    engines are pure and receive only the base year's inventory; derivation needs
    every year, so it happens in the stores and is injected.
-3. Both stores derive once in a `useMemo` over their year maps and pass it down.
+3. Each store derives its **own** scope's rate in a `useMemo` over its own year
+   map and passes it as that scope's fallback (Amendment 2). No cross-store
+   plumbing, and no store needs data it does not own.
 4. Delete both `BAU_GROWTH` constants (B6). No reader of a hardcoded growth value
    survives.
 5. **Auto-adoption.** With no `bauGrowthPct` set, the derived rate applies
@@ -392,13 +421,25 @@ writing the derived number into it — so the field stays live as the inventory
 grows. A consequence line in the §4.4 register: *"At 2.5 %/yr, business-as-usual
 reaches 8,010 t by 2030 instead of 6,900 t — 1,110 t more to remove."*
 
-Chart: new `components/charts/BauChart.tsx` — actual points for every year with
-data, the BAU line at the rate in force, and the derived line dashed behind it
-when an override differs. `WedgeChart` is **not** reused, though the original
-spec said to: it plots one BAU against a plan's wedges, and this chart's subject
-is two BAU lines against history. Bending it would cost more than the ~80 lines
-of recharts this needs, and would put a wedge stack on a screen that has no plan
-on it.
+Chart *(amended)*: new `components/charts/BauChart.tsx` — actual points for every
+year with data, plus **one** BAU line taken straight from
+`combineTrajectories(s1.result.trajectory, s2.result.trajectoryMarket)`, whose
+rows already carry `bau` per year. `BalanceTab` computes those rows today
+(`BalanceTab.tsx:123`), so the chart adds no BAU arithmetic of its own and cannot
+disagree with the rail beside it.
+
+The dashed second line for the derived rate is **dropped**. Drawing it would mean
+recomputing a compound curve outside the trajectory engine, which omits the
+grid-decline factor that engine applies to Scope 2 (`gridFactor`,
+`trajectory.ts:48`) — so the two lines would not be comparable, and the
+comparison was the only reason to draw the second one. Clearing the override
+shows the derived path exactly, through the same engine. The rate in force and
+the derived rates are stated in the caption instead.
+
+`WedgeChart` is still **not** reused, though the original spec said to: it plots
+BAU against a plan's wedges, and this chart's subject is BAU against history.
+Bending it would cost more than the ~60 lines of recharts this needs, and would
+put a wedge stack on a screen that has no plan on it.
 
 **6.4.2 Mix inputs.** The CAPEX budget box moves here as its single home. Note
 that by then it is the **peak single-year** capital cap, not the lifetime total:
@@ -436,8 +477,13 @@ second copy, which is the distinction `lib/store.tsx:406` exists to enforce.
 - **Regression guard on auto-adoption:** with `bauGrowthPct = 1` set explicitly,
   every pre-amendment trajectory number is reproduced exactly. This is what makes
   deleting the constants safe.
-- One rate moves **both** scopes' BAU — the inverse of the superseded per-scope
-  test, which must be deleted rather than left passing vacuously.
+- An explicit `bauGrowthPct` override moves **both** scopes' BAU.
+- With **no** override, each scope's BAU moves with its own derived rate, and a
+  change to the Scope 2 facilities' history does not move Scope 1's BAU
+  (Amendment 2). This replaces the superseded per-scope-override test, which must
+  be deleted rather than left passing vacuously.
+- The chart's BAU series is identical to `combineTrajectories(...).map(r => r.bau)`
+  — asserted, so the chart can never grow BAU arithmetic of its own.
 - Raising growth increases `requiredT` by exactly `ΔBAU(y)`, tying this to §4.2.
 - Editing a mixed-rate line: per-source ratios are preserved and the line's
   weighted average equals the typed rate (the §5.4 amendment).
