@@ -19,6 +19,25 @@ import type { YearPoint } from "@/lib/bau";
 const C_ACTUAL = "#0F5C36"; // dark green — the same actual colour the goal chart uses
 const C_BAU = "#B45309";    // amber — BAU is the path being argued against
 
+/** One row per year in the union of both series, each value carried through
+ *  UNCHANGED. Exported so the carry-through is assertable: this component's
+ *  contract is that it plots what it is handed and derives no BAU of its own,
+ *  and a rendering smoke test cannot check that under jsdom, where recharts
+ *  has no layout and draws no marks. */
+export function bauChartRows(
+  actuals: YearPoint[],
+  bau: { year: number; bau: number }[],
+): { year: number; actual: number | null; bau: number | null }[] {
+  const years = [...new Set([...actuals.map((p) => p.year), ...bau.map((r) => r.year)])].sort((a, b) => a - b);
+  const aMap = new Map(actuals.map((p) => [p.year, p.totalT]));
+  const bMap = new Map(bau.map((r) => [r.year, r.bau]));
+  return years.map((year) => ({
+    year,
+    actual: aMap.get(year) ?? null,
+    bau: bMap.get(year) ?? null,
+  }));
+}
+
 interface TooltipEntry { name?: string; value?: number | null; color?: string; }
 function BauTooltip({ active, payload, label }: {
   active?: boolean; payload?: TooltipEntry[]; label?: number | string;
@@ -47,14 +66,7 @@ export function BauChart({
   baseYear: number;
   height?: number;
 }) {
-  const years = [...new Set([...actuals.map((p) => p.year), ...bau.map((r) => r.year)])].sort((a, b) => a - b);
-  const aMap = new Map(actuals.map((p) => [p.year, p.totalT]));
-  const bMap = new Map(bau.map((r) => [r.year, r.bau]));
-  const data = years.map((year) => ({
-    year,
-    actual: aMap.get(year) ?? null,
-    bau: bMap.get(year) ?? null,
-  }));
+  const data = bauChartRows(actuals, bau);
 
   return (
     <div style={{ height }}>
