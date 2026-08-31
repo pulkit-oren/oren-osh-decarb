@@ -26,9 +26,9 @@ import type { Facility, Scope2Levers } from "./types";
 import { validateScope2 } from "./validate";
 import { cfeScore, LOAD_SHAPES, type CfeResult } from "./hourly";
 import { FAMILY_IDX } from "@/lib/model/palette";
+import { resolveBauGrowthPct } from "@/lib/bau";
 
 export const END_YEAR = 2050;
-export const BAU_GROWTH = 0.01;
 // DISCOUNT_RATE_PCT and the local S2_LIFETIME_YEARS table are GONE. Both were
 // module-private with no external reference, so unlike the four symbols Ruling B
 // defers to Task 10, deleting them here cannot break another task — and left in
@@ -120,6 +120,9 @@ export function computeScope2(
   // from Scope 2 — which is WHY DISCOUNT_RATE_PCT was a module constant (F8),
   // not merely an oversight.
   assumptions?: Partial<GlobalAssumptions>,
+  /** Derived from the facilities' year-wise history by the store. Fifth, so
+   *  every existing 3- and 4-arg caller keeps compiling. */
+  bauGrowthFallbackPct?: number,
 ): Scope2ComputeResult {
   const fa = financeAssumptionsFrom(assumptions);
   const baseline = baselineScope2(facilities);
@@ -309,12 +312,13 @@ export function computeScope2(
   // gridLinked: every tonne on both curves is grid electricity, so the
   // baseline itself falls as the grid cleans and each wedge is worth less.
   const gridFactor = gridFactorFn(baseYear, assumptions?.gridEfDeclinePctPerYear);
+  const bauGrowth = resolveBauGrowthPct(assumptions?.bauGrowthPct, bauGrowthFallbackPct) / 100;
   const trajectoryLocation = buildTrajectory({
-    baseYear, endYear: END_YEAR, baseTotalT, bauGrowth: BAU_GROWTH, wedges: wedgesLocation,
+    baseYear, endYear: END_YEAR, baseTotalT, bauGrowth, wedges: wedgesLocation,
     gridFactor, gridLinked: true,
   });
   const trajectoryMarket = buildTrajectory({
-    baseYear, endYear: END_YEAR, baseTotalT, bauGrowth: BAU_GROWTH, wedges: wedgesMarket,
+    baseYear, endYear: END_YEAR, baseTotalT, bauGrowth, wedges: wedgesMarket,
     gridFactor, gridLinked: true,
   });
 
