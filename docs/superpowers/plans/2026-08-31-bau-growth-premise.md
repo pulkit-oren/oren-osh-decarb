@@ -506,15 +506,16 @@ const at = (rows: { year: number; bau: number }[], year: number) =>
   rows.find((x) => x.year === year)!.bau;
 
 describe("Scope 2 BAU growth", () => {
-  it("reproduces the old hardcoded 1% exactly when told 1", () => {
-    const r = run(1);
-    const rows = r.trajectoryLocation;
-    // gridLinked: the grid-decline factor multiplies the curve, so the ratio
-    // between two years is compared against growth AND that factor, which is
-    // why this asserts a ratio of ratios rather than an absolute figure.
-    const ref = run(1);
-    expect(at(rows, DEFAULT_BASE_YEAR + 10)).toBeCloseTo(at(ref.trajectoryLocation, DEFAULT_BASE_YEAR + 10), 6);
-    expect(at(rows, DEFAULT_BASE_YEAR)).toBeGreaterThan(0);
+  it("makes 1% behave as 1% — the guard that lets BAU_GROWTH be deleted", () => {
+    // Scope 2 IS gridLinked, so bau = baseTotalT x (1+g)^n x gridFactor(n) and
+    // an absolute figure would be asserting the grid decline too. Dividing two
+    // runs at the same year cancels gridFactor exactly, leaving the growth
+    // ratio alone — so this is the honest form of "1% still means 1%".
+    const y = DEFAULT_BASE_YEAR + 10;
+    const flat = at(run(0).trajectoryLocation, y);
+    const onePct = at(run(1).trajectoryLocation, y);
+    expect(flat).toBeGreaterThan(0);
+    expect(onePct / flat).toBeCloseTo(Math.pow(1.01, 10), 6);
   });
 
   it("a higher rate raises BAU on BOTH curves", () => {
@@ -653,8 +654,11 @@ function Probe() {
       <span data-testid="s1-derived">{s1.derivedBau ? s1.derivedBau.pct.toFixed(4) : "null"}</span>
       <span data-testid="s2-derived">{s2.derivedBau ? s2.derivedBau.pct.toFixed(4) : "null"}</span>
       <span data-testid="s1-span">{s1.derivedBau ? `${s1.derivedBau.fromYear}-${s1.derivedBau.toYear}` : "null"}</span>
+      <span data-testid="s1-bau-base">
+        {s1.result.trajectory.find((r) => r.year === s1.baseYear)!.bau.toFixed(6)}
+      </span>
       <span data-testid="s1-bau-2035">
-        {s1.result.trajectory.find((r) => r.year === 2035)!.bau.toFixed(4)}
+        {s1.result.trajectory.find((r) => r.year === 2035)!.bau.toFixed(6)}
       </span>
     </>
   );
@@ -674,23 +678,35 @@ describe("stores derive the BAU premise", () => {
     expect(screen.getByTestId("s1-span").textContent).toMatch(/-2025$/);
   });
 
-  it("derives the two scopes independently", () => {
+  it("derives each scope from its own series, and neither comes back null", () => {
     mount();
-    // Not asserted equal or unequal — asserted SEPARATE: each is a finite
-    // number produced from its own scope's series.
-    expect(Number(screen.getByTestId("s1-derived").textContent)).toBeTypeOf("number");
-    expect(Number(screen.getByTestId("s2-derived").textContent)).toBeTypeOf("number");
+    // `toBeTypeOf("number")` would be satisfied by NaN — i.e. by the exact
+    // failure this test exists to catch — so assert the text is not "null" and
+    // the parsed value is finite.
+    for (const id of ["s1-derived", "s2-derived"]) {
+      const text = screen.getByTestId(id).textContent!;
+      expect(text, id).not.toBe("null");
+      expect(Number.isFinite(Number(text)), id).toBe(true);
+    }
   });
 
   it("drives the trajectory with the derived rate, not with 1%", () => {
     mount();
+    const derivedPct = Number(screen.getByTestId("s1-derived").textContent);
+    const baseT = Number(screen.getByTestId("s1-bau-base").textContent);
     const bau2035 = Number(screen.getByTestId("s1-bau-2035").textContent);
-    const base = 0; // read below instead
-    expect(bau2035).toBeGreaterThan(base);
-    // Auto-adoption: the shipped fixture trends upward, so a derived-rate BAU
-    // must exceed what a flat 1% would have produced. Pinned loosely on
-    // purpose — the exact rate is the fixture's business, not this test's.
-    expect(Number.isFinite(bau2035)).toBe(true);
+    const n = 2035 - 2025;
+
+    // Auto-adoption, stated exactly: the curve must compound at the DERIVED
+    // rate, not at the old 1% constant. Scope 1 is not gridLinked, so this is
+    // an exact identity rather than a ratio.
+    expect(bau2035).toBeCloseTo(baseT * Math.pow(1 + derivedPct / 100, n), 4);
+
+    // And the fixture trends up (lib/defaults.ts: 1 + 0.025 x (year - 2025)),
+    // so the derived rate must exceed the constant it replaced — otherwise
+    // "auto-adoption" would be an invisible no-op.
+    expect(derivedPct).toBeGreaterThan(1);
+    expect(bau2035).toBeGreaterThan(baseT * Math.pow(1.01, n));
   });
 });
 ```
