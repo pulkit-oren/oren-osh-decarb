@@ -37,6 +37,7 @@ import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/selec
 import { CURRENCY } from "@/lib/defaults";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { SectionTabs } from "@/components/ui/SectionTabs";
+import { AssumptionsPanel } from "./balance/AssumptionsPanel";
 import { GapStack, type GapSegment } from "@/components/charts/GapStack";
 import { MaccChart, type MaccLever } from "@/components/charts/MaccChart";
 import { CapitalByYear, type CapitalSeriesLever } from "@/components/charts/CapitalByYear";
@@ -151,7 +152,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const [appliedObj, setAppliedObj] = useState<MixObjective | null>(null);
   const [logicOpen, setLogicOpen] = useState<MixObjective | null>(null);
   const [capexBudget, setCapexBudget] = useState(0); // 0 = no cap
-  const [tab, setTab] = useState<"mixes" | "levers" | "curve">("levers");
+  const [tab, setTab] = useState<"assumptions" | "mixes" | "levers" | "curve">("levers");
   const invalidate = () => { setOptions(null); setAppliedObj(null); setLogicOpen(null); };
   const computeOptions = () => {
     const inp: CombinedInputs = {
@@ -591,8 +592,9 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
         <SectionTabs
           ariaLabel="Balance sections"
           active={tab}
-          onSelect={(k) => setTab(k as "mixes" | "levers" | "curve")}
+          onSelect={(k) => setTab(k as "assumptions" | "mixes" | "levers" | "curve")}
           tabs={[
+            { key: "assumptions", label: "Assumptions" },
             { key: "mixes", label: "Compare mixes", badge: options ? String(options.length) : undefined },
             { key: "levers", label: "Fine-tune levers", badge: String(activeLevers) },
             { key: "curve", label: "Cost & capital" },
@@ -603,7 +605,13 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
           key={tab}
           className="panel-in flex-1 min-h-0 rounded-xl3 border border-line/60 bg-surface shadow-card overflow-hidden"
         >
-          {tab === "mixes" ? mixesPanel : tab === "curve" ? curvePanel : leversPanel}
+          {tab === "assumptions"
+            ? <AssumptionsPanel
+                rows={rows} year={year} target={target}
+                capexBudget={capexBudget} setCapexBudget={setCapexBudget}
+                invalidate={invalidate}
+              />
+            : tab === "mixes" ? mixesPanel : tab === "curve" ? curvePanel : leversPanel}
         </div>
       </div>
 
