@@ -4,17 +4,22 @@
 
    Extracted rather than added to BalanceTab.tsx, which is already ~700 lines.
 
-   Two rules this file must keep:
+   Three rules this file must keep:
    - It computes NO business-as-usual. The chart's line is the `rows` prop,
      which is the same `combineTrajectories` output the result rail reads.
-   - Reset CLEARS `bauGrowthPct`. Writing the derived number into it would
-     freeze today's history into the saved scenario. */
+   - Reset CLEARS all three growth fields. Writing a derived number into one
+     would freeze today's history into the saved scenario.
+   - The two growth fields write `bauGrowthS1Pct` / `bauGrowthS2Pct` and never
+     `bauGrowthPct`. That third field is what scenarios saved before the split
+     carry; it still drives a scope that has no rate of its own, so it is READ
+     here (through `bauOverridesFrom`) and never written. */
 
 import { useMemo } from "react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import {
-  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, describeBauPremise,
+  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, bauOverridesFrom, describeBauPremise,
+  overrideForScope, resolveBauGrowthPct,
   scope1ActualSeries, scope2ActualSeries, type DerivedGrowth, type YearPoint,
 } from "@/lib/bau";
 import { targetPosition, type CombinedRow } from "@/lib/model/combined";
@@ -26,14 +31,6 @@ import { BauChart } from "@/components/charts/BauChart";
 import { SettingCard } from "./SettingCard";
 import { CapexRateTable } from "./CapexRateTable";
 import { cn, fmt, fmtMoney } from "@/lib/utils";
-
-/** The slider's usable band. Deliberately narrower than the accepted range
- *  (`BAU_GROWTH_MIN_PCT`…`BAU_GROWTH_MAX_PCT`): a slider spanning −99.99 to 100
- *  would put every plausible rate inside two pixels. The number field beside it
- *  still accepts anything the engines accept, so the slider covers the band you
- *  would actually drag and typing covers the rest. */
-const SLIDER_MIN_PCT = -5;
-const SLIDER_MAX_PCT = 15;
 
 /** One short line naming the basis a derived rate was measured on — the
  *  number is unauditable without it. `singular`/`plural` name a source in
@@ -120,6 +117,40 @@ export function capitalRowsFrom(
   return merged.sort((x, z) => z.capex - x.capex);
 }
 
+/** One scope's growth override.
+ *
+ *  A component rather than two copies of the same twenty lines: the min/max
+ *  bounds, the empty-string-to-undefined normalisation and the placeholder
+ *  contract are exactly the rules that must not differ between the two scopes,
+ *  and two inline copies are how they would come to. */
+function GrowthField({ scope, value, placeholder, onChange }: {
+  scope: "Scope 1" | "Scope 2";
+  value: number | undefined;
+  placeholder: string;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <span className="w-14 text-[11px] font-semibold text-ink-faint">{scope}</span>
+      <input
+        /* min/max bound the SPINNER only — typing past them is still possible,
+           so the same bounds are enforced where the value is read, in
+           resolveBauGrowthPct. Following the precedent in
+           lib/finance/assumptions.ts. Without either, a typed 1000000 was
+           accepted and made every downstream figure meaningless. */
+        type="number" step={0.1}
+        min={BAU_GROWTH_MIN_PCT} max={BAU_GROWTH_MAX_PCT}
+        aria-label={`${scope} BAU growth override`}
+        placeholder={placeholder}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+        className="w-24 border border-line rounded-lg px-3 py-2 text-sm bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
+      />
+      <span className="text-xs text-ink-faint">%/yr</span>
+    </span>
+  );
+}
+
 export function AssumptionsPanel({
   rows, year, target, capexBudget, setCapexBudget, invalidate,
 }: {
@@ -151,36 +182,61 @@ export function AssumptionsPanel({
   }, [s1.combustion, s1.refrigeration, s2.facilities]);
 
   const { base, bauAtYear, requiredT } = targetPosition(rows, year, target);
-  const override = a.bauGrowthPct;
-  const setGrowth = (v: number | undefined) => { invalidate(); s1.updateAssumptions({ bauGrowthPct: v }); };
   const pctLabel = (n: number) => `${n >= 0 ? "" : "−"}${Math.abs(n).toFixed(1)} %/yr`;
 
-  /* What the field will fall back to if left blank — BOTH scopes' rates, in the
-     Scope 1 / Scope 2 order the block on the left lists them.
-     It showed Scope 1's derived rate alone, under a hint that says the override
-     applies to both scopes: on the shipped inventories it read `2.8` while
-     Scope 2 was actually running at 7.5. Resolved through the same
-     describeBauPremise the rail uses (override deliberately `undefined` here —
-     this describes the state the field is being compared AGAINST), so a scope
-     with too few years shows the 1.0 %/yr floor it will really use rather than
-     disappearing. */
-  const derivedPremise = describeBauPremise(undefined, s1.derivedBau, s2.derivedBau);
-  const overridePlaceholder = derivedPremise.single
-    ? derivedPremise.s1Pct.toFixed(1)
-    : `${derivedPremise.s1Pct.toFixed(1)} / ${derivedPremise.s2Pct.toFixed(1)}`;
+  /* What each field SHOWS. `bauGrowthPct` is the pre-split rate: a scenario
+     saved before the split has it and neither scope field, and the honest thing
+     to show in both boxes is the rate that scenario is actually running on.
+     Editing one box then writes only that scope's field, which leaves the other
+     scope on the inherited rate — unchanged, which is the point. */
+  const s1Override = a.bauGrowthS1Pct ?? a.bauGrowthPct;
+  const s2Override = a.bauGrowthS2Pct ?? a.bauGrowthPct;
+
+  const setS1 = (v: number | undefined) => { invalidate(); s1.updateAssumptions({ bauGrowthS1Pct: v }); };
+  const setS2 = (v: number | undefined) => { invalidate(); s1.updateAssumptions({ bauGrowthS2Pct: v }); };
+  /* Reset clears all three, INCLUDING the pre-split field. Clearing only the
+     two scope fields would leave a pre-split scenario silently forced on a rate
+     the panel had just told the reader was reset to derived. */
+  const resetGrowth = () => {
+    invalidate();
+    s1.updateAssumptions({ bauGrowthS1Pct: undefined, bauGrowthS2Pct: undefined, bauGrowthPct: undefined });
+  };
+  const anyOverride = overrideForScope(bauOverridesFrom(a), "s1") != null
+    || overrideForScope(bauOverridesFrom(a), "s2") != null;
+
+  /* What each field falls back to if left blank — that scope's OWN rate, not
+     the pair. One shared placeholder reading "2.8 / 7.5" was correct beside a
+     single field and is unreadable beside two: neither box could say which half
+     of it belonged to that box.
+
+     Resolved through the same `resolveBauGrowthPct` the engines call (no
+     override, deliberately — this describes the state the field is being
+     compared AGAINST), so a scope with too few years shows the 1.0 %/yr floor
+     it will really use rather than showing nothing. */
+  const s1Placeholder = resolveBauGrowthPct(undefined, s1.derivedBau?.pct).toFixed(1);
+  const s2Placeholder = resolveBauGrowthPct(undefined, s2.derivedBau?.pct).toFixed(1);
 
   /* ---- card header summaries: each card's current state, legible folded ---- */
 
   /* The premise actually in force, through the same resolver the engines use. */
-  const inForce = describeBauPremise(override, s1.derivedBau, s2.derivedBau);
+  const inForce = describeBauPremise(bauOverridesFrom(a), s1.derivedBau, s2.derivedBau);
   /* "derived", not "from your data": the card body already labels the per-scope
      block "From your data", and two elements carrying the same phrase makes the
-     header ambiguous to read and to query. */
-  const bauProvenance = inForce.overridden
+     header ambiguous to read and to query.
+
+     The two single-scope cases need their own words. "your override" would
+     claim both scopes are typed and "derived" would claim neither is; a folded
+     card that misstates which half is yours is worse than one that says
+     nothing. */
+  const bauProvenance = inForce.overriddenScopes === "both"
     ? "your override"
-    : s1.derivedBau || s2.derivedBau
-      ? "derived"
-      : "fallback";
+    : inForce.overriddenScopes === "s1"
+      ? "Scope 1 override"
+      : inForce.overriddenScopes === "s2"
+        ? "Scope 2 override"
+        : s1.derivedBau || s2.derivedBau
+          ? "derived"
+          : "fallback";
   const bauSummary = `${
     inForce.single
       ? `${inForce.s1Pct.toFixed(1)} %/yr`
@@ -192,14 +248,6 @@ export function AssumptionsPanel({
   /* The two figures that move the most numbers downstream, of the twelve in
      that card — a discount rate and a fuel escalation reach every ₹/t. */
   const financeSummary = `WACC ${a.discountRatePct ?? 10}% · fuel +${a.fuelEscalationPct ?? 5}%/yr`;
-
-  /* Where the slider rests. An override is one number and sits exactly where it
-     was put. With none set there is no single "current" rate to point at — the
-     two scopes can be on different derived rates — so it rests on Scope 1's,
-     which is the first of the two rates listed directly above it and the one
-     the placeholder leads with. The slider is a control, not the readout: the
-     per-scope lines beside it are what state the premise. */
-  const sliderPct = override ?? derivedPremise.s1Pct;
 
   /* ---- where the capital goes ---- */
 
@@ -249,55 +297,40 @@ export function AssumptionsPanel({
             <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s2.derivedBau, "facility", "facilities")}</div>
           </div>
 
-          <label className="block">
+          <div>
             <span className="text-[11px] text-ink-soft flex items-center gap-1">
               Use instead
-              <InfoTip text={`One rate, applied to both scopes, replacing the per-scope rates on the left. Leave blank to let each scope follow its own history — the greyed-out figure is what is in play now (Scope 1 / Scope 2). Zero is a valid premise: a flat business-as-usual. Accepted range ${BAU_GROWTH_MIN_PCT} to ${BAU_GROWTH_MAX_PCT} %/yr.`} />
-            </span>
-            <span className="mt-1.5 flex items-center gap-2">
-              <input
-                /* min/max bound the SPINNER only — typing past them is still
-                   possible, so the same bounds are enforced where the value is
-                   read, in resolveBauGrowthPct. Following the precedent in
-                   lib/finance/assumptions.ts. Without either, a typed 1000000
-                   was accepted and made every downstream figure meaningless. */
-                type="number" step={0.1}
-                min={BAU_GROWTH_MIN_PCT} max={BAU_GROWTH_MAX_PCT}
-                aria-label="BAU growth override"
-                placeholder={overridePlaceholder}
-                value={override ?? ""}
-                onChange={(e) => setGrowth(e.target.value === "" ? undefined : Number(e.target.value))}
-                className="w-24 border border-line rounded-lg px-3 py-2 text-sm bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
-              />
-              <span className="text-xs text-ink-faint">%/yr</span>
-              <button
-                type="button"
-                onClick={() => setGrowth(undefined)}
-                disabled={override == null}
-                className="text-xs font-semibold text-brand-700 hover:text-brand-800 disabled:text-ink-faint disabled:cursor-default"
-              >
-                Reset to derived
-              </button>
+              <InfoTip text={`A rate per scope, each replacing that scope's own history on the left. Fill one and the other keeps following its own data — the two scopes rarely grow at the same speed, which is why there are two boxes rather than one. Leave a box blank and the greyed-out figure is what that scope will use. Zero is a valid premise: a flat business-as-usual. Accepted range ${BAU_GROWTH_MIN_PCT} to ${BAU_GROWTH_MAX_PCT} %/yr.`} />
             </span>
 
-            {/* Same premise, second control. Writes through the same setGrowth,
-                so dragging invalidates suggested mixes exactly as typing does. */}
-            <span className="mt-2.5 block">
-              <input
-                type="range"
-                min={SLIDER_MIN_PCT} max={SLIDER_MAX_PCT} step={0.1}
-                aria-label="BAU growth slider"
-                value={sliderPct}
-                onChange={(e) => setGrowth(Number(e.target.value))}
-                className="w-52 cursor-pointer accent-brand-500"
+            {/* One field per scope, in the Scope 1 / Scope 2 order the derived
+                block on the left lists them. No slider: it drove ONE value, and
+                a single slider beside two fields would have had to pick a scope
+                to control silently. */}
+            <span className="mt-1.5 flex flex-col gap-2">
+              <GrowthField
+                scope="Scope 1"
+                value={s1Override}
+                placeholder={s1Placeholder}
+                onChange={setS1}
               />
-              <span className="mt-0.5 flex w-52 justify-between text-[9px] font-bold text-ink-faint">
-                <span>{SLIDER_MIN_PCT}%</span>
-                <span>0%</span>
-                <span>+{SLIDER_MAX_PCT}%</span>
-              </span>
+              <GrowthField
+                scope="Scope 2"
+                value={s2Override}
+                placeholder={s2Placeholder}
+                onChange={setS2}
+              />
             </span>
-          </label>
+
+            <button
+              type="button"
+              onClick={resetGrowth}
+              disabled={!anyOverride}
+              className="mt-2 text-xs font-semibold text-brand-700 hover:text-brand-800 disabled:text-ink-faint disabled:cursor-default"
+            >
+              Reset to derived
+            </button>
+          </div>
         </div>
 
         <p className="mt-3 text-[11px] text-ink-soft leading-relaxed max-w-2xl">

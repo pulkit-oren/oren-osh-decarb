@@ -7,7 +7,7 @@
 
 import { baselineScope1, refrigerantCO2e } from "./baseline";
 import { FAMILY_COLORS, getRefrigerant, refrigerantPricePerKg } from "./factors";
-import { resolveBauGrowthPct } from "@/lib/bau";
+import { bauOverridesFrom, overrideForScope, resolveBauGrowthPct } from "@/lib/bau";
 import {
   financeAssumptionsFrom,
   recCostPerTonneFrom,
@@ -125,7 +125,8 @@ export function compute(
   baseYear: number = BASE_YEAR,
   /** The rate derived from the year-wise inventories, injected by the store.
    *  The engine is pure and sees only the base year, so it cannot derive this
-   *  itself. Overridden by `assumptions.bauGrowthPct` when that is set. */
+   *  itself. Overridden by `assumptions.bauGrowthS1Pct` when that is set, or
+   *  by the pre-split `assumptions.bauGrowthPct` when it is not. */
   bauGrowthFallbackPct?: number,
 ): ComputeResult {
   const baseline = baselineScope1(assets, systems);
@@ -427,7 +428,7 @@ export function compute(
 
   const trajectory = buildTrajectory({
     baseYear, endYear: END_YEAR, baseTotalT,
-    bauGrowth: resolveBauGrowthPct(g.bauGrowthPct, bauGrowthFallbackPct) / 100,
+    bauGrowth: resolveBauGrowthPct(overrideForScope(bauOverridesFrom(g), "s1"), bauGrowthFallbackPct) / 100,
     wedges,
     scope2Spill: anyElec && scope2SpillFullT > 0 ? [{ startYear: elecR.startYear, rampYears: elecR.rampYears, fullT: scope2SpillFullT }] : [],
     // NOT gridLinked: Scope 1's baseline and wedges are fuel. Only the spill —

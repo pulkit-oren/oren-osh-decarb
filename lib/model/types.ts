@@ -354,8 +354,20 @@ export interface GlobalAssumptions {
   /** Business-as-usual activity growth, PERCENT per year — 2.5 means 2.5%/yr.
    *  Absent means "use the rate derived from the year-wise inventories", which
    *  the store passes to the engine; absent from both means 1. Optional so old
-   *  saves parse, and `??`-resolved so an explicit 0 stays a flat BAU. */
+   *  saves parse, and `??`-resolved so an explicit 0 stays a flat BAU.
+   *
+   *  PRE-SPLIT: one rate for BOTH scopes. Still read, still means both, because
+   *  every scenario saved before the split carries it — but nothing writes it
+   *  any more. The Assumptions panel writes the two fields below. */
   bauGrowthPct?: number;
+  /** Scope 1's own business-as-usual rate, PERCENT per year. Beats
+   *  `bauGrowthPct` for Scope 1 and is invisible to Scope 2. Absent means
+   *  Scope 1 follows `bauGrowthPct`, then its own derived history, then 1. */
+  bauGrowthS1Pct?: number;
+  /** Scope 2's own business-as-usual rate, PERCENT per year. The mirror of
+   *  `bauGrowthS1Pct` — the two scopes grow at genuinely different rates, which
+   *  is why one field could not serve both. */
+  bauGrowthS2Pct?: number;
 }
 
 export interface LeverSettings {
