@@ -325,6 +325,19 @@ describe("Business as usual \u00b7 a rate per scope", () => {
   const s2Field = () => screen.getByLabelText("Scope 2 BAU growth override") as HTMLInputElement;
   const bauHeader = () => screen.getByRole("button", { name: /Business as usual/i });
 
+  /* The spinner quirk: `min` is the HTML step BASE. With the accepted minimum
+     (-99.99) on the input, the arrows walked in .x9/.x1 offsets — 2.81, not
+     2.90 — on every growth field. */
+  it("steps in round tenths from an aligned step base", () => {
+    open();
+    for (const field of [s1Field(), s2Field()]) {
+      const min = Number(field.getAttribute("min"));
+      const step = Number(field.getAttribute("step"));
+      expect(step).toBeGreaterThan(0);
+      expect(Math.abs(min / step - Math.round(min / step))).toBeLessThan(1e-9);
+    }
+  });
+
   it("offers one override per scope", () => {
     open();
     expect(s1Field()).toBeTruthy();

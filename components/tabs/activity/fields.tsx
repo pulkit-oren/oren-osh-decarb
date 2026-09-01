@@ -3,14 +3,26 @@
 import { Minus, Plus, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** How large a field renders.
+ *
+ *  `sm` is the activity screens' density — dozens of fields per source, where
+ *  compactness is the point. `md` is for screens with a handful of settings and
+ *  room to read them. Opt-in, so adding it changed no existing screen. */
+export type FieldSize = "sm" | "md";
+
 /** Field label with an optional (i) hint shown on hover. */
-export function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+export function FieldLabel({ children, hint, size = "sm" }: {
+  children: React.ReactNode; hint?: string; size?: FieldSize;
+}) {
   return (
-    <span className="text-xs font-semibold text-ink-soft flex items-center gap-1.5">
+    <span className={cn(
+      "font-semibold text-ink-soft flex items-center gap-1.5",
+      size === "md" ? "text-[13px]" : "text-xs",
+    )}>
       {children}
       {hint && (
         <span title={hint} aria-label={hint} className="text-ink-faint cursor-help shrink-0">
-          <Info size={12} />
+          <Info size={size === "md" ? 13 : 12} />
         </span>
       )}
     </span>
@@ -35,14 +47,15 @@ export function TextField({
 }
 
 export function NumField({
-  label, value, onChange, suffix, hint, footer, min, step, placeholder,
+  label, value, onChange, suffix, hint, footer, min, step, placeholder, size = "sm",
 }: {
   label: string; value: number; onChange: (v: number) => void; suffix?: string;
   hint?: string; footer?: React.ReactNode; min?: number; step?: number; placeholder?: string;
+  size?: FieldSize;
 }) {
   return (
     <label className="block">
-      <FieldLabel hint={hint}>{label}</FieldLabel>
+      <FieldLabel hint={hint} size={size}>{label}</FieldLabel>
       <span className="mt-1.5 flex items-center gap-1.5">
         <input
           type="number"
@@ -52,9 +65,19 @@ export function NumField({
           placeholder={placeholder}
           onChange={(e) => onChange(Number(e.target.value))}
           aria-label={label}
-          className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-brand-400 text-right tabular-nums"
+          className={cn(
+            "w-full border border-line rounded-lg px-3 bg-white focus:outline-none focus:border-brand-400 text-right tabular-nums",
+            size === "md" ? "py-2.5 text-base" : "py-2 text-sm",
+          )}
         />
-        {suffix && <span className="text-xs text-ink-faint shrink-0 min-w-[2.75rem]">{suffix}</span>}
+        {suffix && (
+          <span className={cn(
+            "text-ink-faint shrink-0 min-w-[2.75rem]",
+            size === "md" ? "text-xs font-medium" : "text-xs",
+          )}>
+            {suffix}
+          </span>
+        )}
       </span>
       {footer && <span className="block mt-1 text-[11px] text-ink-faint">{footer}</span>}
     </label>

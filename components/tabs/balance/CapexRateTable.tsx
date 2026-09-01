@@ -91,7 +91,7 @@ export function CapexRateTable({ invalidate }: { invalidate: () => void }) {
 
   if (lines.length === 0) {
     return (
-      <p className="text-[11px] text-ink-faint">
+      <p className="text-[13px] text-ink-faint leading-relaxed">
         No lever is active yet, so the plan buys nothing. Turn one on in Fine-tune
         levers and the prices it is built from appear here.
       </p>
@@ -100,7 +100,7 @@ export function CapexRateTable({ invalidate }: { invalidate: () => void }) {
 
   return (
     <div data-testid="capex-rate-table">
-      <div className="flex items-center gap-3 pb-1.5 text-[9px] uppercase tracking-wide font-bold text-ink-faint">
+      <div className="flex items-center gap-3 pb-2 text-[10px] uppercase tracking-[0.08em] font-bold text-ink-faint">
         <span className="w-44 shrink-0">Driver</span>
         <span className="w-6 shrink-0" />
         <span className="w-28 shrink-0 text-right">Quantity</span>
@@ -117,12 +117,12 @@ export function CapexRateTable({ invalidate }: { invalidate: () => void }) {
 
           return (
             <div key={`${line.scope}:${line.driverId}`} className="flex items-center gap-3 py-2">
-              <span className="w-44 shrink-0 text-[11px] font-medium text-ink truncate" title={line.label}>
+              <span className="w-44 shrink-0 text-[13px] font-medium text-ink truncate" title={line.label}>
                 {line.label}
               </span>
-              <span className="w-6 shrink-0 text-[9px] font-bold text-ink-faint">S{line.scope}</span>
+              <span className="w-6 shrink-0 text-[10px] font-bold text-ink-faint">S{line.scope}</span>
 
-              <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-ink-soft">
+              <span className="w-28 shrink-0 text-right text-xs tabular-nums text-ink-soft">
                 {line.unit ? `${fmt(line.unit.quantity)} ${line.unit.unitLabel}` : "—"}
               </span>
 
@@ -136,10 +136,10 @@ export function CapexRateTable({ invalidate }: { invalidate: () => void }) {
                     onFocus={(e) => setEditing({ driverId: line.driverId, text: e.target.value })}
                     onBlur={(e) => commit(line, e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                    className="w-28 border border-line rounded-lg px-2 py-1 text-[11px] bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
+                    className="w-28 border border-line rounded-lg px-2.5 py-1.5 text-[13px] bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
                   />
                 ) : (
-                  <span className="text-[11px] text-ink-faint">
+                  <span className="text-xs text-ink-faint">
                     {zeroCapital ? "no capital" : "per source"}
                   </span>
                 )}
@@ -151,7 +151,7 @@ export function CapexRateTable({ invalidate }: { invalidate: () => void }) {
               <span
                 data-amount={line.amount}
                 className={cn(
-                  "w-24 shrink-0 text-right text-[11px] font-extrabold tabular-nums",
+                  "w-24 shrink-0 text-right text-[13px] font-extrabold tabular-nums",
                   line.amount < 0 ? "text-brand-600" : "text-ink",
                 )}
               >
@@ -170,12 +170,10 @@ export function CapexRateTable({ invalidate }: { invalidate: () => void }) {
         })}
       </div>
 
-      <p className="mt-3 text-[11px] text-ink-faint leading-relaxed max-w-2xl">
-        These are the same prices the Scope 1 and Scope 2 source screens edit — one
-        place, not a copy. Typing a figure here scales every source behind it by the
-        same factor, so a site you priced differently stays different. Rates shown
-        as {CURRENCY} per unit where the driver decomposes; otherwise the line&rsquo;s
-        total. The solar subsidy is a percentage and is set per facility.
+      <p className="mt-3.5 text-xs text-ink-faint leading-relaxed max-w-2xl">
+        The same prices the Scope 1 and Scope 2 source screens edit. A rate is{" "}
+        {CURRENCY} per unit where the driver decomposes and the line&rsquo;s total
+        where it does not; the solar subsidy is a percentage, set per facility.
       </p>
     </div>
   );

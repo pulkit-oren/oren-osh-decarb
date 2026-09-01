@@ -18,7 +18,9 @@ import { useMemo } from "react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import {
-  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, bauOverridesFrom, describeBauPremise,
+  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT,
+  BAU_GROWTH_SPINNER_MAX_PCT, BAU_GROWTH_SPINNER_MIN_PCT, BAU_GROWTH_STEP_PCT,
+  bauOverridesFrom, describeBauPremise,
   overrideForScope, resolveBauGrowthPct,
   scope1ActualSeries, scope2ActualSeries, type DerivedGrowth, type YearPoint,
 } from "@/lib/bau";
@@ -119,10 +121,15 @@ export function capitalRowsFrom(
 
 /** One scope's growth override.
  *
- *  A component rather than two copies of the same twenty lines: the min/max
+ *  A component rather than two copies of the same twenty lines: the spinner
  *  bounds, the empty-string-to-undefined normalisation and the placeholder
  *  contract are exactly the rules that must not differ between the two scopes,
- *  and two inline copies are how they would come to. */
+ *  and two inline copies are how they would come to.
+ *
+ *  It carries no visible label. The row it sits in names the scope once, for
+ *  both the derived rate and this field; a second "Scope 1" beside the box
+ *  labelled the same thing twice on one line. The aria-label stays, because a
+ *  screen reader has no row to read it from. */
 function GrowthField({ scope, value, placeholder, onChange }: {
   scope: "Scope 1" | "Scope 2";
   value: number | undefined;
@@ -131,25 +138,75 @@ function GrowthField({ scope, value, placeholder, onChange }: {
 }) {
   return (
     <span className="flex items-center gap-2">
-      <span className="w-14 text-[11px] font-semibold text-ink-faint">{scope}</span>
       <input
-        /* min/max bound the SPINNER only — typing past them is still possible,
-           so the same bounds are enforced where the value is read, in
-           resolveBauGrowthPct. Following the precedent in
-           lib/finance/assumptions.ts. Without either, a typed 1000000 was
-           accepted and made every downstream figure meaningless. */
-        type="number" step={0.1}
-        min={BAU_GROWTH_MIN_PCT} max={BAU_GROWTH_MAX_PCT}
+        /* The bounds here are the SPINNER pair, deliberately wider than the
+           accepted range: `min` doubles as the HTML step base, so it must be a
+           multiple of the step or the arrows land on 2.81 rather than 2.90. The
+           real clamp is in resolveBauGrowthPct, where the value is read — which
+           is also what stops a typed 1000000 from compounding into nonsense. */
+        type="number" step={BAU_GROWTH_STEP_PCT}
+        min={BAU_GROWTH_SPINNER_MIN_PCT} max={BAU_GROWTH_SPINNER_MAX_PCT}
         aria-label={`${scope} BAU growth override`}
         placeholder={placeholder}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-        className="w-24 border border-line rounded-lg px-3 py-2 text-sm bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
+        className="w-28 border border-line rounded-lg px-3 py-2.5 text-base bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
       />
-      <span className="text-xs text-ink-faint">%/yr</span>
+      <span className="text-xs font-medium text-ink-faint">%/yr</span>
     </span>
   );
 }
+
+/** One scope's line in the growth table: what its own history says, and what
+ *  you are using instead.
+ *
+ *  A ROW per scope, not a column per source. The two scopes are peers — the
+ *  previous layout set Scope 1 at `text-2xl` and Scope 2 at `text-sm`, which
+ *  claimed a hierarchy that does not exist and buried the larger of the two
+ *  rates on the client inventories that prompted the split. Putting the
+ *  override on the same line as the rate it replaces also makes the
+ *  substitution visible, which two stacked blocks never did. */
+function ScopeGrowthRow({ scope, derived, basis, value, placeholder, onChange }: {
+  scope: "Scope 1" | "Scope 2";
+  derived: DerivedGrowth | null;
+  basis: string;
+  value: number | undefined;
+  placeholder: string;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <div className={GROWTH_GRID + " items-center py-3.5 border-t border-line/60"}>
+      <span className="text-[11px] uppercase tracking-[0.08em] font-bold text-ink-faint">
+        {scope}
+      </span>
+      <span className="min-w-0">
+        {/* No unit beside the dash. At 2xl extrabold an em dash is a heavy
+            horizontal bar, and "— %/yr" reads as a rate whose digits failed to
+            load rather than as a scope with too little history to measure. The
+            line underneath says which it is. */}
+        {derived ? (
+          <span className="block text-2xl font-extrabold tabular-nums leading-none text-ink">
+            {growthPct(derived.pct)}
+            <span className="text-sm font-bold text-ink-faint ml-1.5">%/yr</span>
+          </span>
+        ) : (
+          <span className="block text-xl font-semibold leading-none text-ink-faint">&mdash;</span>
+        )}
+        <span className="block text-[11px] text-ink-faint mt-1.5 leading-snug">{basis}</span>
+      </span>
+      <GrowthField scope={scope} value={value} placeholder={placeholder} onChange={onChange} />
+    </div>
+  );
+}
+
+/** Shared by the header and both rows, so the three columns cannot drift. */
+const GROWTH_GRID = "grid grid-cols-[4.5rem_1fr_auto] gap-x-5";
+
+/** A rate to one decimal with a true minus sign, not a hyphen. One decimal
+ *  because that is the precision every other statement of the premise uses —
+ *  `describeBauPremise.single` collapses two rates at exactly this precision,
+ *  so printing more here would show two numbers the model calls one. */
+const growthPct = (n: number) => `${n >= 0 ? "" : "−"}${Math.abs(n).toFixed(1)}`;
 
 export function AssumptionsPanel({
   rows, year, target, capexBudget, setCapexBudget, invalidate,
@@ -182,7 +239,6 @@ export function AssumptionsPanel({
   }, [s1.combustion, s1.refrigeration, s2.facilities]);
 
   const { base, bauAtYear, requiredT } = targetPosition(rows, year, target);
-  const pctLabel = (n: number) => `${n >= 0 ? "" : "−"}${Math.abs(n).toFixed(1)} %/yr`;
 
   /* What each field SHOWS. `bauGrowthPct` is the pre-split rate: a scenario
      saved before the split has it and neither scope field, and the honest thing
@@ -278,68 +334,59 @@ export function AssumptionsPanel({
     <div className="h-full min-h-0 overflow-y-auto p-6 space-y-4">
       {/* ── Business as usual ──────────────────────────────────────────── */}
       <SettingCard title="Business as usual" summary={bauSummary}>
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
-          <div>
-            <div className="text-[11px] text-ink-soft flex items-center gap-1">
+        {/* Two columns, named once at the top, over one row per scope — rather
+            than the two labels repeated beside each of four stacked blocks. */}
+        <div className="max-w-3xl">
+          <div className={GROWTH_GRID + " items-center pb-1"}>
+            <span />
+            <span className="text-[11px] uppercase tracking-[0.08em] font-bold text-ink-soft flex items-center gap-1.5">
               From your data
               <InfoTip text="Compound annual growth between the earliest financial year you have an inventory for and your base year, restricted to the sources present in BOTH years — a source that joined or left mid-span is named below rather than counted as growth. Every year is plotted below, so an odd year is visible rather than hidden." />
-            </div>
-            <div className="text-2xl font-extrabold tabular-nums text-ink">
-              {s1.derivedBau ? pctLabel(s1.derivedBau.pct) : "—"}
-              <span className="text-[11px] font-semibold text-ink-faint ml-2">Scope 1</span>
-            </div>
-            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s1.derivedBau, "source", "sources")}</div>
-
-            <div className="text-sm font-extrabold tabular-nums text-ink mt-3">
-              {s2.derivedBau ? pctLabel(s2.derivedBau.pct) : "—"}
-              <span className="text-[11px] font-semibold text-ink-faint ml-2">Scope 2</span>
-            </div>
-            <div className="text-[11px] text-ink-faint mt-1">{bauBasisLine(s2.derivedBau, "facility", "facilities")}</div>
-          </div>
-
-          <div>
-            <span className="text-[11px] text-ink-soft flex items-center gap-1">
+            </span>
+            <span className="text-[11px] uppercase tracking-[0.08em] font-bold text-ink-soft flex items-center gap-1.5">
               Use instead
               <InfoTip text={`A rate per scope, each replacing that scope's own history on the left. Fill one and the other keeps following its own data — the two scopes rarely grow at the same speed, which is why there are two boxes rather than one. Leave a box blank and the greyed-out figure is what that scope will use. Zero is a valid premise: a flat business-as-usual. Accepted range ${BAU_GROWTH_MIN_PCT} to ${BAU_GROWTH_MAX_PCT} %/yr.`} />
             </span>
+          </div>
 
-            {/* One field per scope, in the Scope 1 / Scope 2 order the derived
-                block on the left lists them. No slider: it drove ONE value, and
-                a single slider beside two fields would have had to pick a scope
-                to control silently. */}
-            <span className="mt-1.5 flex flex-col gap-2">
-              <GrowthField
-                scope="Scope 1"
-                value={s1Override}
-                placeholder={s1Placeholder}
-                onChange={setS1}
-              />
-              <GrowthField
-                scope="Scope 2"
-                value={s2Override}
-                placeholder={s2Placeholder}
-                onChange={setS2}
-              />
-            </span>
+          <ScopeGrowthRow
+            scope="Scope 1"
+            derived={s1.derivedBau}
+            basis={bauBasisLine(s1.derivedBau, "source", "sources")}
+            value={s1Override}
+            placeholder={s1Placeholder}
+            onChange={setS1}
+          />
+          <ScopeGrowthRow
+            scope="Scope 2"
+            derived={s2.derivedBau}
+            basis={bauBasisLine(s2.derivedBau, "facility", "facilities")}
+            value={s2Override}
+            placeholder={s2Placeholder}
+            onChange={setS2}
+          />
 
+          <div className={GROWTH_GRID + " border-t border-line/60 pt-2.5"}>
+            <span />
+            <span />
             <button
               type="button"
               onClick={resetGrowth}
               disabled={!anyOverride}
-              className="mt-2 text-xs font-semibold text-brand-700 hover:text-brand-800 disabled:text-ink-faint disabled:cursor-default"
+              className="justify-self-start text-xs font-semibold text-brand-700 hover:text-brand-800 disabled:text-ink-faint disabled:cursor-default"
             >
               Reset to derived
             </button>
           </div>
         </div>
 
-        <p className="mt-3 text-[11px] text-ink-soft leading-relaxed max-w-2xl">
+        <p className="mt-5 text-[13px] text-ink-soft leading-relaxed max-w-2xl">
           Business-as-usual reaches <strong className="text-ink tabular-nums">{fmt(bauAtYear)} t</strong> by {year},
           against a {s1.baseYear} base of <strong className="text-ink tabular-nums">{fmt(base)} t</strong> — so{" "}
           <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> has to come out of that path to hit {target}%.
         </p>
 
-        <div className="mt-3">
+        <div className="mt-4">
           <BauChart actuals={actuals} bau={rows} baseYear={s1.baseYear} />
         </div>
       </SettingCard>
@@ -348,12 +395,14 @@ export function AssumptionsPanel({
       <SettingCard title="Mix inputs" summary={mixSummary}>
         <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
-            <div className="text-[11px] text-ink-soft">Target</div>
-            <div className="text-sm font-extrabold tabular-nums text-ink">{target}% by {year}</div>
-            <div className="text-[11px] text-ink-faint mt-0.5">set in the band above</div>
+            <span className="text-[11px] uppercase tracking-[0.08em] font-bold text-ink-soft">Target</span>
+            <div className="text-2xl font-extrabold tabular-nums leading-none text-ink mt-1.5">
+              {target}%<span className="text-sm font-bold text-ink-faint ml-1.5">by {year}</span>
+            </div>
+            <div className="text-[11px] text-ink-faint mt-1.5">set in the band above</div>
           </div>
           <label className="block">
-            <span className="text-[11px] text-ink-soft flex items-center gap-1">
+            <span className="text-[11px] uppercase tracking-[0.08em] font-bold text-ink-soft flex items-center gap-1.5">
               CAPEX budget
               <InfoTip text="Ceiling on the capital a suggested mix may commit. Leave blank for no cap." />
             </span>
@@ -364,9 +413,9 @@ export function AssumptionsPanel({
                 placeholder="no cap"
                 value={capexBudget === 0 ? "" : capexBudget}
                 onChange={(e) => { invalidate(); setCapexBudget(Math.max(0, Number(e.target.value) || 0)); }}
-                className="w-40 border border-line rounded-lg px-3 py-2 text-sm bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
+                className="w-44 border border-line rounded-lg px-3 py-2.5 text-base bg-white text-right tabular-nums focus:outline-none focus:border-brand-400"
               />
-              <span className="text-xs text-ink-faint">{CURRENCY}</span>
+              <span className="text-xs font-medium text-ink-faint">{CURRENCY}</span>
             </span>
           </label>
         </div>
@@ -379,7 +428,7 @@ export function AssumptionsPanel({
         testId="capital-card"
       >
         {capitalRows.length === 0 ? (
-          <p className="text-[11px] text-ink-faint">
+          <p className="text-[13px] text-ink-faint leading-relaxed">
             No lever is active yet, so the plan commits no capital. Turn one on in
             Fine-tune levers and its capital appears here.
           </p>
@@ -388,20 +437,20 @@ export function AssumptionsPanel({
             {/* The two figures carry opposite meanings and one is often
                 negative, so an unlabelled "₹-5.82 Cr/yr" reads as ambiguous
                 between a cost and a saving. Colour alone was carrying that. */}
-            <div className="flex items-center gap-3 pb-1.5 text-[9px] uppercase tracking-wide font-bold text-ink-faint">
-              <span className="w-36 shrink-0">Lever</span>
+            <div className="flex items-center gap-3 pb-2 text-[10px] uppercase tracking-[0.08em] font-bold text-ink-faint">
+              <span className="w-40 shrink-0">Lever</span>
               <span className="w-6 shrink-0" />
               <span className="flex-1 min-w-8" />
               <span className="w-24 shrink-0 text-right">Capital</span>
               <span className="w-24 shrink-0 text-right">Yearly cost</span>
             </div>
             {capitalRows.map((row) => (
-              <div key={`${row.scopeTag}:${row.id}`} className="flex items-center gap-3 py-2">
-                <span className="w-36 shrink-0 text-[11px] font-medium text-ink truncate" title={row.label}>
+              <div key={`${row.scopeTag}:${row.id}`} className="flex items-center gap-3 py-2.5">
+                <span className="w-40 shrink-0 text-[13px] font-medium text-ink truncate" title={row.label}>
                   {row.label}
                 </span>
-                <span className="w-6 shrink-0 text-[9px] font-bold text-ink-faint">{row.scopeTag}</span>
-                <span className="flex-1 min-w-8 h-2 rounded-full bg-surface-muted overflow-hidden">
+                <span className="w-6 shrink-0 text-[10px] font-bold text-ink-faint">{row.scopeTag}</span>
+                <span className="flex-1 min-w-8 h-2.5 rounded-full bg-surface-muted overflow-hidden">
                   <span
                     className="block h-full rounded-full transition-all duration-500"
                     style={{
@@ -412,14 +461,14 @@ export function AssumptionsPanel({
                 </span>
                 <span
                   data-capex={row.capex}
-                  className="w-24 shrink-0 text-right text-[11px] font-extrabold tabular-nums text-ink"
+                  className="w-24 shrink-0 text-right text-[13px] font-extrabold tabular-nums text-ink"
                 >
                   {row.capex > 0.5
                     ? fmtMoney(row.capex)
                     : <span className="font-semibold text-ink-faint">no capital</span>}
                 </span>
                 <span className={cn(
-                  "w-24 shrink-0 text-right text-[10px] tabular-nums",
+                  "w-24 shrink-0 text-right text-xs tabular-nums",
                   row.annualOpexDelta <= 0 ? "text-brand-600" : "text-amber-700",
                 )}>
                   {Math.abs(row.annualOpexDelta) > 0.5 ? `${fmtMoney(row.annualOpexDelta)}/yr` : "—"}
@@ -428,11 +477,6 @@ export function AssumptionsPanel({
             ))}
           </div>
         )}
-        <p className="mt-3 text-[11px] text-ink-faint leading-relaxed max-w-2xl">
-          Capital per lever family, from the same model the Cost &amp; capital tab
-          reads — so the two cannot disagree. The prices underneath it are in the
-          next card.
-        </p>
       </SettingCard>
 
       {/* ── The prices that capital is built from ──────────────────────── */}
@@ -447,58 +491,55 @@ export function AssumptionsPanel({
       {/* ── Running costs & finance ────────────────────────────────────── */}
       <SettingCard title="Running costs & finance" summary={financeSummary}>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <NumField label="Discount rate (WACC)" suffix="%" step={0.5} min={0}
+          <NumField size="md" label="Discount rate (WACC)" suffix="%" step={0.5} min={0}
             hint="Discounts every year's cash and tonnes back to the base year — drives ₹/t, NPV and payback."
             value={a.discountRatePct ?? 10}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ discountRatePct: v }); }} />
-          <NumField label="Fuel escalation" suffix="%/yr" step={0.5}
+          <NumField size="md" label="Fuel escalation" suffix="%/yr" step={0.5}
             hint="How fast fuel prices rise each year."
             value={a.fuelEscalationPct ?? 5}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ fuelEscalationPct: v }); }} />
-          <NumField label="Electricity escalation" suffix="%/yr" step={0.5}
+          <NumField size="md" label="Electricity escalation" suffix="%/yr" step={0.5}
             hint="How fast the grid tariff rises each year."
             value={a.elecEscalationPct ?? 3}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ elecEscalationPct: v }); }} />
-          <NumField label="Other escalation" suffix="%/yr" step={0.5}
+          <NumField size="md" label="Other escalation" suffix="%/yr" step={0.5}
             hint="Growth for everything else — certificates, maintenance."
             value={a.otherEscalationPct ?? 0}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ otherEscalationPct: v }); }} />
-          <NumField label="Maintenance share of spend" suffix="%" step={5}
+          <NumField size="md" label="Maintenance share of spend" suffix="%" step={5}
             hint="Share of an asset's annual bill that is maintenance; fuel is the rest."
             value={a.maintenanceShareOfSpendPct ?? 20}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ maintenanceShareOfSpendPct: v }); }} />
-          <NumField label="EV maintenance vs ICE" suffix="%" step={5}
+          <NumField size="md" label="EV maintenance vs ICE" suffix="%" step={5}
             hint="EVs still need maintenance — this share of the displaced maintenance is added back."
             value={a.evMaintenanceRatioPct ?? 65}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ evMaintenanceRatioPct: v }); }} />
-          <NumField label="Heat-pump maintenance" suffix="%" step={5}
+          <NumField size="md" label="Heat-pump maintenance" suffix="%" step={5}
             hint="Heat-pump / electric-boiler maintenance as a share of the plant it replaces."
             value={a.heatPumpMaintenanceRatioPct ?? 70}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ heatPumpMaintenanceRatioPct: v }); }} />
-          <NumField label="Certificate price" suffix={`${CURRENCY}/kWh`} step={0.05}
+          <NumField size="md" label="Certificate price" suffix={`${CURRENCY}/kWh`} step={0.05}
             hint="REC / green-tariff premium per kWh — the one place either scope reads it from."
             value={a.recPricePerKwh ?? 0.45}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ recPricePerKwh: v }); }} />
-          <NumField label="Carbon price" suffix={`${CURRENCY}/t`} step={250}
+          <NumField size="md" label="Carbon price" suffix={`${CURRENCY}/t`} step={250}
             hint="Internal carbon price — shown as a uniform sensitivity, never mixed into the cash view."
             value={a.carbonPricePerTonne}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ carbonPricePerTonne: v }); }} />
-          <NumField label="Grid emission factor" suffix="kgCO₂e/kWh" step={0.01}
+          <NumField size="md" label="Grid emission factor" suffix="kgCO₂e/kWh" step={0.01}
             hint="How dirty the local grid is per unit of electricity, in the base year."
             value={a.gridEf}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ gridEf: v }); }} />
-          <NumField label="Grid decline" suffix="%/yr" step={0.5}
+          <NumField size="md" label="Grid decline" suffix="%/yr" step={0.5}
             hint="How fast the grid cleans each year — every Scope 2 tonne falls with it."
             value={a.gridEfDeclinePctPerYear ?? 0}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ gridEfDeclinePctPerYear: v }); }} />
-          <NumField label="Infrastructure CAPEX" suffix={CURRENCY} step={1_000_000}
+          <NumField size="md" label="Infrastructure CAPEX" suffix={CURRENCY} step={1_000_000}
             hint="One-off charging / grid-upgrade cost, charged once when any electrification is on."
             value={a.infraCapex}
             onChange={(v) => { invalidate(); s1.updateAssumptions({ infraCapex: v }); }} />
         </div>
-        <p className="mt-3 text-[11px] text-ink-faint">
-          These are the same figures the Scope 1 source screens edit — one place, not a copy.
-        </p>
       </SettingCard>
     </div>
   );

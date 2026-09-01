@@ -38,29 +38,29 @@ export function SettingCard({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "w-full flex items-center gap-2.5 px-4 py-3 text-left",
+          "w-full flex items-center gap-2.5 px-5 py-3.5 text-left",
           "transition-colors hover:bg-surface-muted/50",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-inset",
         )}
       >
         <ChevronDown
-          size={14}
+          size={15}
           aria-hidden="true"
           className={cn(
             "shrink-0 text-ink-faint transition-transform duration-200",
             open ? "" : "-rotate-90",
           )}
         />
-        <span className="text-[10px] uppercase tracking-wide font-bold text-ink">{title}</span>
+        <span className="text-[11px] uppercase tracking-[0.09em] font-bold text-ink">{title}</span>
         {summary != null && (
-          <span className="ml-auto pl-3 text-[11px] tabular-nums text-ink-soft text-right">
+          <span className="ml-auto pl-3 text-xs tabular-nums text-ink-soft text-right">
             {summary}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="px-4 pt-3 pb-4 border-t border-line/60">{children}</div>
+        <div className="px-5 pt-4 pb-5 border-t border-line/60">{children}</div>
       )}
     </section>
   );

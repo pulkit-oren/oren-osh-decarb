@@ -2,7 +2,9 @@
    and the CAGR that turns it into one growth rate. */
 import { describe, expect, it } from "vitest";
 import {
-  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, deriveBauGrowth, deriveScope1Bau, deriveScope2Bau,
+  BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, BAU_GROWTH_STEP_PCT,
+  BAU_GROWTH_SPINNER_MAX_PCT, BAU_GROWTH_SPINNER_MIN_PCT,
+  deriveBauGrowth, deriveScope1Bau, deriveScope2Bau,
   describeBauPremise, overrideForScope, resolveBauGrowthPct, scope1ActualSeries, scope2ActualSeries,
   type DerivedGrowth, type YearPoint,
 } from "../bau";
@@ -490,5 +492,36 @@ describe("deriveScope2Bau — like-for-like across a changed boundary", () => {
     const d = deriveScope2Bau(DEFAULT_FACILITIES_BY_YEAR, SCOPE2_DEFAULT_BASE_YEAR)!;
     expect(d.basis).toBe("like-for-like");
     expect(d.pct).toBeCloseTo(2.11, 2);
+  });
+});
+
+/* The spinner bounds are a SEPARATE pair from the accepted range, and the
+   reason is a piece of HTML most people meet once: `min` is the step BASE, not
+   just a floor. With min=-99.99 and step=0.1 the arrows walk -99.99, -99.89 …
+   and land on 2.81 rather than 2.90 — every value ends in the wrong digit. */
+describe("the growth field's spinner bounds", () => {
+  const isMultipleOfStep = (v: number) =>
+    Math.abs(v / BAU_GROWTH_STEP_PCT - Math.round(v / BAU_GROWTH_STEP_PCT)) < 1e-9;
+
+  it("puts the step base on a multiple of the step, so arrows land on round tenths", () => {
+    expect(isMultipleOfStep(BAU_GROWTH_SPINNER_MIN_PCT)).toBe(true);
+    // The guard that this test is not vacuous: the ACCEPTED minimum is not a
+    // multiple of the step, which is exactly why a second constant exists.
+    expect(isMultipleOfStep(BAU_GROWTH_MIN_PCT)).toBe(false);
+  });
+
+  it("brackets the accepted range rather than narrowing it", () => {
+    // A spinner bound INSIDE the accepted range would block the arrows from
+    // reaching a premise that typing accepts — two different answers to "what
+    // is allowed" depending on how you entered it.
+    expect(BAU_GROWTH_SPINNER_MIN_PCT).toBeLessThanOrEqual(BAU_GROWTH_MIN_PCT);
+    expect(BAU_GROWTH_SPINNER_MAX_PCT).toBeGreaterThanOrEqual(BAU_GROWTH_MAX_PCT);
+  });
+
+  it("still clamps a value spun to the very edge back into the accepted range", () => {
+    // Widening the spinner is safe only because the clamp lives where the value
+    // is READ, not on the input.
+    expect(resolveBauGrowthPct(BAU_GROWTH_SPINNER_MIN_PCT, undefined)).toBe(BAU_GROWTH_MIN_PCT);
+    expect(resolveBauGrowthPct(BAU_GROWTH_SPINNER_MAX_PCT, undefined)).toBe(BAU_GROWTH_MAX_PCT);
   });
 });

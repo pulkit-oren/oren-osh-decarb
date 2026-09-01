@@ -208,6 +208,22 @@ export function deriveScope2Bau(
 export const BAU_GROWTH_MIN_PCT = -99.99;
 export const BAU_GROWTH_MAX_PCT = 100;
 
+/** What the number inputs carry, which is NOT the accepted range.
+ *
+ *  In HTML, `min` is the step BASE, not merely a floor: allowed values are
+ *  `min + n × step`. With `min={-99.99} step={0.1}` the arrows walk -99.99,
+ *  -99.89, … so every stop lands on the wrong digit — from 2.84 the spinner
+ *  offers 2.81, never 2.90. The base has to be a multiple of the step, and
+ *  -99.99 is not one.
+ *
+ *  So the inputs get the nearest round bounds that BRACKET the accepted range
+ *  — never narrow it, or the arrows would refuse a premise typing accepts —
+ *  and the real clamp stays in `resolveBauGrowthPct`, where the value is read.
+ *  A value spun to -100 is read as -99.99. */
+export const BAU_GROWTH_STEP_PCT = 0.1;
+export const BAU_GROWTH_SPINNER_MIN_PCT = -100;
+export const BAU_GROWTH_SPINNER_MAX_PCT = 100;
+
 /** Clamp to the bounds, and drop a non-finite value entirely so the `??` chain
  *  below falls through to the next premise rather than propagating NaN into
  *  every trajectory. `null`/`undefined` in, `undefined` out — an ABSENT premise
