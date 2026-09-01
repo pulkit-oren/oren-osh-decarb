@@ -24,6 +24,7 @@ import { NumField } from "@/components/tabs/activity/fields";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { BauChart } from "@/components/charts/BauChart";
 import { SettingCard } from "./SettingCard";
+import { CapexRateTable } from "./CapexRateTable";
 import { cn, fmt, fmtMoney } from "@/lib/utils";
 
 /** The slider's usable band. Deliberately narrower than the accepted range
@@ -216,6 +217,9 @@ export function AssumptionsPanel({
   );
 
   const totalCapex = capitalRows.reduce((sum, l) => sum + l.capex, 0);
+  /* How many priced drivers sit behind those families — the CAPEX rates card
+     lists one row per driver, not per family. */
+  const totalCapexLineCount = s1.result.capexLines.length + s2.result.capexLines.length;
   /* Bars are relative to the largest line, not to the total: at a realistic
      spread the biggest line is a third of the total, so scaling by total would
      leave every bar short and the comparison hard to read. Floor of 1 keeps a
@@ -393,12 +397,18 @@ export function AssumptionsPanel({
         )}
         <p className="mt-3 text-[11px] text-ink-faint leading-relaxed max-w-2xl">
           Capital per lever family, from the same model the Cost &amp; capital tab
-          reads — so the two cannot disagree. Rates are edited per source in the{" "}
-          <strong className="text-ink-soft">Scope 1</strong> and{" "}
-          <strong className="text-ink-soft">Scope 2</strong> screens; a table for
-          editing each of the sixteen rate drivers here lands once both engines
-          emit their capital lines.
+          reads — so the two cannot disagree. The prices underneath it are in the
+          next card.
         </p>
+      </SettingCard>
+
+      {/* ── The prices that capital is built from ──────────────────────── */}
+      <SettingCard
+        title="CAPEX rates"
+        summary={`${capitalRows.length > 0 ? `${totalCapexLineCount} drivers` : "nothing priced yet"}`}
+        testId="capex-rates-card"
+      >
+        <CapexRateTable invalidate={invalidate} />
       </SettingCard>
 
       {/* ── Running costs & finance ────────────────────────────────────── */}

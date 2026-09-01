@@ -255,6 +255,64 @@ describe("Assumptions cards", () => {
 
   it("still says where per-source rates are edited", () => {
     open();
-    expect(screen.getByTestId("capital-card").textContent).toMatch(/Scope 1/);
+    // The sentence moved to the CAPEX rates card, which is where the prices
+    // now live — the claim is unchanged, only its home.
+    expect(screen.getByTestId("capex-rate-table").textContent).toMatch(/Scope 1/);
+  });
+
+  it("prices the plan by driver, not only by lever family", () => {
+    open();
+    const table = screen.getByTestId("capex-rate-table");
+    // The capital card groups by lever; this table is the level below it,
+    // one row per priced driver, which is what makes a rate editable.
+    expect(table.textContent).toMatch(/Driver/i);
+    expect(table.querySelectorAll("[data-amount]").length).toBeGreaterThan(0);
+  });
+
+  it("writes a typed rate through to the model, and the lever total moves with it", () => {
+    open();
+    const table = screen.getByTestId("capex-rate-table");
+    const input = [...table.querySelectorAll("input[type=number]")]
+      .find((i) => /rate$/.test(i.getAttribute("aria-label") ?? "")) as HTMLInputElement;
+    expect(input, "expected at least one decomposing driver with an editable rate").toBeTruthy();
+
+    const row = input.closest("div")!.parentElement!;
+    const amountEl = () => row.querySelector("[data-amount]")!;
+    const before = Number(amountEl().getAttribute("data-amount"));
+    const rateBefore = Number(input.value);
+    expect(before).toBeGreaterThan(0);
+
+    // Double the rate. Capital is quantity x rate, and quantity does not move,
+    // so the line's capital must double — that is the whole contract of typing
+    // here rather than editing each source by hand.
+    fireEvent.change(input, { target: { value: String(rateBefore * 2) } });
+    fireEvent.blur(input);
+
+    const after = Number(amountEl().getAttribute("data-amount"));
+    expect(after).toBeCloseTo(before * 2, 4);
+  });
+
+  it("keeps the lever card and the driver table on one set of additions", () => {
+    open();
+    const table = screen.getByTestId("capex-rate-table");
+    const input = [...table.querySelectorAll("input[type=number]")]
+      .find((i) => /rate$/.test(i.getAttribute("aria-label") ?? "")) as HTMLInputElement;
+    const leverText = () => screen.getByTestId("capital-card").textContent ?? "";
+    const before = leverText();
+
+    fireEvent.change(input, { target: { value: String(Number(input.value) * 2) } });
+    fireEvent.blur(input);
+
+    // The lever card reads the same engine output, so a rate edit must move it
+    // too. If it did not, the breakdown and the total would be two quantities.
+    expect(leverText()).not.toBe(before);
+  });
+
+  it("lets a decomposing driver's rate be typed over", () => {
+    open();
+    const table = screen.getByTestId("capex-rate-table");
+    // At least one line must offer an editable figure, or the table is a
+    // read-only breakdown wearing the name of an editor.
+    expect(table.querySelectorAll("input[type=number]").length).toBeGreaterThan(0);
   });
 });
