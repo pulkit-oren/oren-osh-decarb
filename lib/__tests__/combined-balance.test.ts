@@ -2,7 +2,7 @@
    measurement, derived current dials, and the cheapest-first suggester. */
 
 import { describe, expect, it } from "vitest";
-import { combinedReduction2030, currentCombinedDials, suggestCombinedMix, suggestMixOptions, type CombinedDials, type CombinedInputs } from "../combined-balance";
+import { combinedReduction2030, currentCombinedDials, scoreMix, suggestCombinedMix, suggestMixOptions, type CombinedDials, type CombinedInputs, type MixObjective, type MixScore } from "../combined-balance";
 import { compute } from "@/lib/model";
 import { computeScope2 } from "@/lib/scope2/model";
 import { combineTrajectories, targetPosition } from "@/lib/model/combined";
@@ -157,10 +157,9 @@ describe("currentCombinedDials", () => {
 });
 
 describe("suggestCombinedMix", () => {
-  it("meets a modest target and reports the cost ranking", () => {
-    const { dials, achieved, order } = suggestCombinedMix(inp, 0.1);
+  it("meets a modest target with every dial in range", () => {
+    const { dials, achieved } = suggestCombinedMix(inp, 0.1);
     expect(achieved).toBeGreaterThanOrEqual(0.1);
-    expect(order.length).toBeGreaterThan(0);
     const all = [...Object.values(dials.s1), ...Object.values(dials.s2)];
     for (const v of all) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(100); }
   });
@@ -248,33 +247,32 @@ describe("suggestMixOptions — three bases, ordered trade-offs", () => {
   });
 });
 
-describe("the ranking basis is the SAME basis the card shows", () => {
-  // priceFamily used to rank on `annualCost` — the CRF annuity lib/model marks
-  // DISPLAY ONLY — while the KPI beside the options showed the programme
+describe("the number that CHOOSES the mix is the number the card shows", () => {
+  // The suggester used to choose on `annualCost` — the CRF annuity lib/model
+  // marks DISPLAY ONLY — while the KPI beside the options showed the programme
   // levelised figure. Two quantities, two bases, and they order the families
-  // differently: on the annuity basis S2:procurementPct ranked 4th of six; on
-  // the levelised basis it ranks last. So the mix the user was offered as
-  // "cheapest" was cheapest by a number the screen never displayed.
+  // differently: the mix offered as "cheapest" was cheapest by a number the
+  // screen never displayed.
   //
-  // Electrification leads because its Rs/t is a SAVING and netting the Scope 2
-  // spill out of its denominator divides that saving by fewer tonnes, which
-  // reads as cheaper. That is a property of ranking savings by Rs/t, not of the
-  // netting: for a lever that costs money, netting makes it dearer. Recorded
-  // here because it is the kind of sign asymmetry that looks like a bug later.
-  const order = suggestCombinedMix(inp, 0.12, "costPerTonne").order;
+  // There is no ranking left to assert — the search prices whole mixes rather
+  // than sorting families — so the property is stated where it actually bites:
+  // the basis a card optimises must be the basis it prints.
+  const opts = suggestMixOptions(inp, 0.12);
 
-  it("ranks the six families in levelised order, procurement last", () => {
-    expect(order).toEqual([
-      "S1:electrifyPct", "S2:solarPct", "S2:efficiencyPct",
-      "S1:refrigPct", "S1:bioBlendPct", "S2:procurementPct",
-    ]);
+  it("optimises each card on the figure that card displays", () => {
+    for (const o of opts) {
+      const s = scoreMix(inp, o.dials);
+      expect(s.costPerTonne).toBeCloseTo(o.kpis.costPerTonne, 6);
+      expect(s.totalCapex).toBeCloseTo(o.kpis.totalCapex, 6);
+      expect(s.annualOpexDelta).toBeCloseTo(o.kpis.annualOpexDelta, 6);
+    }
   });
 
-  it("every family is ranked — none is dropped for having no tonnes", () => {
-    // The old filter was `abatementT > 0` INSIDE the price, which is F4 rebuilt:
-    // spend on a zero-tonne lever left the family's own price.
-    expect(order).toHaveLength(6);
-    expect(new Set(order).size).toBe(6);
+  it("each basis wins on its own figure", () => {
+    const by = Object.fromEntries(opts.map((o) => [o.objective, o]));
+    expect(by.capex.kpis.totalCapex).toBeLessThanOrEqual(by.costPerTonne.kpis.totalCapex + 1e-6);
+    expect(by.costPerTonne.kpis.costPerTonne).toBeLessThanOrEqual(by.capex.kpis.costPerTonne + 1e-6);
+    expect(by.opexSaving.kpis.annualOpexDelta).toBeLessThanOrEqual(by.costPerTonne.kpis.annualOpexDelta + 1e-6);
   });
 });
 
@@ -391,5 +389,98 @@ describe("the premise the suggester runs on IS the premise the rail states", () 
       .toBeCloseTo((p.base - p.netAtYear) / p.base, 9);
     expect(combinedReduction2030(overridden, dials))
       .not.toBeCloseTo(combinedReduction2030(derived, currentCombinedDials(derived)), 4);
+  });
+});
+
+/* ── The suggester searches; it no longer ranks ──────────────────────────────
+   It used to price each family ONCE, standalone from zero, sort by that, and
+   walk the sorted list raising each dial to 100%. Two consequences that a
+   search does not have:
+
+   - a lever whose substrate an earlier lever had already consumed still got
+     raised. On the shipped fixture "Best OPEX saving" recommended bio-blend at
+     100% whose measured contribution was 0.0000pp and zero rupees, because
+     electrify at 100% had already converted the fuel it would have blended.
+   - a family's worth was fixed at its standalone value. Solar alone is worth
+     +23.03pp for the same capital that buys +4.70pp once procurement is at
+     100% — a 5x error the fixed ranking could not see.
+
+   These tests state the properties a search must have, not the mechanism, so
+   they survive a change of search strategy. */
+describe("no recommendation contains a lever that pays for nothing", () => {
+  const DIALS: [keyof CombinedDials, string][] = [
+    ["s1", "electrifyPct"], ["s1", "bioBlendPct"], ["s1", "refrigPct"],
+    ["s2", "efficiencyPct"], ["s2", "solarPct"], ["s2", "procurementPct"],
+  ];
+  const at = (d: CombinedDials, s: keyof CombinedDials, k: string) =>
+    (d as unknown as Record<string, Record<string, number>>)[s][k];
+  const withOff = (d: CombinedDials, s: keyof CombinedDials, k: string): CombinedDials => {
+    const c: CombinedDials = { s1: { ...d.s1 }, s2: { ...d.s2 } };
+    (c as unknown as Record<string, Record<string, number>>)[s][k] = 0;
+    return c;
+  };
+  /** The objective's own number, lower being better on every basis. */
+  const value = (s: MixScore, o: MixObjective) =>
+    o === "capex" ? s.totalCapex : o === "opexSaving" ? s.annualOpexDelta : s.costPerTonne;
+
+  const TARGET = 0.5;
+
+  /* The precise defect, not a proxy for it. Bio-blend at 100% behind
+     electrification at 100% moved NOTHING: same tonnes, same capital, same
+     running cost, same Rs/t — it was pure noise in the recommendation.
+
+     Note what this does NOT assert. A lever may legitimately be kept when
+     dropping it would still meet the target and still cost the same capital,
+     so long as it moves something: on this fixture the lowest-CAPEX mix keeps
+     refrigerant at 10% because it buys 0.38pp more reduction and a better Rs/t
+     for no extra capital. An earlier draft of this test compared only each
+     card's headline figure and called that "free to drop", which would have
+     forced the search to throw away a free improvement. */
+  it("switching any recommended lever off changes something measurable", () => {
+    for (const o of suggestMixOptions(inp, TARGET)) {
+      if (!o.met) continue; // an unreachable target is a different contract
+      const here = scoreMix(inp, o.dials);
+      for (const [scope, key] of DIALS) {
+        if (at(o.dials, scope, key) === 0) continue;
+        const off = scoreMix(inp, withOff(o.dials, scope, key));
+        const inert = Math.abs(off.reduction - here.reduction) < 1e-9
+          && Math.abs(off.totalCapex - here.totalCapex) < 1e-6
+          && Math.abs(off.annualOpexDelta - here.annualOpexDelta) < 1e-6
+          && Math.abs(off.costPerTonne - here.costPerTonne) < 1e-6;
+        expect(inert, `${o.objective}: ${scope}.${key} is recommended but changes nothing`).toBe(false);
+      }
+    }
+  });
+
+  it("no single 10-point change improves a recommended mix", () => {
+    for (const o of suggestMixOptions(inp, TARGET)) {
+      if (!o.met) continue;
+      const here = value(scoreMix(inp, o.dials), o.objective);
+      for (const [scope, key] of DIALS) {
+        for (const delta of [-10, 10]) {
+          const v = at(o.dials, scope, key) + delta;
+          if (v < 0 || v > 100) continue;
+          const c: CombinedDials = { s1: { ...o.dials.s1 }, s2: { ...o.dials.s2 } };
+          (c as unknown as Record<string, Record<string, number>>)[scope][key] = v;
+          const s = scoreMix(inp, c);
+          const better = s.reduction >= TARGET && value(s, o.objective) < here - 1e-9;
+          expect(better, `${o.objective}: ${scope}.${key} ${delta > 0 ? "+" : ""}${delta} is better`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("is deterministic — the same inputs give the same mix twice", () => {
+    const a = suggestMixOptions(inp, TARGET), b = suggestMixOptions(inp, TARGET);
+    expect(a.map((o) => o.dials)).toEqual(b.map((o) => o.dials));
+  });
+
+  it("scoreMix agrees with the option card it produced", () => {
+    for (const o of suggestMixOptions(inp, TARGET)) {
+      const s = scoreMix(inp, o.dials);
+      expect(s.reduction).toBeCloseTo(o.achieved, 9);
+      expect(s.totalCapex).toBeCloseTo(o.kpis.totalCapex, 6);
+      expect(s.costPerTonne).toBeCloseTo(o.kpis.costPerTonne, 6);
+    }
   });
 });

@@ -3,11 +3,20 @@
    Measures the combined (market-based) 2030 reduction for any pair
    of dial vectors, and suggests mixes on three bases: cheapest ₹/t
    (the balanced default), lowest CAPEX (least upfront capital), and
-   best OPEX saving (savings-first, shortest payback). Each family is
-   priced standalone with the real model, ranked by the chosen
-   objective, then raised greedily until the target is met. Every
-   suggested mix also switches leak fixes on — near-zero cost, pure
-   savings. Pure: no React.
+   best OPEX saving (savings-first, shortest payback). Every suggested
+   mix also switches leak fixes on — near-zero cost, pure savings.
+   Pure: no React.
+
+   It SEARCHES; it does not rank. Each family used to be priced once,
+   standalone from zero, and the sorted list walked with each dial raised
+   to 100% in turn. A fixed ranking cannot see that levers consume each
+   other: solar alone was worth +23.03pp for capital that buys +4.70pp
+   once procurement is at 100%, and "Best OPEX saving" recommended
+   bio-blend at 100% whose measured contribution was 0.0000pp, because
+   electrification had already converted the fuel it would have blended.
+   An exhaustive pass over a coarse grid, refined locally, prices every
+   mix as a whole and has neither failure. See GRID for why it is
+   affordable.
 
    A CAPEX budget is a CONSTRAINT, not a fourth basis. It used to be
    modelled as one — a `budget` objective whose rankKey was byte-identical
@@ -165,19 +174,6 @@ function costedLevers(r1: ReturnType<typeof compute>, r2: ReturnType<typeof comp
     .filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
 }
 
-/** The programme's total capital, on exactly the basis the option card shows.
- *
- *  The budget gate used to compute its own: `Σ capex over levers with
- *  abatementT > 0`. That is F4 rebuilt inside the suggester — the same filter
- *  priceFamily's comment says was removed for dropping capex that buys no
- *  tonnes. So capital on a zero-abatement lever (solar added after procurement
- *  has already zeroed the market-based factor; a gas swap with no GWP gain) was
- *  invisible to the cap and visible on the card, and a capped mix could display
- *  a CAPEX figure above its own cap. One function, one basis, no divergence. */
-function totalCapexOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): number {
-  return programmeMetrics(costedLevers(r1, r2).map((l) => l.series)).totalCapex;
-}
-
 function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeScope2>): MixKpis {
   const costed = costedLevers(r1, r2);
   const programme = programmeMetrics(costed.map((l) => l.series));
@@ -190,162 +186,324 @@ function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeSco
   };
 }
 
-/* ---------- families & pricing ---------- */
+/* ---------- the search space ---------- */
 
-type FamilyKey =
-  | { scope: 1; key: keyof BalanceDials }
-  | { scope: 2; key: keyof BalanceDials2 };
+/** The six dials a mix is made of. `renewablePct` is NOT among them: it is
+ *  derived (see `mixOf`), because it is not a choice the plan makes
+ *  independently — it is the greenness of the electricity electrification
+ *  adds, and it moves with procurement. */
+const DIAL_KEYS = [
+  "electrifyPct", "bioBlendPct", "refrigPct",
+  "efficiencyPct", "solarPct", "procurementPct",
+] as const;
+type DialKey = (typeof DIAL_KEYS)[number];
+type DialVector = Record<DialKey, number>;
 
-const FAMILIES: FamilyKey[] = [
-  { scope: 2, key: "efficiencyPct" },
-  { scope: 2, key: "solarPct" },
-  { scope: 2, key: "procurementPct" },
-  { scope: 1, key: "bioBlendPct" },
-  { scope: 1, key: "refrigPct" },
-  { scope: 1, key: "electrifyPct" },
-];
-
-const ZERO: CombinedDials = {
-  s1: { electrifyPct: 0, renewablePct: 0, bioBlendPct: 0, refrigPct: 0 },
-  s2: { efficiencyPct: 0, solarPct: 0, procurementPct: 0 },
-};
-
-const withDial = (d: CombinedDials, f: FamilyKey, v: number): CombinedDials =>
-  f.scope === 1 ? { ...d, s1: { ...d.s1, [f.key]: v } } : { ...d, s2: { ...d.s2, [f.key]: v } };
-
-interface FamilyPrice { costPerTonne: number; capexPerTonne: number; opexPerTonne: number; tonnes: number; }
-
-/** Price one family alone at 100% with the real model (leak fixes excluded so
- *  the family's own economics aren't polluted).
+/** The coarse grid the exhaustive pass walks: 3^6 = 729 mixes.
  *
- *  `costPerTonne` is the SAME programme-levelised figure kpisOf reports and the
- *  card displays. It used to be `Σ annualCost / Σ tonnes` — the CRF annuity
- *  that lib/model marks DISPLAY ONLY, over a filtered tonne count — so the
- *  ranking that CHOSE the mix and the number shown for it were two different
- *  quantities on two different bases, and could order the families differently.
- *  Two lines treating one thing differently, as in Rulings P, R and T.
+ *  Chosen by measurement. One model evaluation costs ~0.065 ms warm, so this
+ *  pass is ~50 ms; the 10% grid the dials themselves offer would be 11^6 =
+ *  1,771,561 mixes and ~115 s. A 5-level grid (15,625, ~1.1 s) was tried and
+ *  REJECTED — not for speed but for answers: on the shipped fixture at a 60%
+ *  target it returned -24,824 Rs/t for 18.89 Cr where this one returns -25,041
+ *  for 17.69 Cr. Coarse-and-well-refined beat fine-and-bluntly-refined, because
+ *  what the search needs from the grid is the right BASIN, and what it needs
+ *  from the refinement is the right point inside it. Below 50% the two agreed
+ *  exactly, so the finer grid was buying 15x the time for nothing. */
+const GRID = [0, 50, 100] as const;
+
+/** Steps the local refinement tries on each dial, around a grid winner.
  *
- *  The `abatementT > 0` filter went with it: it dropped a family's capex from
- *  its own price whenever the spend produced no tonnes, which is F4 rebuilt
- *  inside the suggester. Tonnes are still counted over every lever, so a family
- *  that spends without abating prices as Infinity rather than vanishing. */
-function priceFamily(inp: CombinedInputs, f: FamilyKey): FamilyPrice {
-  const { r1, r2 } = results(inp, withDial(ZERO, f, 100), false);
-  const levers = f.scope === 1 ? r1.levers : r2.levers;
-  const costed = levers.filter((l) => l.capex > 0 || l.opexParts.some((p) => p.amount !== 0));
-  const tonnes = levers.reduce((s, l) => s + l.abatementT, 0);
-  if (tonnes <= 0) return { costPerTonne: Infinity, capexPerTonne: Infinity, opexPerTonne: Infinity, tonnes: 0 };
-  const programme = programmeMetrics(costed.map((l) => l.series));
+ *  Both signs of three sizes. +-20 hops the gap between two grid points so the
+ *  climb is not trapped by one bad step; +-10 reaches the resolution the dials
+ *  are drawn at; +-5 is what lets a 0/50/100 grid land on a genuinely odd
+ *  optimum. Dropping +-5 measurably cost answer quality — see GRID. */
+const REFINE_DELTAS = [-20, -10, -5, 5, 10, 20] as const;
+
+/** How many grid points each basis refines from.
+ *
+ *  Refinement is a single-dial hill climb, so it cannot leave the basin it
+ *  starts in, and the grid is coarse enough that the best grid point is not
+ *  always in the best basin. Climbing from the best few and keeping the best
+ *  result costs ~3x a refinement — tens of milliseconds against a ~50 ms grid
+ *  pass — and stops one fixture's luck from being load-bearing. */
+const REFINE_STARTS = 3;
+
+/** A dial vector as the engines want it, with `renewablePct` derived.
+ *
+ *  Electrification moves energy onto the grid, so the plan has to say how green
+ *  that grid is. The rule — match procurement, never go below the assumption
+ *  the user already set — is the one the greedy walk applied through its
+ *  `greenElectrify` helper. It applied it only when it happened to raise
+ *  electrification, so a mix that raised procurement AFTERWARDS kept the old,
+ *  dirtier figure and the same pair of dials scored differently depending on
+ *  the order the walk reached them. Derived here instead, it cannot. */
+function mixOf(inp: CombinedInputs, v: DialVector): CombinedDials {
+  const baseRe = inp.s1Base.assumptions.renewableSourcingPct ?? 0;
   return {
-    costPerTonne: programme.levelisedCostPerTonne,
-    capexPerTonne: programme.totalCapex / tonnes,
-    opexPerTonne: costed.reduce((s, l) => s + l.annualOpexDelta, 0) / tonnes,
-    tonnes,
+    s1: {
+      electrifyPct: v.electrifyPct,
+      bioBlendPct: v.bioBlendPct,
+      refrigPct: v.refrigPct,
+      renewablePct: v.electrifyPct > 0 ? Math.max(baseRe, v.procurementPct) : baseRe,
+    },
+    s2: {
+      efficiencyPct: v.efficiencyPct,
+      solarPct: v.solarPct,
+      procurementPct: v.procurementPct,
+    },
   };
 }
 
-function rankKey(p: FamilyPrice, objective: MixObjective): [number, number] {
+const vectorOf = (d: CombinedDials): DialVector => ({
+  electrifyPct: d.s1.electrifyPct, bioBlendPct: d.s1.bioBlendPct, refrigPct: d.s1.refrigPct,
+  efficiencyPct: d.s2.efficiencyPct, solarPct: d.s2.solarPct, procurementPct: d.s2.procurementPct,
+});
+
+/* ---------- scoring ---------- */
+
+/** Everything a mix is judged on, from one model run.
+ *
+ *  Exported because the search and the tests must agree on what a mix is worth:
+ *  a property like "no recommended lever could be switched off for free" is
+ *  only meaningful if the test measures the mix the same way the search did. */
+export interface MixScore {
+  /** Fraction below the base year at the target year — the level basis. */
+  reduction: number;
+  totalCapex: number;
+  /** Positive = cost, negative = saving. */
+  annualOpexDelta: number;
+  costPerTonne: number;
+  paybackYears: number | null;
+  paybackKind: LeverMetrics["paybackKind"];
+  /** Sum of the six dials. Not a cost — the last tie-break, so that between two
+   *  mixes that are identical on every figure that matters, the one that asks
+   *  the business to do LESS wins. This is what keeps a lever whose substrate
+   *  another lever already consumed out of the recommendation: bio-blend at
+   *  100% behind electrification at 100% scored exactly the same as bio-blend
+   *  at 0 — same tonnes, same rupees — so under the old walk it was raised, and
+   *  the plan told the reader to run a biofuel programme that changed nothing. */
+  dialSum: number;
+}
+
+/** One model run, one set of figures.
+ *
+ *  The CAPEX cap is enforced against `totalCapex` from THIS function, which is
+ *  the same number the option card prints, because both read one `kpisOf`. The
+ *  budget gate used to compute its own — the sum of capex over levers with
+ *  `abatementT > 0` — so capital on a lever that bought no tonnes was invisible
+ *  to the cap and visible on the card, and a capped mix could display a CAPEX
+ *  above its own cap. Two lines answering one question is how that happens; the
+ *  fix is one line answering it. */
+export function scoreMix(inp: CombinedInputs, d: CombinedDials): MixScore {
+  const { r1, r2 } = results(inp, d, true); // suggested mixes always include leak fixes
+  const k = kpisOf(r1, r2);
+  const v = vectorOf(d);
+  return {
+    reduction: reductionOf(r1, r2, inp.targetYear),
+    totalCapex: k.totalCapex,
+    annualOpexDelta: k.annualOpexDelta,
+    costPerTonne: k.costPerTonne,
+    paybackYears: k.paybackYears,
+    paybackKind: k.paybackKind,
+    dialSum: DIAL_KEYS.reduce((s, key) => s + v[key], 0),
+  };
+}
+
+/** Each basis as a lexicographic key, lower being better on every element.
+ *
+ *  Lexicographic rather than a single figure because every basis has a
+ *  tie-break that matters and no basis should be decided by iteration order.
+ *  The last element is always `dialSum` — see the note on it above. */
+function objectiveKey(s: MixScore, objective: MixObjective): [number, number, number] {
   switch (objective) {
-    case "capex": return [p.capexPerTonne, p.costPerTonne];
-    case "opexSaving": return [p.opexPerTonne, p.costPerTonne]; // most-saving (most negative) first
-    case "costPerTonne": return [p.costPerTonne, p.capexPerTonne];
+    // Least upfront capital; then cheapest per tonne of the mixes that tie.
+    case "capex": return [s.totalCapex, s.costPerTonne, s.dialSum];
+    // Most saving per year — the most NEGATIVE annual delta, so plain `<` on a
+    // signed number is already "best saving first".
+    case "opexSaving": return [s.annualOpexDelta, s.totalCapex, s.dialSum];
+    // Lowest levelised cost of abatement; then the one that ties it for less
+    // capital.
+    case "costPerTonne": return [s.costPerTonne, s.totalCapex, s.dialSum];
   }
+}
+
+const keyLess = (a: [number, number, number], b: [number, number, number]) =>
+  a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
+
+/* ---------- the search ---------- */
+
+interface Candidate { v: DialVector; s: MixScore }
+
+/** The scored grid, kept per inputs object.
+ *
+ *  A mix's score depends on the inputs and the dials — never on the target or
+ *  the CAPEX cap, which are applied to the scores afterwards. So moving the
+ *  target slider, or trying three budgets in a row, re-filters a grid already
+ *  scored rather than re-scoring it: the first call pays ~1 s, the rest are
+ *  microseconds. Weak, so an inputs object the caller has dropped takes its
+ *  ~15,625 scores with it.
+ *
+ *  Keyed on object IDENTITY, which is sound only because CombinedInputs is
+ *  built fresh and never mutated. A caller that mutated one in place would get
+ *  a stale grid; none does, and the type is all-readonly in spirit. */
+const GRID_CACHE = new WeakMap<CombinedInputs, Candidate[]>();
+
+function scoredGrid(inp: CombinedInputs): Candidate[] {
+  const hit = GRID_CACHE.get(inp);
+  if (hit) return hit;
+
+  const points: Candidate[] = [];
+  const v: DialVector = {
+    electrifyPct: 0, bioBlendPct: 0, refrigPct: 0,
+    efficiencyPct: 0, solarPct: 0, procurementPct: 0,
+  };
+  const walk = (i: number) => {
+    if (i === DIAL_KEYS.length) {
+      points.push({ v: { ...v }, s: scoreMix(inp, mixOf(inp, v)) });
+      return;
+    }
+    for (const level of GRID) { v[DIAL_KEYS[i]] = level; walk(i + 1); }
+    v[DIAL_KEYS[i]] = 0;
+  };
+  walk(0);
+
+  GRID_CACHE.set(inp, points);
+  return points;
+}
+
+/** Best of the mixes that meet the target inside the cap, per basis; plus what
+ *  to fall back on when nothing does.
+ *
+ *  One pass over the grid answers all three bases at once — the scores do not
+ *  depend on which basis is asking — so three cards cost one search, not three.
+ */
+function searchGrid(inp: CombinedInputs, target: number, cap: number) {
+  /** The best REFINE_STARTS feasible points per basis, best first. */
+  const feasible: Partial<Record<MixObjective, Candidate[]>> = {};
+  /** The most reduction reachable inside the cap, for when the target is not. */
+  let bestReachable: Candidate | null = null;
+  /** Whether the target is reachable at all when the cap is ignored — the only
+   *  thing that distinguishes "your budget stopped this" from "your target is
+   *  out of reach whatever you spend". */
+  let targetReachableUncapped = false;
+
+  const keep = (o: MixObjective, point: Candidate) => {
+    const list = (feasible[o] ??= []);
+    const key = objectiveKey(point.s, o);
+    let at = list.length;
+    while (at > 0 && keyLess(key, objectiveKey(list[at - 1].s, o))) at--;
+    if (at < REFINE_STARTS) {
+      list.splice(at, 0, point);
+      if (list.length > REFINE_STARTS) list.length = REFINE_STARTS;
+    }
+  };
+
+  for (const point of scoredGrid(inp)) {
+    const { s: sc } = point;
+    const meetsTarget = sc.reduction >= target - 1e-9;
+    if (meetsTarget) targetReachableUncapped = true;
+    if (sc.totalCapex > cap) continue;
+    if (meetsTarget) {
+      for (const o of OBJECTIVES) keep(o, point);
+    } else if (!bestReachable
+      || sc.reduction > bestReachable.s.reduction + 1e-12
+      || (Math.abs(sc.reduction - bestReachable.s.reduction) <= 1e-12 && sc.dialSum < bestReachable.s.dialSum)) {
+      bestReachable = point;
+    }
+  }
+
+  return { feasible, bestReachable: bestReachable as Candidate | null, targetReachableUncapped };
+}
+
+/** Hill-climb from one grid point, at finer resolution than the grid.
+ *
+ *  The grid is coarse on purpose (see GRID); this recovers the detail between
+ *  its points without paying for a 10% search of the whole space. Single-dial
+ *  moves only, so it is a local improvement and not a second search — it
+ *  cannot escape a basin, and does not need to: the exhaustive pass already
+ *  chose which basin. */
+function refine(
+  inp: CombinedInputs, start: Candidate, target: number, cap: number, objective: MixObjective,
+): Candidate {
+  let best = start;
+  for (let pass = 0; pass < 12; pass++) {
+    let moved = false;
+    for (const key of DIAL_KEYS) {
+      for (const delta of REFINE_DELTAS) {
+        const level = best.v[key] + delta;
+        if (level < 0 || level > 100) continue;
+        const v = { ...best.v, [key]: level };
+        const s = scoreMix(inp, mixOf(inp, v));
+        if (s.reduction < target - 1e-9 || s.totalCapex > cap) continue;
+        if (keyLess(objectiveKey(s, objective), objectiveKey(best.s, objective))) {
+          best = { v, s };
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  return best;
+}
+
+const OBJECTIVES: MixObjective[] = ["costPerTonne", "capex", "opexSaving"];
+
+interface Suggestion { dials: CombinedDials; achieved: number; budgetLimited: boolean }
+
+/** Every basis's answer, from one grid pass and one refinement each. */
+function searchAll(inp: CombinedInputs, target: number, capexBudget?: number): Record<MixObjective, Suggestion> {
+  // Infinity, not a null check at each use site: an absent budget is an
+  // unbounded one, and `> Infinity` is false for every finite spend.
+  const cap = capexBudget != null && capexBudget > 0 ? capexBudget : Infinity;
+  const { feasible, bestReachable, targetReachableUncapped } = searchGrid(inp, target, cap);
+
+  const out = {} as Record<MixObjective, Suggestion>;
+  for (const objective of OBJECTIVES) {
+    const starts = feasible[objective];
+    if (starts && starts.length > 0) {
+      let best = refine(inp, starts[0], target, cap, objective);
+      for (const start of starts.slice(1)) {
+        const climbed = refine(inp, start, target, cap, objective);
+        if (keyLess(objectiveKey(climbed.s, objective), objectiveKey(best.s, objective))) best = climbed;
+      }
+      out[objective] = { dials: mixOf(inp, best.v), achieved: best.s.reduction, budgetLimited: false };
+      continue;
+    }
+    if (bestReachable) {
+      // Short of the target. That is the cap's doing only if the target WAS
+      // reachable with the cap lifted; otherwise the target is simply out of
+      // reach and saying "budget-capped" would blame the wrong constraint.
+      out[objective] = {
+        dials: mixOf(inp, bestReachable.v),
+        achieved: bestReachable.s.reduction,
+        budgetLimited: cap < Infinity && targetReachableUncapped,
+      };
+      continue;
+    }
+    // Not one mix on the grid comes in under the cap — including the empty one,
+    // whose capital is the floor: leak fixes ride along unconditionally and the
+    // base settings may already carry spend. No mix can come in under a cap
+    // below that floor, so the floor is reported rather than silently honoured,
+    // and this is the one case where a card's CAPEX may exceed its own cap.
+    const floorV: DialVector = {
+      electrifyPct: 0, bioBlendPct: 0, refrigPct: 0,
+      efficiencyPct: 0, solarPct: 0, procurementPct: 0,
+    };
+    const floor = scoreMix(inp, mixOf(inp, floorV));
+    out[objective] = { dials: mixOf(inp, floorV), achieved: floor.reduction, budgetLimited: true };
+  }
+  return out;
 }
 
 /* ---------- suggesters ---------- */
 
-function greedyMix(
-  inp: CombinedInputs, target: number, objective: MixObjective, capexBudget?: number,
-): { dials: CombinedDials; achieved: number; order: string[]; budgetLimited: boolean } {
-  const ranked = FAMILIES
-    .map((f) => ({ f, p: priceFamily(inp, f) }))
-    .filter((x) => x.p.tonnes > 0)
-    .sort((a, b) => {
-      const ka = rankKey(a.p, objective), kb = rankKey(b.p, objective);
-      return ka[0] - kb[0] || ka[1] - kb[1];
-    });
-
-  let dials: CombinedDials = {
-    ...ZERO,
-    s1: { ...ZERO.s1, renewablePct: inp.s1Base.assumptions.renewableSourcingPct ?? 0 },
-  };
-  const measure = (d: CombinedDials) => {
-    const { r1, r2 } = results(inp, d, true); // suggested mixes always include leak fixes
-    // The SAME capital the card will show, so the gate and the KPI cannot
-    // disagree about whether a mix fits its budget.
-    return { reduction: reductionOf(r1, r2, inp.targetYear), capex: totalCapexOf(r1, r2) };
-  };
-  /* The FLOOR: what a mix costs before any family is raised. Leak fixes ride
-     along unconditionally (near-zero cost, pure savings) and the base settings
-     may already carry spend, so this is capital no cap can decline — the walk
-     below can only ever add to it. A cap below the floor is therefore not
-     satisfiable by any mix, and is reported as budget-capped rather than
-     silently honoured; every cap at or above it is enforced exactly. */
-  let m = measure(dials);
-  const floorCapex = m.capex;
-  // Infinity, not a null check at each use site: an absent budget is an
-  // unbounded one, and `> Infinity` is false for every finite spend.
-  const cap = capexBudget != null && capexBudget > 0 ? capexBudget : Infinity;
-  let capBound = cap < floorCapex;
-
-  const greenElectrify = (d: CombinedDials, f: FamilyKey): CombinedDials =>
-    f.scope === 1 && f.key === "electrifyPct"
-      ? { ...d, s1: { ...d.s1, renewablePct: Math.max(d.s1.renewablePct, d.s2.procurementPct) } }
-      : d;
-
-  for (const { f } of ranked) {
-    if (m.reduction >= target) break;
-    for (let v = 10; v <= 100; v += 10) {
-      const prev = dials;
-      // Green the electricity that electrification adds, in step with procurement.
-      dials = greenElectrify(withDial(dials, f, v), f);
-      const next = measure(dials);
-      // A step that busts the CAPEX cap is reverted; cheaper families further
-      // down the ranking may still fit. Applies to EVERY basis — a ceiling on
-      // capital is a fact about the plan, not a way of ranking levers.
-      if (next.capex > cap) {
-        dials = prev;
-        capBound = true;
-        break;
-      }
-      m = next;
-      if (m.reduction >= target) break;
-    }
-  }
-
-  // "Best OPEX saving" means MAXIMIZE savings subject to the target, not just
-  // reach it: raise every self-funding lever (negative OPEX per tonne) fully —
-  // more reduction, more savings; the payback column shows the capital price.
-  // Checked lever-by-lever against the cap: raising them all and measuring once
-  // would throw away every affordable raise the moment one of them busts.
-  if (objective === "opexSaving") {
-    for (const { f, p } of ranked) {
-      if (p.opexPerTonne >= 0) continue;
-      const raised = greenElectrify(withDial(dials, f, 100), f);
-      const next = measure(raised);
-      if (next.capex > cap) continue; // the target is already met; this was extra
-      dials = raised;
-      m = next;
-    }
-  }
-
-  return {
-    dials,
-    achieved: m.reduction,
-    order: ranked.map((x) => `${x.f.scope === 1 ? "S1" : "S2"}:${x.f.key}`),
-    // Only a cap that actually held the mix SHORT limited it. Reporting a cap
-    // that bound mid-walk and was then overtaken by a cheaper family would
-    // badge a target-meeting mix as budget-capped.
-    budgetLimited: capBound && m.reduction < target,
-  };
-}
-
-/** Single-objective suggest (cheapest ₹/t by default), optionally inside a
- *  CAPEX ceiling. */
+/** Single-basis suggest (cheapest ₹/t by default), optionally inside a CAPEX
+ *  ceiling. */
 export function suggestCombinedMix(
   inp: CombinedInputs, target: number, objective: MixObjective = "costPerTonne", capexBudget?: number,
-) {
-  return greedyMix(inp, target, objective, capexBudget);
+): Suggestion {
+  return searchAll(inp, target, capexBudget)[objective];
 }
 
 const OPTION_META: Record<MixObjective, { label: string; blurb: string }> = {
@@ -358,9 +516,11 @@ const OPTION_META: Record<MixObjective, { label: string; blurb: string }> = {
  *  CAPEX ceiling when one is given. Always three: the cap constrains every
  *  basis rather than adding one of its own. */
 export function suggestMixOptions(inp: CombinedInputs, target: number, opts?: { capexBudget?: number }): MixOption[] {
-  const objectives: MixObjective[] = ["costPerTonne", "capex", "opexSaving"];
-  return objectives.map((objective) => {
-    const { dials, achieved, budgetLimited } = greedyMix(inp, target, objective, opts?.capexBudget);
+  // ONE grid pass answers all three: a mix's score does not depend on which
+  // basis is asking, so three cards cost one search rather than three.
+  const found = searchAll(inp, target, opts?.capexBudget);
+  return OBJECTIVES.map((objective) => {
+    const { dials, achieved, budgetLimited } = found[objective];
     const { r1, r2 } = results(inp, dials, true);
     return {
       objective,
