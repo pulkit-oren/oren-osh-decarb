@@ -1,12 +1,29 @@
 import { compute } from "./index";
 import { combustionBreakdown, refrigerantCO2e } from "./baseline";
-import { applyAssetActions, defaultActions, defaultSystemActions } from "./segments";
-import { endUseProfile } from "./end-use";
+import { applyAssetActions, defaultActions, defaultEfficiency, defaultSystemActions } from "./segments";
+import { efficiencyHintFor, endUseProfile } from "./end-use";
 import { refrigClassProfile } from "./refrigerant-class";
 import { ALT_FUELS_BY_FUEL, maxBlendPctFor, RECOMMENDED_ALT_BY_SYSTEM } from "./factors";
 import type { AltFuelId, CombustionAsset, LeverSettings, RefrigerationSystem } from "./types";
 
-export interface BalanceDials { electrifyPct: number; renewablePct: number; bioBlendPct: number; refrigPct: number; }
+export interface BalanceDials {
+  /** Share of each source's OWN end-use efficiency headroom to take, 0..100.
+   *
+   *  Not a raw saving percentage. `defaultEfficiency` already carries a hint per
+   *  end-use (a truck is not a kiln) and `EfficiencyAction.savingPct` is capped
+   *  at 40, so a dial meaning "save 100% of the fuel" would be unreachable and
+   *  untrue. 100 means "take the full saving this end-use supports". */
+  efficiencyPct: number;
+  electrifyPct: number;
+  renewablePct: number;
+  bioBlendPct: number;
+  refrigPct: number;
+}
+
+/** The saving this asset's end-use can support, as a percentage of its fuel.
+ *  The dial is expressed as a share of THIS, so both directions need it. */
+const efficiencyHeadroomPct = (a: CombustionAsset): number =>
+  Math.max(0, efficiencyHintFor(a.endUse));
 
 const TARGET_YEAR = 2030;
 
@@ -51,7 +68,20 @@ export function applyDials(assets: CombustionAsset[], systems: RefrigerationSyst
     } else if (d.bioBlendPct === 0) {
       fuelSwitch.enabled = false;
     }
-    byAsset[a.id] = { ...cur, electrify, fuelSwitch };
+    /* Step 0 of the stacking pipeline, so this is the lever every other one
+       acts on the remainder of. Disabled at zero rather than left enabled with
+       a zero saving: `applyAssetActions` reads `enabled` first, and an enabled
+       package with nothing in it still books its capex. */
+    const headroom = efficiencyHeadroomPct(a);
+    const efficiency = { ...(cur.efficiency ?? defaultEfficiency(a)) };
+    if (d.efficiencyPct > 0 && headroom > 0) {
+      efficiency.enabled = true;
+      efficiency.savingPct = headroom * (d.efficiencyPct / 100);
+      efficiency.targetYear = TARGET_YEAR;
+    } else {
+      efficiency.enabled = false;
+    }
+    byAsset[a.id] = { ...cur, efficiency, electrify, fuelSwitch };
   }
   const bySystem = { ...base.bySystem };
   for (const s of systems) {
@@ -122,7 +152,20 @@ export function deriveDials(assets: CombustionAsset[], systems: RefrigerationSys
     return { v: g?.enabled ? Math.max(0, Math.min(100, g.transitionPct)) : 0, w: Math.max(refrigerantCO2e(s), 1e-9) };
   });
 
+  /* Read back as the share of headroom taken, so the dial the screen shows is
+     the dial that would reproduce these settings. A package that is off reads
+     0 whatever saving it is carrying — `defaultEfficiency` seeds every asset
+     with its hint while disabled, and counting that would show a dial the plan
+     is not running. */
+  const effPairs = act.map((a) => {
+    const e = settings.byAsset[a.id]?.efficiency;
+    const headroom = efficiencyHeadroomPct(a);
+    const v = e?.enabled && headroom > 0 ? (e.savingPct / headroom) * 100 : 0;
+    return { v: Math.max(0, Math.min(100, v)), w: combustionBreakdown(a).energyGJ };
+  });
+
   return {
+    efficiencyPct: Math.round(wavg(effPairs)),
     electrifyPct: Math.round(wavg(elecPairs)),
     renewablePct: Math.round(settings.assumptions.renewableSourcingPct ?? 0),
     bioBlendPct: Math.round(wavg(bioPairs)),
@@ -152,10 +195,12 @@ export function energyMix(assets: CombustionAsset[], settings: LeverSettings): {
 /** Pure stepwise heuristic: raise dials (electrify → renewable → bio → refrigerant) until the
  *  projected 2030 reduction reaches `target` (0..1), else return the best reachable mix. */
 export function suggestMix(assets: CombustionAsset[], systems: RefrigerationSystem[], base: LeverSettings, target: number, baseYear: number): BalanceDials {
-  const dials: BalanceDials = { electrifyPct: 0, renewablePct: base.assumptions.renewableSourcingPct ?? 0, bioBlendPct: 0, refrigPct: 0 };
+  const dials: BalanceDials = { efficiencyPct: 0, electrifyPct: 0, renewablePct: base.assumptions.renewableSourcingPct ?? 0, bioBlendPct: 0, refrigPct: 0 };
   const reductionFor = (d: BalanceDials) => compute(assets, systems, applyDials(assets, systems, base, d), baseYear).kpis.reduction2030;
   if (reductionFor(dials) >= target) return dials;
-  const order: (keyof BalanceDials)[] = ["electrifyPct", "renewablePct", "bioBlendPct", "refrigPct"];
+  // Efficiency leads: it is step 0 of the pipeline, so every later lever acts
+  // on a smaller base, and it is usually the cheapest tonne on the list.
+  const order: (keyof BalanceDials)[] = ["efficiencyPct", "electrifyPct", "renewablePct", "bioBlendPct", "refrigPct"];
   for (const key of order) {
     for (let v = 10; v <= 100; v += 10) {
       dials[key] = v;

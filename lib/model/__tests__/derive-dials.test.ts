@@ -35,7 +35,7 @@ const BASE2: Scope2Levers = {
 
 describe("Scope 1 dials round-trip", () => {
   it("deriveDials(applyDials(d)) ≈ d", () => {
-    const d: BalanceDials = { electrifyPct: 40, renewablePct: 60, bioBlendPct: 20, refrigPct: 70 };
+    const d: BalanceDials = { efficiencyPct: 0, electrifyPct: 40, renewablePct: 60, bioBlendPct: 20, refrigPct: 70 };
     const derived = deriveDials(assets, systems, applyDials(assets, systems, BASE, d));
     expect(derived.electrifyPct).toBeCloseTo(40, -1);
     expect(derived.renewablePct).toBe(60);
@@ -51,7 +51,7 @@ describe("Scope 1 dials round-trip", () => {
   });
 
   it("a per-source edit moves the derived dial", () => {
-    const s = applyDials(assets, systems, BASE, { electrifyPct: 40, renewablePct: 0, bioBlendPct: 0, refrigPct: 0 });
+    const s = applyDials(assets, systems, BASE, { efficiencyPct: 0, electrifyPct: 40, renewablePct: 0, bioBlendPct: 0, refrigPct: 0 });
     const tweaked: LeverSettings = {
       ...s,
       byAsset: { ...s.byAsset, a2: { ...s.byAsset.a2, electrify: { ...s.byAsset.a2.electrify, unitsToConvert: 10 } } },

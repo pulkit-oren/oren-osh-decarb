@@ -24,7 +24,7 @@
      Scope 1 / Scope 2 moves them here — the two views can never drift. */
 
 import { useEffect, useMemo, useState } from "react";
-import { Zap, Fuel, Snowflake, Sun, Lightbulb, Landmark, Wind, ChevronRight, Info, Check, Sparkles } from "lucide-react";
+import { Zap, Fuel, Snowflake, Sun, Lightbulb, Landmark, Wind, Gauge, ChevronRight, Info, Check, Sparkles } from "lucide-react";
 import { useScenario } from "@/lib/store";
 import { useScope2 } from "@/lib/scope2/store";
 import { useGoals } from "@/lib/goals/store";
@@ -48,26 +48,44 @@ import { bioBlendCap, electrifyCap, solarCapNote, type DialCap } from "@/lib/mod
 import { M2_PER_KW } from "@/lib/scope2/model/constants";
 import { cn, fmt, fmtMoney, fmtPerTonne, fmtPayback } from "@/lib/utils";
 
-/* How each basis builds its mix — shown when the card's (i) is clicked. */
+/* How each basis builds its mix — shown when the card's (i) is clicked.
+   These strings must describe the algorithm that actually runs. They described
+   the previous one (families priced standalone, ranked, raised in 10% steps)
+   for as long as it took to notice, which is exactly as misleading as a wrong
+   number. See lib/combined-balance.ts. */
+const SEARCH_LINE =
+  "Every combination of the seven dials at 0 / 50 / 100 is scored with the real model — 2,187 whole plans, not six families ranked in turn.";
+const REFINE_LINE =
+  "The best few plans are then refined one dial at a time, in 5-point steps, so the answer is not stuck on a round number.";
+
 const MIX_LOGIC: Record<MixObjective, string[]> = {
   costPerTonne: [
-    "Every lever family is priced standalone at 100% with the real model.",
-    `Families are ranked on the same levelised ${CURRENCY}/t the card shows — every year's CAPEX and running-cost change discounted to today over the lever's own life, divided by discounted tonnes abated.`,
-    "Dials rise in 10% steps, cheapest family first, until the target is met.",
+    SEARCH_LINE,
+    `Of the plans that hit the target, this one has the lowest levelised ${CURRENCY}/t — every year's CAPEX and running-cost change discounted to today over each lever's life, divided by discounted tonnes abated.`,
+    `That is the best deal per tonne, which is not the smallest bill: a plan can win here and still commit far more capital than "Lowest total cost". Compare the two cards.`,
+    REFINE_LINE,
+  ],
+  netCost: [
+    SEARCH_LINE,
+    "Of the plans that hit the target, this one costs least in total — all capital plus every year's running-cost change, discounted to today. A negative figure means the plan pays for itself.",
+    "This is the card that answers \u201cwhat is the cheapest way to hit the target\u201d. Its per-tonne figure will usually be worse than the card beside it, because the two ask different questions.",
+    REFINE_LINE,
   ],
   capex: [
-    "Every lever family is priced standalone at 100% with the real model.",
-    `Families are ranked by upfront capital per tonne abated (ties broken by ${CURRENCY}/t) — procurement and fuel blends come before buying new kit.`,
-    "Dials rise in 10% steps, least-capital family first, until the target is met.",
+    SEARCH_LINE,
+    `Of the plans that hit the target, this one needs the least upfront capital (ties broken by ${CURRENCY}/t) — procurement and fuel blends before buying new kit.`,
+    "Least capital is not least cost: a plan with no capital can still raise the yearly bill for years. The payback column says which.",
+    REFINE_LINE,
   ],
   opexSaving: [
-    "Every lever family is priced standalone at 100% with the real model.",
-    "Families are ranked by yearly OPEX change per tonne — biggest running-cost saving first.",
-    "After the target is met, every self-funding lever (one that saves money each year) is raised to 100%: more reduction AND more savings. The payback figure shows the capital price of that choice.",
+    SEARCH_LINE,
+    "Of the plans that hit the target, this one has the biggest yearly running-cost saving — savings-maximising rather than target-satisficing, so it usually overshoots the target.",
+    "The payback column shows the capital price of that choice.",
+    REFINE_LINE,
   ],
 };
-/* The cap is a constraint on all three bases, not a basis of its own — so it
-   reads as an extra line under whichever card is open, not a fourth card. */
+/* The cap is a constraint on every basis, not a basis of its own — so it
+   reads as an extra line under whichever card is open, not a card of its own. */
 const BUDGET_LOGIC_LINE =
   "Every 10% step is then checked against your CAPEX budget. A step that would bust the cap is reverted, and cheaper families further down the list are tried instead — so the mix may stop below the target, and the badge says so.";
 const LOGIC_FOOTER =
@@ -91,9 +109,14 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const s2 = useScope2();
   const { goals } = useGoals();
 
-  const assets = s1.resolvedBaseAssets.filter((a) => !a.excluded);
-  const systems = s1.baseSystems.filter((x) => !x.excluded);
-  const facilities = s2.baseFacilities.filter((f) => !f.excluded);
+  /* Memoised, not because filtering three short arrays is slow, but because
+     their IDENTITY is load-bearing downstream: the mix suggester caches its
+     scored grid per inputs object, and a fresh array every render meant a
+     fresh inputs object and a cache that never once hit. The store already
+     memoises what these filter, so these hold across renders. */
+  const assets = useMemo(() => s1.resolvedBaseAssets.filter((a) => !a.excluded), [s1.resolvedBaseAssets]);
+  const systems = useMemo(() => s1.baseSystems.filter((x) => !x.excluded), [s1.baseSystems]);
+  const facilities = useMemo(() => s2.baseFacilities.filter((f) => !f.excluded), [s2.baseFacilities]);
 
   /* ---- Step 1: target year + percentage, defaulting from the active goal ---- */
   const minYear = s1.baseYear + 1;
@@ -186,17 +209,27 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
   const [capexBudget, setCapexBudget] = useState(0); // 0 = no cap
   const [tab, setTab] = useState<"assumptions" | "mixes" | "levers" | "curve">("levers");
   const invalidate = () => { setOptions(null); setAppliedObj(null); setLogicOpen(null); };
+  /* Memoised because the suggester caches its scored grid PER INPUTS OBJECT,
+     and a fresh literal on every press meant it never once hit that cache.
+     Held across renders, changing only the target percentage or the CAPEX cap
+     re-filters a grid already scored — those two are arguments to the search,
+     not part of what a mix scores — so the second press and every one after it
+     is effectively instant instead of a couple of hundred milliseconds.
+
+     `year` and the two derived rates ARE dependencies: they change what a mix
+     is worth, so they must produce a new object and a fresh grid. */
+  const suggestInputs: CombinedInputs = useMemo(() => ({
+    assets, systems, s1Base: s1.settings, facilities, s2Base: s2.levers,
+    baseYear: s1.baseYear, targetYear: year,
+    // The premise the rail states, handed to the suggester so its stop rule
+    // and `achieved` are measured on it too. Percent, not fraction — the
+    // engines divide by 100 themselves.
+    s1BauFallbackPct: s1.derivedBau?.pct,
+    s2BauFallbackPct: s2.derivedBau?.pct,
+  }), [assets, systems, s1.settings, facilities, s2.levers, s1.baseYear, year, s1.derivedBau?.pct, s2.derivedBau?.pct]);
+
   const computeOptions = () => {
-    const inp: CombinedInputs = {
-      assets, systems, s1Base: s1.settings, facilities, s2Base: s2.levers,
-      baseYear: s1.baseYear, targetYear: year,
-      // The premise the rail states, handed to the suggester so its stop rule
-      // and `achieved` are measured on it too. Percent, not fraction — the
-      // engines divide by 100 themselves.
-      s1BauFallbackPct: s1.derivedBau?.pct,
-      s2BauFallbackPct: s2.derivedBau?.pct,
-    };
-    setOptions(suggestMixOptions(inp, target / 100, capexBudget > 0 ? { capexBudget } : undefined));
+    setOptions(suggestMixOptions(suggestInputs, target / 100, capexBudget > 0 ? { capexBudget } : undefined));
     setAppliedObj(null);
     setLogicOpen(null);
   };
@@ -252,6 +285,19 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
       tonnes: w2["procurement"] ?? 0, costNote: `${fmtMoney(lever2("procurement")?.annualOpexDelta ?? 0)}/yr`,
       perTonne: lever2("procurement")?.costPerTonne,
       focus: { scope: "s2", mode: "procurement" }, place: "Scope 2 → Procurement",
+    },
+    {
+      /* First of the Scope 1 group because it is step 0 of the model's own
+         stacking pipeline: efficiency shrinks the base that electrification,
+         bio-blend and the rest then act on. It had no dial at all until now,
+         so no suggested mix could contain it — worth +3.58pp and 0.55 Cr/yr at
+         zero capital on the shipped fixture. */
+      key: "s1efficiency", scope: "s1", label: "Fuel efficiency", icon: Gauge,
+      hint: "Burn less to begin with — tuning, insulation, heat recovery, driver behaviour. The dial is the share of each source's own realistic headroom, so 100% is what that end-use can actually save, not 100% of its fuel.",
+      value: d1.efficiencyPct, onChange: (v) => setDial1({ efficiencyPct: v }),
+      tonnes: w1["efficiency"] ?? 0, costNote: fmtMoney(lever1("efficiency")?.capex ?? 0),
+      perTonne: lever1("efficiency")?.costPerTonne,
+      focus: { scope: "s1", seg: fuelSeg }, place: `Scope 1 → ${fuelSeg}`,
     },
     {
       key: "bio", scope: "s1", label: "Bio-blend fuel", icon: Fuel,

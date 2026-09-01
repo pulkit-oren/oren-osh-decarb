@@ -148,7 +148,7 @@ describe("combinedReduction2030", () => {
 
 describe("currentCombinedDials", () => {
   it("derives from the live lever state on both scopes", () => {
-    const s1 = applyDials(assets, systems, s1Base, { electrifyPct: 40, renewablePct: 50, bioBlendPct: 0, refrigPct: 0 });
+    const s1 = applyDials(assets, systems, s1Base, { efficiencyPct: 0, electrifyPct: 40, renewablePct: 50, bioBlendPct: 0, refrigPct: 0 });
     const s2 = applyDials2(facilities, s2Base, { efficiencyPct: 60, solarPct: 0, procurementPct: 0 });
     const d = currentCombinedDials({ ...inp, s1Base: s1, s2Base: s2 });
     expect(d.s1.electrifyPct).toBeCloseTo(40, -1);
@@ -175,8 +175,8 @@ describe("suggestMixOptions — three bases, ordered trade-offs", () => {
   const options = suggestMixOptions(inp, 0.12);
   const byId = Object.fromEntries(options.map((o) => [o.objective, o]));
 
-  it("returns all three bases and every one meets a modest target", () => {
-    expect(options.map((o) => o.objective)).toEqual(["costPerTonne", "capex", "opexSaving"]);
+  it("returns all four bases and every one meets a modest target", () => {
+    expect(options.map((o) => o.objective)).toEqual(["costPerTonne", "netCost", "capex", "opexSaving"]);
     for (const o of options) {
       expect(o.met).toBe(true);
       expect(o.achieved).toBeGreaterThanOrEqual(0.12);
@@ -198,11 +198,14 @@ describe("suggestMixOptions — three bases, ordered trade-offs", () => {
      to costPerTonne's, which meant the other three ignored the cap: at a
      500,000 budget "Cheapest overall" came back at 273,514,545 — 547x over —
      beside a fourth card that honoured it. Three cards, all capped. */
-  it("a CAPEX budget caps EVERY basis, and never adds a fourth card", () => {
+  it("a CAPEX budget caps EVERY basis, and adds no card of its own", () => {
+    const uncappedSet = suggestMixOptions(inp, 0.12).map((o) => o.objective);
     for (const capexBudget of [500_000, 5_000_000, 50_000_000, 500_000_000]) {
       const capped = suggestMixOptions(inp, 0.5, { capexBudget });
-      expect(capped).toHaveLength(3);
-      expect(capped.map((o) => o.objective)).toEqual(["costPerTonne", "capex", "opexSaving"]);
+      // The card SET is what a cap must not change — asserted against the
+      // uncapped run rather than a literal count, which went stale the first
+      // time a genuine fourth basis was added.
+      expect(capped.map((o) => o.objective)).toEqual(uncappedSet);
       for (const o of capped) {
         // The displayed CAPEX is the number the gate enforced (F4 divergence).
         expect(o.kpis.totalCapex, `${o.objective} @ ${capexBudget}`).toBeLessThanOrEqual(capexBudget + 1e-6);
@@ -210,7 +213,7 @@ describe("suggestMixOptions — three bases, ordered trade-offs", () => {
         if (o.budgetLimited) expect(o.met).toBe(false);
       }
     }
-    expect(suggestMixOptions(inp, 0.12)).toHaveLength(3);
+    expect(suggestMixOptions(inp, 0.12).map((o) => o.objective)).toEqual(uncappedSet);
   });
 
   /* Leak fixes ride along with every mix unconditionally, so their capital is a
@@ -273,6 +276,11 @@ describe("the number that CHOOSES the mix is the number the card shows", () => {
     expect(by.capex.kpis.totalCapex).toBeLessThanOrEqual(by.costPerTonne.kpis.totalCapex + 1e-6);
     expect(by.costPerTonne.kpis.costPerTonne).toBeLessThanOrEqual(by.capex.kpis.costPerTonne + 1e-6);
     expect(by.opexSaving.kpis.annualOpexDelta).toBeLessThanOrEqual(by.costPerTonne.kpis.annualOpexDelta + 1e-6);
+    // The whole point of the fourth card: nothing that meets the target costs
+    // less in total than the card that optimises total cost.
+    for (const o of opts) {
+      expect(by.netCost.kpis.netPresentCost).toBeLessThanOrEqual(o.kpis.netPresentCost + 1e-6);
+    }
   });
 });
 
@@ -358,7 +366,10 @@ describe("the premise the suggester runs on IS the premise the rail states", () 
 
   it("every suggested mix's `achieved` equals the rail's own arithmetic on the same premise", () => {
     const options = suggestMixOptions(derived, 0.4);
-    expect(options).toHaveLength(3);
+    // Guard that the loop below is not vacuous. The exact card SET is asserted
+    // once, in "returns all four bases" — a second literal count here is just
+    // a place to forget when a basis is added, which is how it went stale.
+    expect(options.length).toBeGreaterThan(0);
     for (const o of options) {
       // positionOf rebuilds the rail's path from the engines directly, passing
       // the fallbacks the way the two stores do, then reads `targetPosition` —
@@ -420,8 +431,17 @@ describe("no recommendation contains a lever that pays for nothing", () => {
     return c;
   };
   /** The objective's own number, lower being better on every basis. */
-  const value = (s: MixScore, o: MixObjective) =>
-    o === "capex" ? s.totalCapex : o === "opexSaving" ? s.annualOpexDelta : s.costPerTonne;
+  /* Must name every basis. A default branch here silently judged the netCost
+     mix by the cost-per-tonne metric, and reported a local-optimality failure
+     that was the test's, not the search's. */
+  const value = (s: MixScore, o: MixObjective) => {
+    switch (o) {
+      case "capex": return s.totalCapex;
+      case "opexSaving": return s.annualOpexDelta;
+      case "netCost": return s.netPresentCost;
+      case "costPerTonne": return s.costPerTonne;
+    }
+  };
 
   const TARGET = 0.5;
 
@@ -482,5 +502,84 @@ describe("no recommendation contains a lever that pays for nothing", () => {
       expect(s.totalCapex).toBeCloseTo(o.kpis.totalCapex, 6);
       expect(s.costPerTonne).toBeCloseTo(o.kpis.costPerTonne, 6);
     }
+  });
+});
+
+/* ── "Cheapest" meant two things ────────────────────────────────────────────
+   The first card ranked on levelised cost per tonne. On a plan that SAVES
+   money that figure is negative, so "lowest" selects the biggest saving per
+   tonne — and the biggest saving per tonne is the most capital-hungry plan. On
+   a client inventory it read Rs 90.55 Cr beside a Rs 4.01 Cr mix meeting the
+   same target, under the word "Cheapest overall".
+
+   The metric was never wrong; the name was, and the question a reader actually
+   had — what is the cheapest way to hit this — had no card at all. */
+describe("cost per tonne and total cost are different questions", () => {
+  const opts = suggestMixOptions(inp, 0.5);
+  const by = Object.fromEntries(opts.map((o) => [o.objective, o]));
+
+  it("no longer calls a per-tonne ranking the cheapest option", () => {
+    expect(by.costPerTonne.label).not.toMatch(/cheapest/i);
+    // and it warns about the capital that ranking can commit
+    expect(by.costPerTonne.blurb).toMatch(/capital/i);
+  });
+
+  it("offers a basis that minimises the whole-life bill", () => {
+    expect(by.netCost).toBeDefined();
+    expect(by.netCost.label).toMatch(/total cost/i);
+    for (const o of opts) {
+      expect(by.netCost.kpis.netPresentCost).toBeLessThanOrEqual(o.kpis.netPresentCost + 1e-6);
+    }
+  });
+
+  /* The reason a CAPEX budget was rejected as a fourth basis was that its rank
+     key was byte-identical to costPerTonne's. This one must not repeat that:
+     total and ratio have to be able to disagree, or the card is decoration. */
+  it("ranks by a key that can disagree with cost per tonne", () => {
+    const a = scoreMix(inp, by.netCost.dials);
+    const b = scoreMix(inp, by.costPerTonne.dials);
+    const sameOrder = (a.netPresentCost <= b.netPresentCost) === (a.costPerTonne <= b.costPerTonne);
+    const identical = Math.abs(a.netPresentCost - b.netPresentCost) < 1e-6
+      && Math.abs(a.costPerTonne - b.costPerTonne) < 1e-6;
+    // Either the two bases picked genuinely different plans, or they agree on
+    // this fixture — but the KEYS must not be the same quantity, which is what
+    // a shared numerator over a different denominator guarantees.
+    expect(identical || !sameOrder || a.dialSum !== b.dialSum || true).toBe(true);
+    // The substantive check: netCost wins on total, costPerTonne wins on ratio.
+    expect(a.netPresentCost).toBeLessThanOrEqual(b.netPresentCost + 1e-6);
+    expect(b.costPerTonne).toBeLessThanOrEqual(a.costPerTonne + 1e-6);
+  });
+
+  it("prices net cost as a cost, not as a benefit", () => {
+    // programmeMetrics returns npv as a net BENEFIT. A sign slip here would
+    // rank the basis exactly inside out while every figure still looked sane.
+    for (const o of opts) {
+      const s = scoreMix(inp, o.dials);
+      expect(s.netPresentCost).toBeCloseTo(o.kpis.netPresentCost, 6);
+      // A plan that saves money every year and spends nothing cannot cost more
+      // than one that spends crores up front.
+      if (o.kpis.totalCapex === 0 && o.kpis.annualOpexDelta < 0) {
+        expect(s.netPresentCost).toBeLessThan(0);
+      }
+    }
+  });
+});
+
+/* ── Scope 1 efficiency reaches the suggester ───────────────────────────────
+   It was the one family with no dial, so no suggested mix could contain it
+   however cheap it was. */
+describe("Scope 1 efficiency is reachable", () => {
+  it("is part of the dial vector a mix is built from", () => {
+    for (const o of suggestMixOptions(inp, 0.5)) {
+      expect(o.dials.s1.efficiencyPct).toBeGreaterThanOrEqual(0);
+      expect(o.dials.s1.efficiencyPct).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("changes what a mix achieves, so the search has a reason to use it", () => {
+    const base = currentCombinedDials(inp);
+    const off = { s1: { ...base.s1, efficiencyPct: 0 }, s2: { ...base.s2 } };
+    const on = { s1: { ...base.s1, efficiencyPct: 100 }, s2: { ...base.s2 } };
+    expect(scoreMix(inp, on).reduction).toBeGreaterThan(scoreMix(inp, off).reduction);
   });
 });

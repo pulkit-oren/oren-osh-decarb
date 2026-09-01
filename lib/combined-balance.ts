@@ -71,9 +71,19 @@ export interface CombinedInputs {
   s2BauFallbackPct: number | undefined;
 }
 
-export type MixObjective = "costPerTonne" | "capex" | "opexSaving";
+export type MixObjective = "costPerTonne" | "netCost" | "capex" | "opexSaving";
 
 export interface MixKpis {
+  /** Discounted whole-life cost of the programme: capital plus running cost,
+   *  every year of it, brought back to the base year. Positive = the plan costs
+   *  money overall; negative = it pays for itself and more.
+   *
+   *  This is the figure "cheapest" reads as, and it is NOT costPerTonne. The
+   *  two share a numerator and differ by the tonne denominator, so a ratio can
+   *  be best while the total is far from it - which is exactly how the card
+   *  labelled "Cheapest overall" came to recommend 90.55 Cr of capital beside
+   *  a 4.01 Cr mix that met the same target. */
+  netPresentCost: number;
   totalCapex: number;
   annualOpexDelta: number; // positive = cost, negative = saving
   costPerTonne: number;
@@ -178,6 +188,10 @@ function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeSco
   const costed = costedLevers(r1, r2);
   const programme = programmeMetrics(costed.map((l) => l.series));
   return {
+    // `npv` is the net BENEFIT (metrics.ts returns -discCost), so the cost is
+    // its negation. Getting this sign backwards would rank the basis exactly
+    // inside out, and every figure on the card would still look plausible.
+    netPresentCost: -programme.npv,
     totalCapex: programme.totalCapex,
     annualOpexDelta: costed.reduce((s, l) => s + l.annualOpexDelta, 0),
     costPerTonne: programme.levelisedCostPerTonne,
@@ -193,17 +207,17 @@ function kpisOf(r1: ReturnType<typeof compute>, r2: ReturnType<typeof computeSco
  *  independently — it is the greenness of the electricity electrification
  *  adds, and it moves with procurement. */
 const DIAL_KEYS = [
-  "electrifyPct", "bioBlendPct", "refrigPct",
-  "efficiencyPct", "solarPct", "procurementPct",
+  "s1EfficiencyPct", "electrifyPct", "bioBlendPct", "refrigPct",
+  "s2EfficiencyPct", "solarPct", "procurementPct",
 ] as const;
 type DialKey = (typeof DIAL_KEYS)[number];
 type DialVector = Record<DialKey, number>;
 
-/** The coarse grid the exhaustive pass walks: 3^6 = 729 mixes.
+/** The coarse grid the exhaustive pass walks: 3^7 = 2,187 mixes.
  *
  *  Chosen by measurement. One model evaluation costs ~0.065 ms warm, so this
- *  pass is ~50 ms; the 10% grid the dials themselves offer would be 11^6 =
- *  1,771,561 mixes and ~115 s. A 5-level grid (15,625, ~1.1 s) was tried and
+ *  pass is ~150 ms; the 10% grid the dials themselves offer would be 11^7 and
+ *  some five hours. A 5-level grid was tried and
  *  REJECTED — not for speed but for answers: on the shipped fixture at a 60%
  *  target it returned -24,824 Rs/t for 18.89 Cr where this one returns -25,041
  *  for 17.69 Cr. Coarse-and-well-refined beat fine-and-bluntly-refined, because
@@ -224,10 +238,14 @@ const REFINE_DELTAS = [-20, -10, -5, 5, 10, 20] as const;
  *
  *  Refinement is a single-dial hill climb, so it cannot leave the basin it
  *  starts in, and the grid is coarse enough that the best grid point is not
- *  always in the best basin. Climbing from the best few and keeping the best
- *  result costs ~3x a refinement — tens of milliseconds against a ~50 ms grid
- *  pass — and stops one fixture's luck from being load-bearing. */
-const REFINE_STARTS = 3;
+ *  always in the best basin. Climbing from more than one start and keeping the
+ *  best result stops one fixture's luck from being load-bearing.
+ *
+ *  Two, not three: three was tried and returned byte-identical answers at every
+ *  target on the shipped fixture while roughly doubling the time (about 200 ms
+ *  against 400). Four bases climbing from three starts each is twelve climbs,
+ *  and that is what the suggest button pays for. */
+const REFINE_STARTS = 2;
 
 /** A dial vector as the engines want it, with `renewablePct` derived.
  *
@@ -242,13 +260,14 @@ function mixOf(inp: CombinedInputs, v: DialVector): CombinedDials {
   const baseRe = inp.s1Base.assumptions.renewableSourcingPct ?? 0;
   return {
     s1: {
+      efficiencyPct: v.s1EfficiencyPct,
       electrifyPct: v.electrifyPct,
       bioBlendPct: v.bioBlendPct,
       refrigPct: v.refrigPct,
       renewablePct: v.electrifyPct > 0 ? Math.max(baseRe, v.procurementPct) : baseRe,
     },
     s2: {
-      efficiencyPct: v.efficiencyPct,
+      efficiencyPct: v.s2EfficiencyPct,
       solarPct: v.solarPct,
       procurementPct: v.procurementPct,
     },
@@ -256,9 +275,17 @@ function mixOf(inp: CombinedInputs, v: DialVector): CombinedDials {
 }
 
 const vectorOf = (d: CombinedDials): DialVector => ({
-  electrifyPct: d.s1.electrifyPct, bioBlendPct: d.s1.bioBlendPct, refrigPct: d.s1.refrigPct,
-  efficiencyPct: d.s2.efficiencyPct, solarPct: d.s2.solarPct, procurementPct: d.s2.procurementPct,
+  s1EfficiencyPct: d.s1.efficiencyPct, electrifyPct: d.s1.electrifyPct,
+  bioBlendPct: d.s1.bioBlendPct, refrigPct: d.s1.refrigPct,
+  s2EfficiencyPct: d.s2.efficiencyPct, solarPct: d.s2.solarPct, procurementPct: d.s2.procurementPct,
 });
+
+/** All dials off. Named rather than repeated: two places need it, and one of
+ *  them is the floor a cap below the unavoidable minimum falls back to. */
+const ZERO_VECTOR: DialVector = {
+  s1EfficiencyPct: 0, electrifyPct: 0, bioBlendPct: 0, refrigPct: 0,
+  s2EfficiencyPct: 0, solarPct: 0, procurementPct: 0,
+};
 
 /* ---------- scoring ---------- */
 
@@ -270,6 +297,8 @@ const vectorOf = (d: CombinedDials): DialVector => ({
 export interface MixScore {
   /** Fraction below the base year at the target year — the level basis. */
   reduction: number;
+  /** Discounted capital plus running cost over the programme's life. */
+  netPresentCost: number;
   totalCapex: number;
   /** Positive = cost, negative = saving. */
   annualOpexDelta: number;
@@ -301,6 +330,7 @@ export function scoreMix(inp: CombinedInputs, d: CombinedDials): MixScore {
   const v = vectorOf(d);
   return {
     reduction: reductionOf(r1, r2, inp.targetYear),
+    netPresentCost: k.netPresentCost,
     totalCapex: k.totalCapex,
     annualOpexDelta: k.annualOpexDelta,
     costPerTonne: k.costPerTonne,
@@ -319,6 +349,12 @@ function objectiveKey(s: MixScore, objective: MixObjective): [number, number, nu
   switch (objective) {
     // Least upfront capital; then cheapest per tonne of the mixes that tie.
     case "capex": return [s.totalCapex, s.costPerTonne, s.dialSum];
+    // Least whole-life cost. A genuinely different question from costPerTonne
+    // - total against ratio - which is why this earns a card where the CAPEX
+    // budget did not: an earlier "budget" objective was removed because its
+    // key was byte-identical to costPerTonne's, and a basis that cannot rank
+    // differently is not a basis.
+    case "netCost": return [s.netPresentCost, s.totalCapex, s.dialSum];
     // Most saving per year — the most NEGATIVE annual delta, so plain `<` on a
     // signed number is already "best saving first".
     case "opexSaving": return [s.annualOpexDelta, s.totalCapex, s.dialSum];
@@ -335,32 +371,54 @@ const keyLess = (a: [number, number, number], b: [number, number, number]) =>
 
 interface Candidate { v: DialVector; s: MixScore }
 
-/** The scored grid, kept per inputs object.
+/** Scores already computed for one inputs object: the whole grid, plus every
+ *  point any refinement has visited.
  *
  *  A mix's score depends on the inputs and the dials — never on the target or
- *  the CAPEX cap, which are applied to the scores afterwards. So moving the
- *  target slider, or trying three budgets in a row, re-filters a grid already
- *  scored rather than re-scoring it: the first call pays ~1 s, the rest are
- *  microseconds. Weak, so an inputs object the caller has dropped takes its
- *  ~15,625 scores with it.
+ *  the CAPEX cap, which are applied to the scores afterwards. Two things follow.
+ *  Moving the target slider, or trying three budgets in a row, re-filters a
+ *  grid already scored rather than re-scoring it. And the twelve hill climbs
+ *  (four bases from three starts each) overlap heavily — they explore the same
+ *  neighbourhood from different directions — so sharing one memo across them
+ *  is most of the refinement's cost removed.
  *
  *  Keyed on object IDENTITY, which is sound only because CombinedInputs is
  *  built fresh and never mutated. A caller that mutated one in place would get
- *  a stale grid; none does, and the type is all-readonly in spirit. */
-const GRID_CACHE = new WeakMap<CombinedInputs, Candidate[]>();
+ *  a stale grid; none does, and the type is all-readonly in spirit. Weak, so an
+ *  inputs object the caller has dropped takes its scores with it. */
+interface Scores { points: Candidate[]; byKey: Map<string, MixScore> }
+const SCORE_CACHE = new WeakMap<CombinedInputs, Scores>();
 
-function scoredGrid(inp: CombinedInputs): Candidate[] {
-  const hit = GRID_CACHE.get(inp);
+const vectorKey = (v: DialVector) => DIAL_KEYS.map((k) => v[k]).join(",");
+
+/** `scoreMix` through the memo. Every search path must go through this rather
+ *  than calling `scoreMix` directly, or the climbs stop sharing work. */
+function scoreVector(inp: CombinedInputs, v: DialVector): MixScore {
+  const cache = scoresFor(inp);
+  const key = vectorKey(v);
+  const hit = cache.byKey.get(key);
+  if (hit) return hit;
+  const s = scoreMix(inp, mixOf(inp, v));
+  cache.byKey.set(key, s);
+  return s;
+}
+
+function scoresFor(inp: CombinedInputs): Scores {
+  const hit = SCORE_CACHE.get(inp);
   if (hit) return hit;
 
-  const points: Candidate[] = [];
-  const v: DialVector = {
-    electrifyPct: 0, bioBlendPct: 0, refrigPct: 0,
-    efficiencyPct: 0, solarPct: 0, procurementPct: 0,
-  };
+  const cache: Scores = { points: [], byKey: new Map() };
+  // Set before filling: scoreVector below re-enters through scoresFor, and a
+  // second empty cache would make the memo silently useless.
+  SCORE_CACHE.set(inp, cache);
+
+  const v: DialVector = { ...ZERO_VECTOR };
   const walk = (i: number) => {
     if (i === DIAL_KEYS.length) {
-      points.push({ v: { ...v }, s: scoreMix(inp, mixOf(inp, v)) });
+      const key = vectorKey(v);
+      const s = scoreMix(inp, mixOf(inp, v));
+      cache.byKey.set(key, s);
+      cache.points.push({ v: { ...v }, s });
       return;
     }
     for (const level of GRID) { v[DIAL_KEYS[i]] = level; walk(i + 1); }
@@ -368,9 +426,10 @@ function scoredGrid(inp: CombinedInputs): Candidate[] {
   };
   walk(0);
 
-  GRID_CACHE.set(inp, points);
-  return points;
+  return cache;
 }
+
+const scoredGrid = (inp: CombinedInputs): Candidate[] => scoresFor(inp).points;
 
 /** Best of the mixes that meet the target inside the cap, per basis; plus what
  *  to fall back on when nothing does.
@@ -434,7 +493,7 @@ function refine(
         const level = best.v[key] + delta;
         if (level < 0 || level > 100) continue;
         const v = { ...best.v, [key]: level };
-        const s = scoreMix(inp, mixOf(inp, v));
+        const s = scoreVector(inp, v);
         if (s.reduction < target - 1e-9 || s.totalCapex > cap) continue;
         if (keyLess(objectiveKey(s, objective), objectiveKey(best.s, objective))) {
           best = { v, s };
@@ -447,7 +506,11 @@ function refine(
   return best;
 }
 
-const OBJECTIVES: MixObjective[] = ["costPerTonne", "capex", "opexSaving"];
+/* Order is display order. `netCost` sits directly beside `costPerTonne`
+   because those two are the pair a reader confuses: one is the best deal per
+   tonne, the other the smallest bill. Seeing them adjacent is most of the
+   explanation. */
+const OBJECTIVES: MixObjective[] = ["costPerTonne", "netCost", "capex", "opexSaving"];
 
 interface Suggestion { dials: CombinedDials; achieved: number; budgetLimited: boolean }
 
@@ -486,11 +549,8 @@ function searchAll(inp: CombinedInputs, target: number, capexBudget?: number): R
     // base settings may already carry spend. No mix can come in under a cap
     // below that floor, so the floor is reported rather than silently honoured,
     // and this is the one case where a card's CAPEX may exceed its own cap.
-    const floorV: DialVector = {
-      electrifyPct: 0, bioBlendPct: 0, refrigPct: 0,
-      efficiencyPct: 0, solarPct: 0, procurementPct: 0,
-    };
-    const floor = scoreMix(inp, mixOf(inp, floorV));
+    const floorV = ZERO_VECTOR;
+    const floor = scoreVector(inp, floorV);
     out[objective] = { dials: mixOf(inp, floorV), achieved: floor.reduction, budgetLimited: true };
   }
   return out;
@@ -507,7 +567,14 @@ export function suggestCombinedMix(
 }
 
 const OPTION_META: Record<MixObjective, { label: string; blurb: string }> = {
-  costPerTonne: { label: "Cheapest overall", blurb: "Lowest ₹ per tonne — the balanced default." },
+  /* NOT "Cheapest overall". It ranks on levelised cost per tonne, which on a
+     plan that saves money is NEGATIVE - so "lowest" selects the biggest saving
+     per tonne, and the biggest saving per tonne is the most capital-hungry
+     plan. On a client inventory that card read 90.55 Cr beside a 4.01 Cr mix
+     meeting the same target, under the word "cheapest". The metric is a
+     legitimate axis; only the name was wrong. */
+  costPerTonne: { label: "Best value per tonne", blurb: "Biggest saving for every tonne removed — may commit significant capital." },
+  netCost: { label: "Lowest total cost", blurb: "Smallest whole-life bill — capital plus running cost, discounted." },
   capex: { label: "Lowest CAPEX", blurb: "Least upfront capital — leans procurement and blends before new kit." },
   opexSaving: { label: "Best OPEX saving", blurb: "Savings-maximizing — every self-funding lever at full, plus leak fixes; the payback column shows the capital price." },
 };

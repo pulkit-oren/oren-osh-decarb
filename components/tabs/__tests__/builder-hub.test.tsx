@@ -72,22 +72,26 @@ describe("BuilderHub — Balance to target lands first", () => {
     expect(screen.getByText("Live projection")).toBeTruthy();
   });
 
-  it("suggest compares three bases and applying one moves the dials", () => {
+  it("suggest compares four bases and applying one moves the dials", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     // The suggester lives in its own tab now — open it the way a user does.
     fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
     fireEvent.click(screen.getByRole("button", { name: /suggest mixes/i }));
-    // the three option cards with their trade-off stats
-    expect(screen.getByText("Cheapest overall")).toBeTruthy();
+    // the four option cards with their trade-off stats. "Cheapest overall" is
+    // deliberately absent: it ranked on a per-tonne figure that is negative on
+    // a money-saving plan, so it named the most capital-hungry mix "cheapest".
+    expect(screen.getByText("Best value per tonne")).toBeTruthy();
+    expect(screen.getByText("Lowest total cost")).toBeTruthy();
     expect(screen.getByText("Lowest CAPEX")).toBeTruthy();
     expect(screen.getByText("Best OPEX saving")).toBeTruthy();
+    expect(screen.queryByText("Cheapest overall")).toBeNull();
     // preview does NOT change the plan yet — check the dial back in its tab
     fireEvent.click(screen.getByRole("tab", { name: /Fine-tune levers/ }));
     expect((screen.getByLabelText("Efficiency dial") as HTMLInputElement).value).toBe("0");
     fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
     // the (i) icon flips a card to its calculation logic
     fireEvent.click(screen.getByRole("button", { name: /how best opex saving is calculated/i }));
-    expect(screen.getByText(/biggest running-cost saving first/i)).toBeTruthy();
+    expect(screen.getByText(/biggest yearly running-cost saving/i)).toBeTruthy();
     // apply the OPEX-saving basis (last card) → dials move
     const applyButtons = screen.getAllByRole("button", { name: /apply this mix/i });
     fireEvent.click(applyButtons[applyButtons.length - 1]);
