@@ -65,3 +65,47 @@ describe("Scope 2 BAU growth", () => {
     expect(at(overridden.trajectoryLocation, y)).toBeCloseTo(at(justOne.trajectoryLocation, y), 6);
   });
 });
+
+/* Mirror of the Scope 1 half: each scope carries its own override, and the
+   pre-split `bauGrowthPct` keeps driving both. */
+describe("Scope 2 BAU growth · per-scope override", () => {
+  const runWith = (
+    assumptions: { bauGrowthPct?: number; bauGrowthS1Pct?: number; bauGrowthS2Pct?: number },
+    fallbackPct?: number,
+  ) => computeScope2(FACILITIES, DEFAULT_SCOPE2_LEVERS, DEFAULT_BASE_YEAR, assumptions, fallbackPct);
+
+  /* Scope 2 is gridLinked, so an absolute figure asserts the grid decline too.
+     Dividing two runs at the same year cancels the grid factor exactly. */
+  const ratioVsFlat = (
+    a: { bauGrowthPct?: number; bauGrowthS1Pct?: number; bauGrowthS2Pct?: number },
+    fallbackPct?: number,
+  ) => {
+    const y = DEFAULT_BASE_YEAR + 10;
+    return at(runWith(a, fallbackPct).trajectoryLocation, y)
+      / at(runWith({ bauGrowthPct: 0 }).trajectoryLocation, y);
+  };
+
+  it("grows at the Scope 2 rate when one is set", () => {
+    expect(ratioVsFlat({ bauGrowthS2Pct: 5 })).toBeCloseTo(Math.pow(1.05, 10), 6);
+  });
+
+  it("ignores the Scope 1 rate entirely", () => {
+    expect(ratioVsFlat({ bauGrowthS1Pct: 9 }, 3)).toBeCloseTo(Math.pow(1.03, 10), 6);
+  });
+
+  it("prefers its own rate over one saved for both scopes", () => {
+    expect(ratioVsFlat({ bauGrowthS2Pct: 2, bauGrowthPct: 9 })).toBeCloseTo(Math.pow(1.02, 10), 6);
+  });
+
+  it("still honours a rate saved for both scopes before the split", () => {
+    expect(ratioVsFlat({ bauGrowthPct: 6 })).toBeCloseTo(Math.pow(1.06, 10), 6);
+  });
+
+  it("moves the market curve too, not only the location curve", () => {
+    // A per-scope override threaded into one of the two call sites passes
+    // every location-curve assertion above and fails here.
+    const y = DEFAULT_BASE_YEAR + 10;
+    const low = runWith({ bauGrowthS2Pct: 1 }), high = runWith({ bauGrowthS2Pct: 6 });
+    expect(at(high.trajectoryMarket, y)).toBeGreaterThan(at(low.trajectoryMarket, y));
+  });
+});

@@ -27,7 +27,7 @@ import type { Facility, Scope2Levers } from "./types";
 import { validateScope2 } from "./validate";
 import { cfeScore, LOAD_SHAPES, type CfeResult } from "./hourly";
 import { FAMILY_IDX } from "@/lib/model/palette";
-import { resolveBauGrowthPct } from "@/lib/bau";
+import { bauOverridesFrom, overrideForScope, resolveBauGrowthPct } from "@/lib/bau";
 
 export const END_YEAR = 2050;
 // DISCOUNT_RATE_PCT and the local S2_LIFETIME_YEARS table are GONE. Both were
@@ -339,7 +339,9 @@ export function computeScope2(
   // gridLinked: every tonne on both curves is grid electricity, so the
   // baseline itself falls as the grid cleans and each wedge is worth less.
   const gridFactor = gridFactorFn(baseYear, assumptions?.gridEfDeclinePctPerYear);
-  const bauGrowth = resolveBauGrowthPct(assumptions?.bauGrowthPct, bauGrowthFallbackPct) / 100;
+  const bauGrowth = resolveBauGrowthPct(
+    overrideForScope(bauOverridesFrom(assumptions), "s2"), bauGrowthFallbackPct,
+  ) / 100;
   const trajectoryLocation = buildTrajectory({
     baseYear, endYear: END_YEAR, baseTotalT, bauGrowth, wedges: wedgesLocation,
     gridFactor, gridLinked: true,

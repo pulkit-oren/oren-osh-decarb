@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BAU_GROWTH_MAX_PCT, BAU_GROWTH_MIN_PCT, deriveBauGrowth, deriveScope1Bau, deriveScope2Bau,
-  describeBauPremise, resolveBauGrowthPct, scope1ActualSeries, scope2ActualSeries,
+  describeBauPremise, overrideForScope, resolveBauGrowthPct, scope1ActualSeries, scope2ActualSeries,
   type DerivedGrowth, type YearPoint,
 } from "../bau";
 import { DEFAULT_COMBUSTION_BY_YEAR, DEFAULT_REFRIGERATION_BY_YEAR, DEFAULT_BASE_YEAR } from "../defaults";
@@ -98,43 +98,120 @@ describe("resolveBauGrowthPct", () => {
   });
 });
 
-/* One rate honestly annotates a COMBINED business-as-usual figure only when an
-   override is set, because that override is what drives both engines. Two
-   screens printed Scope 1's chain beside the combined tonnes; on the shipped
-   inventories that read 2.8 %/yr while Scope 2 ran at 7.5. */
+/* One rate honestly annotates a COMBINED business-as-usual figure only when the
+   scope it labels is actually running on it. Two screens printed Scope 1's
+   chain beside the combined tonnes; on the shipped inventories that read
+   2.8 %/yr while Scope 2 ran at 7.5. */
+describe("overrideForScope", () => {
+  it("prefers the scope's own rate over the one saved for both", () => {
+    expect(overrideForScope({ s1Pct: 4, bothPct: 9 }, "s1")).toBe(4);
+    expect(overrideForScope({ s2Pct: 6, bothPct: 9 }, "s2")).toBe(6);
+  });
+
+  /* Scenarios saved before the premise split carry one `bauGrowthPct`. It has
+     to keep meaning what it meant — both scopes — or every saved scenario
+     silently changes its answer on upgrade. */
+  it("falls back to the rate saved for both scopes", () => {
+    expect(overrideForScope({ bothPct: 9 }, "s1")).toBe(9);
+    expect(overrideForScope({ bothPct: 9 }, "s2")).toBe(9);
+  });
+
+  it("leaves a scope with no override of its own on the one saved for both", () => {
+    const o = { s1Pct: 4, bothPct: 9 };
+    expect(overrideForScope(o, "s1")).toBe(4);
+    expect(overrideForScope(o, "s2")).toBe(9);
+  });
+
+  it("reports no override when neither is set", () => {
+    expect(overrideForScope({}, "s1")).toBeUndefined();
+    expect(overrideForScope(undefined, "s2")).toBeUndefined();
+  });
+
+  it("treats an explicit zero as a premise, not as absent", () => {
+    expect(overrideForScope({ s1Pct: 0, bothPct: 9 }, "s1")).toBe(0);
+  });
+
+  /* An emptied field can arrive as NaN before the panel normalises it. Falling
+     THROUGH to the both-scopes value is the honest read; propagating NaN would
+     reach resolveBauGrowthPct as a set-but-unusable override and drop the
+     scope to the 1% floor instead of to its saved rate. */
+  it("falls through a non-finite scope rate to the one saved for both", () => {
+    expect(overrideForScope({ s1Pct: Number.NaN, bothPct: 9 }, "s1")).toBe(9);
+  });
+
+  it("clamps an absurd premise rather than passing it on", () => {
+    expect(overrideForScope({ s1Pct: 1_000_000 }, "s1")).toBe(BAU_GROWTH_MAX_PCT);
+    expect(overrideForScope({ s2Pct: -500 }, "s2")).toBe(BAU_GROWTH_MIN_PCT);
+  });
+});
+
 describe("describeBauPremise", () => {
   const g = (pct: number): DerivedGrowth => ({ pct, fromYear: 2021, toYear: 2027, years: 6 });
 
   it("reports both scopes' own rates, and that one number will not do", () => {
-    const p = describeBauPremise(undefined, g(2.84), g(7.46));
+    const p = describeBauPremise({}, g(2.84), g(7.46));
     expect(p.s1Pct).toBeCloseTo(2.84, 9);
     expect(p.s2Pct).toBeCloseTo(7.46, 9);
     expect(p.single).toBe(false);
-    expect(p.overridden).toBe(false);
+    expect(p.overriddenScopes).toBe("none");
   });
 
-  it("an override IS one rate for both scopes", () => {
-    const p = describeBauPremise(3.5, g(2.84), g(7.46));
+  it("a rate saved for both scopes IS one rate for both scopes", () => {
+    const p = describeBauPremise({ bothPct: 3.5 }, g(2.84), g(7.46));
     expect(p.s1Pct).toBe(3.5);
     expect(p.s2Pct).toBe(3.5);
     expect(p.single).toBe(true);
-    expect(p.overridden).toBe(true);
+    expect(p.overriddenScopes).toBe("both");
   });
 
   it("a zero override is an override — a flat BAU on both scopes", () => {
-    const p = describeBauPremise(0, g(2.84), g(7.46));
-    expect(p.overridden).toBe(true);
+    const p = describeBauPremise({ bothPct: 0 }, g(2.84), g(7.46));
+    expect(p.overriddenScopes).toBe("both");
     expect(p.single).toBe(true);
     expect(p.s1Pct).toBe(0);
   });
 
+  /* The point of the split: one scope can be forced while the other keeps
+     following its own history. The screens have to be able to say which. */
+  it("names the one scope that is overridden, leaving the other derived", () => {
+    const p = describeBauPremise({ s1Pct: 4 }, g(2.84), g(7.46));
+    expect(p.s1Pct).toBe(4);
+    expect(p.s2Pct).toBeCloseTo(7.46, 9);
+    expect(p.overriddenScopes).toBe("s1");
+    expect(p.single).toBe(false);
+  });
+
+  it("names Scope 2 when Scope 2 is the overridden one", () => {
+    const p = describeBauPremise({ s2Pct: 4 }, g(2.84), g(7.46));
+    expect(p.s1Pct).toBeCloseTo(2.84, 9);
+    expect(p.s2Pct).toBe(4);
+    expect(p.overriddenScopes).toBe("s2");
+  });
+
+  it("reports two different typed rates as two premises, both overridden", () => {
+    const p = describeBauPremise({ s1Pct: 0.9, s2Pct: 7.5 }, g(2.84), g(7.46));
+    expect(p.s1Pct).toBe(0.9);
+    expect(p.s2Pct).toBe(7.5);
+    expect(p.overriddenScopes).toBe("both");
+    expect(p.single).toBe(false);
+  });
+
+  /* A per-scope rate beside an inherited both-scopes rate: the scope with its
+     own value uses it, the other stays on what the old scenario saved. */
+  it("mixes a scope rate with an inherited both-scopes rate", () => {
+    const p = describeBauPremise({ s1Pct: 4, bothPct: 9 }, g(2.84), g(7.46));
+    expect(p.s1Pct).toBe(4);
+    expect(p.s2Pct).toBe(9);
+    expect(p.overriddenScopes).toBe("both");
+  });
+
   it("collapses to one number when the two derived rates print the same", () => {
-    expect(describeBauPremise(undefined, g(2.84), g(2.85)).single).toBe(true);
-    expect(describeBauPremise(undefined, null, null).single).toBe(true);
+    expect(describeBauPremise({}, g(2.84), g(2.85)).single).toBe(true);
+    expect(describeBauPremise({}, null, null).single).toBe(true);
   });
 
   it("shows the floor a scope with too few years will actually run on", () => {
-    const p = describeBauPremise(undefined, g(2.84), null);
+    const p = describeBauPremise({}, g(2.84), null);
     expect(p.s1Pct).toBeCloseTo(2.84, 9);
     expect(p.s2Pct).toBe(1);
     expect(p.single).toBe(false);

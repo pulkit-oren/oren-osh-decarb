@@ -226,6 +226,47 @@ export function resolveBauGrowthPct(
   return sane(override) ?? sane(fallback) ?? 1;
 }
 
+/* ---------- which override each scope is on ---------- */
+
+/** The typed rates, as the assumptions hold them.
+ *
+ *  `bothPct` is the pre-split `assumptions.bauGrowthPct`: one number that drove
+ *  BOTH engines. It is kept — and kept meaning what it meant — because every
+ *  scenario saved before the split carries it, and reading it as "Scope 1 only"
+ *  would silently change what those scenarios say Scope 2 does. New edits write
+ *  the per-scope fields; `bothPct` is inherited, never written. */
+export interface BauOverrides {
+  s1Pct?: number;
+  s2Pct?: number;
+  bothPct?: number;
+}
+
+/** The override in force for one scope, or `undefined` when that scope is free
+ *  to follow its own history.
+ *
+ *  Sanitised on the way through — `sane` before `??`, not after — so a field
+ *  emptied to NaN falls THROUGH to `bothPct` instead of reaching
+ *  `resolveBauGrowthPct` as a set-but-unusable override, which would drop the
+ *  scope to the 1% floor rather than to the rate its scenario actually saved. */
+export function overrideForScope(
+  o: BauOverrides | undefined,
+  scope: "s1" | "s2",
+): number | undefined {
+  return sane(scope === "s1" ? o?.s1Pct : o?.s2Pct) ?? sane(o?.bothPct);
+}
+
+/** The three fields off a settings object, as one `BauOverrides`.
+ *
+ *  Structurally typed rather than importing `GlobalAssumptions`: `lib/model`
+ *  imports THIS module, so taking the type back would close a cycle. */
+export function bauOverridesFrom(a: {
+  bauGrowthPct?: number;
+  bauGrowthS1Pct?: number;
+  bauGrowthS2Pct?: number;
+} | undefined): BauOverrides {
+  return { s1Pct: a?.bauGrowthS1Pct, s2Pct: a?.bauGrowthS2Pct, bothPct: a?.bauGrowthPct };
+}
+
 /* ---------- what to SAY about the premise ---------- */
 
 /** The premise as the screen must state it.
@@ -234,15 +275,20 @@ export function resolveBauGrowthPct(
  *  chain — `override ?? s1.derivedBau?.pct ?? 1` — beside a COMBINED
  *  business-as-usual figure that is the sum of a Scope 1 curve and a Scope 2
  *  curve growing at two different derived rates. The arithmetic closed in
- *  neither direction. One rate is honest only when an explicit override is set,
- *  because that override is what drives both engines.
+ *  neither direction. One rate is honest only when both scopes are actually on
+ *  it — which, now that each scope carries its own override, is a thing to be
+ *  computed rather than assumed from the presence of an override.
  *
  *  Built on `resolveBauGrowthPct`, so the rates a screen states are the rates
  *  the engines will use, by construction rather than by matching chains. */
 export interface BauPremise {
-  /** True when one typed rate drives BOTH engines — the only case in which a
-   *  single number honestly annotates a combined figure. */
-  overridden: boolean;
+  /** Which scopes are running on a typed rate rather than on their own history.
+   *
+   *  One field rather than a boolean plus a qualifier: the screens have three
+   *  things to say ("from your data", "a rate you set", "Scope N set, the other
+   *  from your data") and a boolean cannot carry the third without a second
+   *  field beside it that can drift out of step with it. */
+  overriddenScopes: "none" | "s1" | "s2" | "both";
   /** Percent/yr each engine will actually apply. */
   s1Pct: number;
   s2Pct: number;
@@ -252,14 +298,20 @@ export interface BauPremise {
 }
 
 export function describeBauPremise(
-  override: number | undefined,
+  overrides: BauOverrides | undefined,
   s1: DerivedGrowth | null,
   s2: DerivedGrowth | null,
 ): BauPremise {
-  const s1Pct = resolveBauGrowthPct(override, s1?.pct);
-  const s2Pct = resolveBauGrowthPct(override, s2?.pct);
+  const s1Over = overrideForScope(overrides, "s1");
+  const s2Over = overrideForScope(overrides, "s2");
+  const s1Pct = resolveBauGrowthPct(s1Over, s1?.pct);
+  const s2Pct = resolveBauGrowthPct(s2Over, s2?.pct);
   return {
-    overridden: sane(override) != null,
+    overriddenScopes:
+      s1Over != null && s2Over != null ? "both"
+        : s1Over != null ? "s1"
+          : s2Over != null ? "s2"
+            : "none",
     s1Pct,
     s2Pct,
     // 0.05, not 0: both are printed to one decimal, and two rates that render

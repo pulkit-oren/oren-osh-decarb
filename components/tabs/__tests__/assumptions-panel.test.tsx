@@ -31,7 +31,7 @@ describe("Assumptions sub-tab", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
     expect(screen.getByText(/from your data/i)).toBeTruthy();
-    expect(screen.getByLabelText("BAU growth override")).toBeTruthy();
+    expect(screen.getByLabelText("Scope 1 BAU growth override")).toBeTruthy();
   });
 
   it("an override moves the required cut", () => {
@@ -39,25 +39,30 @@ describe("Assumptions sub-tab", () => {
     const requiredBefore = screen.getAllByText("Required cut")[0]
       .parentElement!.textContent!;
     fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
-    fireEvent.change(screen.getByLabelText("BAU growth override"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("Scope 1 BAU growth override"), { target: { value: "9" } });
     const requiredAfter = screen.getAllByText("Required cut")[0]
       .parentElement!.textContent!;
     expect(requiredAfter).not.toBe(requiredBefore);
   });
 
-  it("reset clears the override rather than freezing the derived number", () => {
+  it("reset clears BOTH overrides rather than freezing the derived numbers", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
-    const input = screen.getByLabelText("BAU growth override") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "9" } });
+    const s1 = screen.getByLabelText("Scope 1 BAU growth override") as HTMLInputElement;
+    const s2 = screen.getByLabelText("Scope 2 BAU growth override") as HTMLInputElement;
+    fireEvent.change(s1, { target: { value: "9" } });
+    fireEvent.change(s2, { target: { value: "4" } });
     fireEvent.click(screen.getByRole("button", { name: /reset to derived/i }));
-    expect(input.value).toBe("");
+    // One reset, both scopes: a reset that cleared only the scope it sat beside
+    // would leave the other frozen on a rate the reader believes is derived.
+    expect(s1.value).toBe("");
+    expect(s2.value).toBe("");
   });
 
   it("holds a flat BAU at zero instead of treating it as cleared", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
-    const input = screen.getByLabelText("BAU growth override") as HTMLInputElement;
+    const input = screen.getByLabelText("Scope 2 BAU growth override") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "0" } });
     expect(input.value).toBe("0");
   });
@@ -102,7 +107,7 @@ describe("Compare mixes states its premise", () => {
     expect(stripElement.textContent).toMatch(/BAU\s+[\d.]+\s+%\/yr/);
     fireEvent.click(changeButton);
     // We land on Assumptions.
-    expect(screen.getByLabelText("BAU growth override")).toBeTruthy();
+    expect(screen.getByLabelText("Scope 1 BAU growth override")).toBeTruthy();
   });
 
   it("keeps the Suggest button beside the results", () => {
@@ -119,8 +124,9 @@ describe("Compare mixes states its premise", () => {
     expect(stripElement.textContent).toContain("(from your data)");
     // Set a distinctive override value that no derived rate would coincidentally equal.
     fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
-    const overrideInput = screen.getByLabelText("BAU growth override") as HTMLInputElement;
-    fireEvent.change(overrideInput, { target: { value: "7.3" } });
+    // Both scopes, so one rate honestly annotates the combined figure.
+    fireEvent.change(screen.getByLabelText("Scope 1 BAU growth override"), { target: { value: "7.3" } });
+    fireEvent.change(screen.getByLabelText("Scope 2 BAU growth override"), { target: { value: "7.3" } });
     // Return to Compare mixes and verify the override is now displayed.
     fireEvent.click(screen.getByRole("tab", { name: /Compare mixes/ }));
     const stripAfterOverride = screen.getByTestId("premise-strip");
@@ -142,7 +148,8 @@ describe("the rail names its premise", () => {
   it("says so when the rate is an override instead", () => {
     render(<Wrapper><BuilderHub /></Wrapper>);
     fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
-    fireEvent.change(screen.getByLabelText("BAU growth override"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("Scope 1 BAU growth override"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("Scope 2 BAU growth override"), { target: { value: "7" } });
     expect(screen.getByText(/a rate you set/i)).toBeTruthy();
   });
 });
@@ -171,7 +178,8 @@ describe("Assumptions cards", () => {
 
   it("opens every card by default, so nothing surfaced last week is re-hidden", () => {
     open();
-    expect(screen.getByLabelText("BAU growth override")).toBeTruthy();
+    expect(screen.getByLabelText("Scope 1 BAU growth override")).toBeTruthy();
+    expect(screen.getByLabelText("Scope 2 BAU growth override")).toBeTruthy();
     expect(screen.getByLabelText("CAPEX budget")).toBeTruthy();
     expect(screen.getByRole("spinbutton", { name: /Discount rate/i })).toBeTruthy();
   });
@@ -199,10 +207,11 @@ describe("Assumptions cards", () => {
     expect(header.textContent).toMatch(/derived/i);
     expect(header.textContent).not.toMatch(/fallback/i);
 
-    fireEvent.change(screen.getByLabelText("BAU growth override"), { target: { value: "7.3" } });
+    fireEvent.change(screen.getByLabelText("Scope 1 BAU growth override"), { target: { value: "7.3" } });
+    fireEvent.change(screen.getByLabelText("Scope 2 BAU growth override"), { target: { value: "7.3" } });
     expect(header.textContent).toMatch(/7\.3\s*%\/yr/);
     expect(header.textContent).toMatch(/your override/i);
-    // An override is one rate for both scopes, so the derived pair is gone.
+    // Both scopes typed to the same rate: one number, and no derived pair.
     expect(header.textContent).not.toMatch(/derived/i);
   });
 
@@ -213,27 +222,13 @@ describe("Assumptions cards", () => {
     expect(header.textContent).toMatch(/no cap/i);
   });
 
-  it("drives the growth override from a slider as well as the number field", () => {
+  /* The slider is gone with the split. It drove ONE value, and there are now
+     two — a single slider would have had to pick a scope to control, silently,
+     which is worse than typing. */
+  it("carries no growth slider", () => {
     open();
-    const slider = screen.getByLabelText("BAU growth slider") as HTMLInputElement;
-    expect(slider.type).toBe("range");
-    fireEvent.change(slider, { target: { value: "4.5" } });
-    // One premise, two controls: the number field must show what the slider set.
-    expect((screen.getByLabelText("BAU growth override") as HTMLInputElement).value).toBe("4.5");
-    expect(screen.getByRole("button", { name: /Business as usual/i }).textContent).toMatch(/4\.5\s*%\/yr/);
-  });
-
-  it("the slider rests on the rate in force, so it is never blank when unset", () => {
-    open();
-    const slider = screen.getByLabelText("BAU growth slider") as HTMLInputElement;
-    const field = screen.getByLabelText("BAU growth override") as HTMLInputElement;
-    // Unset: the field is empty and its placeholder names the rate(s) that
-    // would apply. The slider must rest on the first of those rather than on
-    // zero, or dragging it would jump the premise from a real value to none.
-    expect(field.value).toBe("");
-    const leading = Number(field.placeholder.split("/")[0].trim());
-    expect(Number.isFinite(leading)).toBe(true);
-    expect(Number(slider.value)).toBeCloseTo(leading, 1);
+    expect(screen.queryByLabelText("BAU growth slider")).toBeNull();
+    expect(screen.queryByLabelText(/BAU growth.*slider/i)).toBeNull();
   });
 
   it("lists where the capital goes, largest first, instead of an empty placeholder", () => {
@@ -314,5 +309,105 @@ describe("Assumptions cards", () => {
     // At least one line must offer an editable figure, or the table is a
     // read-only breakdown wearing the name of an editor.
     expect(table.querySelectorAll("input[type=number]").length).toBeGreaterThan(0);
+  });
+});
+
+/* The premise split: Scope 1 and Scope 2 grow at different rates, so each gets
+   its own field and either can be left on its own history. */
+describe("Business as usual \u00b7 a rate per scope", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+
+  const open = () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+  };
+  const s1Field = () => screen.getByLabelText("Scope 1 BAU growth override") as HTMLInputElement;
+  const s2Field = () => screen.getByLabelText("Scope 2 BAU growth override") as HTMLInputElement;
+  const bauHeader = () => screen.getByRole("button", { name: /Business as usual/i });
+
+  it("offers one override per scope", () => {
+    open();
+    expect(s1Field()).toBeTruthy();
+    expect(s2Field()).toBeTruthy();
+  });
+
+  it("each field placeholder names that scope's own derived rate", () => {
+    open();
+    // The placeholder is what tells you what happens if you leave it blank. A
+    // shared placeholder listing "s1 / s2" beside two fields cannot say which
+    // half belongs to which.
+    const s1Placeholder = Number(s1Field().placeholder);
+    const s2Placeholder = Number(s2Field().placeholder);
+    expect(Number.isFinite(s1Placeholder)).toBe(true);
+    expect(Number.isFinite(s2Placeholder)).toBe(true);
+    // The shipped fixture derives two genuinely different rates; if they were
+    // equal this assertion would pass vacuously and prove nothing.
+    expect(s1Placeholder).not.toBeCloseTo(s2Placeholder, 1);
+    expect(bauHeader().textContent).toContain(s1Placeholder.toFixed(1));
+    expect(bauHeader().textContent).toContain(s2Placeholder.toFixed(1));
+  });
+
+  it("a Scope 1 rate leaves Scope 2 on its own derived rate", () => {
+    open();
+    const s2Derived = Number(s2Field().placeholder);
+    fireEvent.change(s1Field(), { target: { value: "9" } });
+    // This is the whole point of the split: the header must now read two
+    // premises, 9 on Scope 1 and Scope 2's unchanged derived rate.
+    expect(bauHeader().textContent).toContain("9.0");
+    expect(bauHeader().textContent).toContain(s2Derived.toFixed(1));
+    expect(s2Field().value).toBe("");
+  });
+
+  it("a Scope 2 rate leaves Scope 1 on its own derived rate", () => {
+    open();
+    const s1Derived = Number(s1Field().placeholder);
+    fireEvent.change(s2Field(), { target: { value: "9" } });
+    expect(bauHeader().textContent).toContain(s1Derived.toFixed(1));
+    expect(s1Field().value).toBe("");
+  });
+
+  it("names which scope is overridden in the folded header", () => {
+    open();
+    fireEvent.change(s1Field(), { target: { value: "9" } });
+    // "your override" alone would claim both scopes are typed; "derived" alone
+    // would claim neither is.
+    expect(bauHeader().textContent).toMatch(/Scope 1 override/i);
+    fireEvent.click(screen.getByRole("button", { name: /reset to derived/i }));
+    fireEvent.change(s2Field(), { target: { value: "9" } });
+    expect(bauHeader().textContent).toMatch(/Scope 2 override/i);
+  });
+
+  it("moves the required cut from the Scope 2 field alone", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    const required = () => screen.getAllByText("Required cut")[0].parentElement!.textContent!;
+    const before = required();
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+    fireEvent.change(s2Field(), { target: { value: "12" } });
+    // A Scope 2 rate that reached only the Scope 1 engine, or neither, would
+    // leave this untouched.
+    expect(required()).not.toBe(before);
+  });
+
+  it("drives the two scopes independently", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    const required = () => screen.getAllByText("Required cut")[0].parentElement!.textContent!;
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+    fireEvent.change(s1Field(), { target: { value: "3" } });
+    const afterS1 = required();
+    fireEvent.change(s2Field(), { target: { value: "3" } });
+    // If one field wrote a value both engines read, the second edit would be a
+    // no-op - the combined figure would already be at 3 %/yr on both curves.
+    expect(required()).not.toBe(afterS1);
+  });
+
+  it("the rail says which scope was set and which is still from the data", () => {
+    render(<Wrapper><BuilderHub /></Wrapper>);
+    fireEvent.click(screen.getByRole("tab", { name: /Assumptions/ }));
+    fireEvent.change(s1Field(), { target: { value: "9" } });
+    fireEvent.click(screen.getByRole("tab", { name: /Fine-tune levers/ }));
+    const rail = screen.getByText(/Business-as-usual reaches/i).parentElement!.textContent!;
+    expect(rail).toMatch(/Scope 1/);
+    expect(rail).toMatch(/you set/i);
+    expect(rail).toMatch(/year-on-year data/i);
   });
 });

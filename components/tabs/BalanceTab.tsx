@@ -33,7 +33,7 @@ import { applyDials2, deriveDials2, type BalanceDials2 } from "@/lib/scope2/mode
 import { combineTrajectories, targetPosition } from "@/lib/model/combined";
 import { END_YEAR } from "@/lib/model";
 import { suggestMixOptions, type CombinedInputs, type MixObjective, type MixOption } from "@/lib/combined-balance";
-import { describeBauPremise, type DerivedGrowth } from "@/lib/bau";
+import { bauOverridesFrom, describeBauPremise, type DerivedGrowth } from "@/lib/bau";
 import { baseValueFor, targetValueAt, type Inventories } from "@/lib/goals/select";
 import { CURRENCY } from "@/lib/defaults";
 import { InfoTip } from "@/components/ui/InfoTip";
@@ -140,14 +140,21 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
      premise strip and the rail used to label it with Scope 1's chain alone.
      describeBauPremise runs the same resolveBauGrowthPct the engines run, so
      these are the rates the engines apply, and it reports whether one number
-     covers both scopes (it does exactly when an override is set, or when the
-     two derived rates round to the same 1 dp). */
+     covers both scopes (it does when both scopes are on the same typed rate, or
+     when the two derived rates round to the same 1 dp) and WHICH scopes are
+     running on a typed rate at all. */
   const bauPremise = describeBauPremise(
-    s1.settings.assumptions.bauGrowthPct, s1.derivedBau, s2.derivedBau,
+    bauOverridesFrom(s1.settings.assumptions), s1.derivedBau, s2.derivedBau,
   );
   const spanOf = (d: DerivedGrowth | null) => (d ? `FY${d.fromYear} to FY${d.toYear}` : null);
   const s1Span = spanOf(s1.derivedBau);
   const s2Span = spanOf(s2.derivedBau);
+  /* The span belonging to the scope that is NOT overridden. `bauSpan` below is
+     the combined phrasing, which is wrong to print when only one scope is
+     derived — it would credit the typed scope's rate to the data too. */
+  const otherScopeSpan = bauPremise.overriddenScopes === "s1" ? s2Span
+    : bauPremise.overriddenScopes === "s2" ? s1Span
+      : null;
   const bauSpan = !s1Span ? s2Span
     : !s2Span ? s1Span
       : s1Span === s2Span ? s1Span
@@ -422,7 +429,7 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
         <span aria-hidden="true" className="text-ink-faint">·</span>
         <span>
           BAU <BauRates premise={bauPremise} />
-          {!bauPremise.overridden && " (from your data)"}
+          {bauPremise.overriddenScopes === "none" && " (from your data)"}
         </span>
         <button
           type="button"
@@ -717,14 +724,28 @@ export function BalanceTab({ onOpenLever }: { onOpenLever?: (focus: LeverFocus) 
                 Business-as-usual reaches <strong className="text-ink tabular-nums">{fmt(bauAtYear)} t</strong> by {year},
                 growing at <BauRates premise={bauPremise} />
                 {" — "}
-                {bauPremise.overridden
+                {bauPremise.overriddenScopes === "both"
                   ? <>a rate you set on the <strong className="text-ink">Assumptions</strong> tab, which replaces both scopes&rsquo; own history</>
-                  : bauSpan
+                  : bauPremise.overriddenScopes !== "none"
+                    /* One scope typed, one still on its own history. Naming only
+                       the typed one would leave the other reading as derived by
+                       omission, which is true but silent; naming only the
+                       derived one would claim the whole figure came from the
+                       data. Both halves get said. */
                     ? <>
-                        from your own year-on-year data, {bauSpan}
-                        {bauPartlyDerived && <>; the other scope has too few years and falls back</>}
+                        <strong className="text-ink">{bauPremise.overriddenScopes === "s1" ? "Scope 1" : "Scope 2"}</strong>{" "}
+                        at a rate you set on the <strong className="text-ink">Assumptions</strong> tab, and{" "}
+                        {bauPremise.overriddenScopes === "s1" ? "Scope 2" : "Scope 1"}{" "}
+                        {otherScopeSpan
+                          ? <>from its own year-on-year data, {otherScopeSpan}</>
+                          : <>on the fallback, for want of enough year-on-year data</>}
                       </>
-                    : <>the fallback, because there is not yet enough year-on-year data to derive one</>}
+                    : bauSpan
+                      ? <>
+                          from your own year-on-year data, {bauSpan}
+                          {bauPartlyDerived && <>; the other scope has too few years and falls back</>}
+                        </>
+                      : <>the fallback, because there is not yet enough year-on-year data to derive one</>}
                 . So <strong className="text-ink tabular-nums">{fmt(requiredT)} t</strong> has to come out of that path.
                 Your plan takes out <strong className="text-ink tabular-nums">{fmt(allocatedT)} t</strong>, landing at {fmt(netAtYear)} t.
               </p>
