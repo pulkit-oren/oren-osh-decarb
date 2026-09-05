@@ -6,6 +6,7 @@ import { Scope2Provider } from "@/lib/scope2/store";
 import { EsgProvider } from "@/lib/esg/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "@/components/tabs/ActivityDataTab";
+import { FUELS } from "@/lib/model/factors";
 
 function Probe() {
   const { combustion, baseYear } = useScenario();
@@ -28,7 +29,7 @@ function mount() {
 }
 
 /** Navigate esg -> Environment -> Energy & Emissions -> a stationary
- *  category -> open the add-a-source form. ActivityDataTab defaults to the
+ *  category -> open the add-a-fuel form. ActivityDataTab defaults to the
  *  E/S/G pre-screen (initialNav = { level: "esg" }) when no initialNav is
  *  passed, so the full click path is required — there is no "home" shortcut
  *  available from a plain <ActivityDataTab /> mount. */
@@ -37,41 +38,80 @@ function openAddForm() {
   fireEvent.click(screen.getByRole("button", { name: /^Environment$/i }));
   fireEvent.click(screen.getByRole("button", { name: /Energy & Emissions/i }));
   fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
 }
 
 beforeEach(() => window.localStorage.clear());
 
-describe("adding a source", () => {
+/** Pick a fuel by its visible label and submit. The entry's name follows the
+ *  fuel — the form has no name box to fill in. */
+function addFuel(label: string) {
+  fireEvent.change(screen.getByLabelText(/^fuel$/i), {
+    target: { value: FUEL_ID_BY_LABEL[label] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+}
+
+const FUEL_ID_BY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.values(FUELS).map((f) => [f.label, f.id]),
+);
+
+describe("adding a fuel", () => {
   it("no longer asks for End-use (D6)", () => {
     openAddForm();
     expect(screen.queryByLabelText(/end.?use/i)).toBeNull();
     expect(screen.queryByText(/^End-use$/i)).toBeNull();
   });
 
-  it("still asks for Name, Fuel and Business unit", () => {
+  it("asks for Fuel and Business unit, and offers no name box", () => {
     openAddForm();
-    // Name: the input carries aria-label="Source name" (no htmlFor/id pair).
-    expect(screen.getByLabelText(/name/i)).toBeTruthy();
     // Fuel: <label htmlFor="src-fuel-select"> properly associated with the select.
-    expect(screen.getByLabelText(/fuel/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^fuel$/i)).toBeTruthy();
     // Business unit: the <label> is a sibling of the <select>, not wrapping/
     // pointing at it (no htmlFor/id), so it is not accessibility-linked —
     // assert the field is present by its visible label text instead.
     expect(screen.getByText(/business unit/i)).toBeTruthy();
+    // The name comes from the fuel, so there is nothing to type.
+    expect(screen.queryByLabelText(/source name/i)).toBeNull();
+  });
+
+  it("names the entry after the fuel picked from the dropdown", () => {
+    openAddForm();
+    addFuel("Kerosene / Burning Oil");
+    const all = JSON.parse(screen.getByTestId("dump").textContent!);
+    expect(all.map((e: { name: string }) => e.name)).toContain("Kerosene / Burning Oil");
+  });
+
+  it("suffixes a repeat of the same fuel so the two rows stay distinguishable", () => {
+    openAddForm();
+    addFuel("Diesel");
+    fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
+    addFuel("Diesel");
+    const names = JSON.parse(screen.getByTestId("dump").textContent!)
+      .map((e: { name: string }) => e.name)
+      .filter((n: string) => /^Diesel( \d+)?$/.test(n));
+    expect(names).toEqual(["Diesel", "Diesel 2"]);
+  });
+
+  it("does not offer Lubricants — a consumable, not a combusted fuel", () => {
+    openAddForm();
+    const opts = Array.from(
+      (screen.getByLabelText(/^fuel$/i) as HTMLSelectElement).options,
+    ).map((o) => o.textContent);
+    expect(opts).toContain("Diesel");
+    expect(opts).not.toContain("Lubricants");
   });
 
   it("mints exactly one equipment, reusing the source id (D8)", () => {
     openAddForm();
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "New boiler" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    addFuel("Fuel Oil / Furnace Oil");
 
     const all = JSON.parse(screen.getByTestId("dump").textContent!);
-    const created = all.find((e: { name: string }) => e.name === "New boiler");
+    const created = all.find((e: { name: string }) => e.name === "Fuel Oil / Furnace Oil");
     expect(created).toBeTruthy();
     expect(created.equipment).toHaveLength(1);
     expect(created.equipment[0].id).toBe(created.id);
-    expect(created.equipment[0].name).toBe("New boiler");
+    expect(created.equipment[0].name).toBe("Fuel Oil / Furnace Oil");
     expect(created.equipment[0].unitCount).toBe(1);
     expect(created.equipment[0].remainingLife).toBe(10);
     expect(Object.keys(created.allocations)).toEqual([created.id]);
@@ -79,10 +119,9 @@ describe("adding a source", () => {
 
   it("does not put remainingLife, unitCount or endUse on the source", () => {
     openAddForm();
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Plain" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    addFuel("Residual Fuel Oil");
     const all = JSON.parse(screen.getByTestId("dump").textContent!);
-    const created = all.find((e: { name: string }) => e.name === "Plain");
+    const created = all.find((e: { name: string }) => e.name === "Residual Fuel Oil");
     expect(created.remainingLife).toBeUndefined();
     expect(created.unitCount).toBeUndefined();
     expect(created.endUse).toBeUndefined();
@@ -90,9 +129,8 @@ describe("adding a source", () => {
 
   it("leaves capacityUnit unset - no capacity has been recorded yet (D9)", () => {
     openAddForm();
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "NoCap" } });
-    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    addFuel("Kerosene / Burning Oil");
     const all = JSON.parse(screen.getByTestId("dump").textContent!);
-    expect(all.find((e: { name: string }) => e.name === "NoCap").capacityUnit).toBeUndefined();
+    expect(all.find((e: { name: string }) => e.name === "Kerosene / Burning Oil").capacityUnit).toBeUndefined();
   });
 });

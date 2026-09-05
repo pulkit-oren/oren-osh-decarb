@@ -14,7 +14,8 @@ import { EsgProvider } from "@/lib/esg/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "@/components/tabs/ActivityDataTab";
 import { isUnallocatedId } from "@/lib/equipment/resolve";
-import type { CombustionAsset } from "@/lib/model/types";
+import { FUELS } from "@/lib/model/factors";
+import type { CombustionAsset, FuelId } from "@/lib/model/types";
 
 function Probe() {
   const { combustion, baseYear, resolvedBaseAssets } = useScenario();
@@ -46,26 +47,31 @@ const resolved = (): CombustionAsset[] => JSON.parse(screen.getByTestId("resolve
 
 /** Create a source through the real UI, then type its annual volume on the
  *  source list exactly as a user does — the two steps are separate, and it is
- *  the gap between them that C1 lives in. */
-function createSourceThenTypeVolume(name: string, volume: number) {
+ *  the gap between them that C1 lives in.
+ *
+ *  The add form has no name box: an entry is named by the fuel picked from the
+ *  dropdown, so the caller names the FUEL and gets back the entry name. */
+function createSourceThenTypeVolume(fuelId: FuelId, volume: number) {
   mount();
   fireEvent.click(screen.getByRole("button", { name: /^Environment$/i }));
   fireEvent.click(screen.getByRole("button", { name: /Energy & Emissions/i }));
   fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
-  fireEvent.change(screen.getByLabelText(/name/i), { target: { value: name } });
+  fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
+  fireEvent.change(screen.getByLabelText(/^fuel$/i), { target: { value: fuelId } });
   fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+  const name = FUELS[fuelId].label;
   fireEvent.change(screen.getByLabelText(`${name} annual consumption`), {
     target: { value: String(volume) },
   });
+  return name;
 }
 
 beforeEach(() => window.localStorage.clear());
 
 describe("a source created by hand (C1)", () => {
   it("allocates the volume onto its equipment as soon as the volume is typed", () => {
-    createSourceThenTypeVolume("Hand made", 250000);
-    const created = raw().find((e) => e.name === "Hand made")!;
+    const name = createSourceThenTypeVolume("kerosene", 250000);
+    const created = raw().find((e) => e.name === name)!;
     expect(created.annualVolume).toBe(250000);
     // Before the fix this was { [id]: 0 } — written at creation when the volume
     // WAS 0, and never re-synced.
@@ -73,8 +79,8 @@ describe("a source created by hand (C1)", () => {
   });
 
   it("leaves nothing on the lever-inert remainder row", () => {
-    createSourceThenTypeVolume("Hand made", 250000);
-    const created = raw().find((e) => e.name === "Hand made")!;
+    const name = createSourceThenTypeVolume("kerosene", 250000);
+    const created = raw().find((e) => e.name === name)!;
     const rows = resolved().filter((r) => r.sourceEntryId === created.id);
     const remainder = rows.find((r) => isUnallocatedId(r.id));
     // The remainder row carries emissions but no lever can act on it, so a
@@ -85,8 +91,8 @@ describe("a source created by hand (C1)", () => {
   });
 
   it("puts the volume on the row the seeded lever is keyed to", () => {
-    createSourceThenTypeVolume("Hand made", 250000);
-    const created = raw().find((e) => e.name === "Hand made")!;
+    const name = createSourceThenTypeVolume("kerosene", 250000);
+    const created = raw().find((e) => e.name === name)!;
     // addCombustionAsset seeds byAsset[id] at creation, and the minted
     // equipment reuses the source id — so THIS row is the one every lever on
     // this source acts through. At zero volume the lever abates nothing,

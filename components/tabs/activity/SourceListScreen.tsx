@@ -96,15 +96,28 @@ export function SourceListScreen({
     ? refrigerationSystems
     : combustionAssets.filter((a) => fuelFamily(a.fuelType) === family);
 
+  /* A fuel entry is named by the fuel it burns — the add form offers no
+     free-text name, because the only fuels that can exist here are the ones in
+     the dropdown. Adding the same fuel twice would otherwise produce two rows
+     with identical labels, so a collision takes a numeric suffix. Refrigerant
+     systems keep their own name: a chiller is not named by its gas. */
+  const fuelEntryName = (fuelId: FuelId): string => {
+    const base = FUELS[fuelId].label;
+    const taken = new Set((sources as CombustionAsset[]).map((a) => a.name));
+    if (!taken.has(base)) return base;
+    let n = 2;
+    while (taken.has(`${base} ${n}`)) n += 1;
+    return `${base} ${n}`;
+  };
+
   // Total emissions for the category (non-excluded) — derived from the already-filtered sources array
   const totalEmissions = isRefrigerant
     ? refrigerationSystems.filter((s) => !s.excluded).reduce((sum, s) => sum + refrigerantCO2e(s), 0)
     : (sources as CombustionAsset[]).filter((a) => !a.excluded).reduce((sum, a) => sum + combustionCO2e(a), 0);
 
   const handleAdd = () => {
-    if (!sourceName.trim()) return;
     if (isRefrigerant) {
-      if (!selectedGas) return;
+      if (!sourceName.trim() || !selectedGas) return;
       addRefrigerationSystem(year, {
         id: newId("r"),
         name: sourceName.trim(),
@@ -122,7 +135,7 @@ export function SourceListScreen({
       const id = newId("c");
       const base: CombustionAsset = {
         id,
-        name: sourceName.trim(),
+        name: fuelEntryName(fuelId),
         category: fuelType,
         fuelType: fuelId,
         unit: FUELS[fuelId].unit,
@@ -280,30 +293,33 @@ export function SourceListScreen({
           <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
             <Plus size={14} strokeWidth={2.5} />
           </span>
-          Add a {isRefrigerant ? "system" : "source"}
+          Add a {isRefrigerant ? "system" : "fuel"}
         </button>
       ) : (
         <div className="rounded-xl3 border border-brand-200 bg-surface shadow-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-ink">New {isRefrigerant ? "system" : "source"}</h2>
+            <h2 className="text-sm font-semibold text-ink">New {isRefrigerant ? "system" : "fuel"}</h2>
             <button onClick={() => setShowForm(false)} aria-label="Close" className="p-1 -mr-1 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-muted transition-colors">
               <X size={16} />
             </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Source name */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold text-ink-soft">Name</label>
-              <input
-                aria-label="Source name"
-                type="text"
-                value={sourceName}
-                onChange={(e) => setSourceName(e.target.value)}
-                placeholder={isRefrigerant ? "e.g. Rooftop chillers" : "e.g. Diesel gensets"}
-                className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
-              />
-            </div>
+            {/* Name — refrigerant systems only. A fuel takes its name from the
+                fuel picked below, so there is nothing here to type. */}
+            {isRefrigerant && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-semibold text-ink-soft">Name</label>
+                <input
+                  aria-label="Source name"
+                  type="text"
+                  value={sourceName}
+                  onChange={(e) => setSourceName(e.target.value)}
+                  placeholder="e.g. Rooftop chillers"
+                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
+                />
+              </div>
+            )}
 
             {/* Type control */}
             {!isRefrigerant ? (
@@ -408,7 +424,7 @@ export function SourceListScreen({
             </button>
             <button
               onClick={handleAdd}
-              disabled={!sourceName.trim()}
+              disabled={isRefrigerant ? !sourceName.trim() : !selectedFuel}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={15} strokeWidth={2.5} /> Add

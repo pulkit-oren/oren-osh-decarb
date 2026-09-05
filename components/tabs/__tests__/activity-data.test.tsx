@@ -234,15 +234,16 @@ async function openDieselBuEntry() {
       <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
-  // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row
+  // Navigate: home → Fuels – Liquid category → Add a fuel → submit → click row.
+  // The form has no name box: the entry is named by the fuel, which defaults
+  // to the first stationary liquid (Diesel).
   fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
-  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Pune Diesel" } });
+  fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
   // Leave all defaults (stationary, first fuel, no BU), just submit
   fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
   // Now click the source row to open the entry screen
   // The row is a div with onClick; find the name span and click its parent
-  const nameSpan = screen.getAllByText("Pune Diesel").find((el) => el.tagName === "SPAN");
+  const nameSpan = screen.getAllByText("Diesel").find((el) => el.tagName === "SPAN");
   fireEvent.click(nameSpan!.closest("div")!);
 }
 
@@ -275,7 +276,7 @@ async function openR404aBuRow() {
   );
   // Navigate: home → Refrigerants & cooling → Add a source → name + R-404A → submit
   fireEvent.click(screen.getByText("Refrigerants & cooling").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a (source|system)/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Add a system/i }));
   fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Pune R404A System" } });
   // The gas dropdown should have R-404A; select it by label
   const gasSelect = screen.getByLabelText(/Refrigerant gas/i);
@@ -392,13 +393,13 @@ async function openDieselSourceEntry() {
       <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
-  // Navigate: home → Fuels – Liquid category → Add a source → fill in Diesel → submit → click row
+  // Navigate: home → Fuels – Liquid category → Add a fuel → submit → click row.
+  // No name box — the entry is named after the fuel (default: Diesel).
   fireEvent.click(screen.getByText("Fuels – Liquid").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
-  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Diesel gensets" } });
+  fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
   fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
   // Click the source row to open the entry screen
-  const nameSpan = screen.getAllByText("Diesel gensets").find((el) => el.tagName === "SPAN");
+  const nameSpan = screen.getAllByText("Diesel").find((el) => el.tagName === "SPAN");
   fireEvent.click(nameSpan!.closest("div")!);
 }
 
@@ -415,19 +416,31 @@ describe("ActivityDataTab — fuel entry shows all detail fields", () => {
     window.localStorage.clear();
   });
 
-  it("fuel entry details expose the full interactive field set", async () => {
-    await openDieselSourceEntry(); // helper: add 'Diesel gensets', click it
+  it("fuel entry has two sections: Consumption and Asset details", async () => {
+    await openDieselSourceEntry(); // helper: add a Diesel entry, click it
     // Consumption is where the entry opens.
     expect(screen.getByText(/Metered volume/i)).toBeTruthy();
 
-    openEntryTab(/Asset details/i);
-    expect(screen.getByLabelText(/Site \/ location/i)).toBeTruthy();
-    expect(screen.getByLabelText(/^Category$/i)).toBeTruthy();
-    expect(screen.getAllByText(/Annual spend/i).length).toBeGreaterThan(0);
+    // Exactly two tabs — the old separate Asset details pane is gone and the
+    // equipment pane now carries that name.
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent ?? "");
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]).toMatch(/Consumption/i);
+    expect(tabs[1]).toMatch(/Asset details/i);
 
-    openEntryTab(/Equipment/i);
+    openEntryTab(/Asset details/i);
+    // Same equipment controls as before the rename.
     expect(screen.getByLabelText("Number of units")).toBeTruthy();
     expect(screen.getByLabelText(/Remaining life/i)).toBeTruthy();
+    // The retired pane's fields are not hiding somewhere else.
+    expect(screen.queryByLabelText(/Site \/ location/i)).toBeNull();
+    expect(screen.queryByLabelText(/^Category$/i)).toBeNull();
+  });
+
+  it("names the entry after its fuel, with no way to rename it", async () => {
+    await openDieselSourceEntry();
+    expect(screen.queryByLabelText(/Source name/i)).toBeNull();
+    expect(screen.getByRole("heading", { name: "Diesel" })).toBeTruthy();
   });
 });
 
@@ -438,29 +451,29 @@ describe("ActivityDataTab — SourceListScreen (Task 1)", () => {
     window.localStorage.clear();
   });
 
-  it("category shows a source list and adding a source creates it", async () => {
+  it("category shows a source list and adding a fuel creates it", async () => {
     renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
     fireEvent.click(await screen.findByText("Fuels – Liquid"));
     // no all-fuels grid: a known non-added fuel card is absent
     expect(screen.queryByText("Marine Gas Oil (ULSGO)")).toBeFalsy();
-    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
-    fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Diesel gensets" } });
+    fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
     // fuel + type + BU default to first sensible values; submit
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
-    expect(screen.getAllByText("Diesel gensets").length).toBeGreaterThan(0);
+    // Named after the fuel — there was no name box to type into.
+    expect(screen.getAllByText("Diesel").some((el) => el.tagName === "SPAN")).toBe(true);
   });
 
   it("the always-visible central pill toggles between 'In total' and 'Excluded'", async () => {
     renderActivityWithBu({ units: [{ name: "Pune", aggregate: true }] });
     fireEvent.click(await screen.findByText("Fuels – Liquid"));
-    // Add a source
-    fireEvent.click(screen.getByRole("button", { name: /Add a source/i }));
-    fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Excluded Genset" } });
+    // Add a fuel that is not already in the seed, so its pill aria-label is unique
+    fireEvent.click(screen.getByRole("button", { name: /Add a fuel/i }));
+    fireEvent.change(screen.getByLabelText(/^Fuel$/i), { target: { value: "kerosene" } });
     fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
     // Included by default → at least one pill reads "In total"
     expect(screen.getAllByText(/In total/i).length).toBeGreaterThan(0);
     // Toggle exclusion via this source's always-visible pill (aria-label carries its name)
-    fireEvent.click(screen.getByRole("button", { name: /Excluded Genset.*company total/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Kerosene.*company total/i }));
     // Now its pill reads "Excluded"
     expect(screen.getByText(/^Excluded$/i)).toBeTruthy();
   });
@@ -471,8 +484,8 @@ describe("ActivityDataTab — end-use selector", () => {
   beforeEach(() => { window.localStorage.clear(); });
 
   it("fuel entry shows an end-use selector filtered by category", async () => {
-    await openDieselSourceEntry(); // existing helper: adds 'Diesel gensets', opens its entry
-    openEntryTab(/Equipment/i);
+    await openDieselSourceEntry(); // existing helper: adds a Diesel entry, opens it
+    openEntryTab(/Asset details/i);
     const sel = screen.getByLabelText(/Equipment \/ end-use/i) as HTMLSelectElement;
     expect(sel).toBeTruthy();
     const opts = Array.from(sel.querySelectorAll("option")).map((o) => o.textContent);

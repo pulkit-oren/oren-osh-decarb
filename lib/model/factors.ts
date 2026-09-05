@@ -471,7 +471,11 @@ export const FUELS_BY_CATEGORY: Record<"stationary" | "mobile", FuelId[]> = {
     "jetFuel", "aviationGasoline", "bioCng",
   ],
   stationary: [
-    "diesel", "fuelOil", "residualFuelOil", "lubricants", "ldo", "kerosene", "naphtha",
+    // "lubricants" is deliberately absent: it is a consumable, not a fuel that
+    // gets combusted for energy, so it is not offered as a liquid fuel choice.
+    // The factor itself stays in FUELS so any entry already carrying it still
+    // reports and still renders its label.
+    "diesel", "fuelOil", "residualFuelOil", "ldo", "kerosene", "naphtha",
     "png", "lng", "cng", "cngScm", "lpg", "propane", "butane",
     "coal", "cokingCoal", "lignite", "petcoke", "coalAnthracite", "coalBituminous", "coalBriquettes", "coalElectricity",
     "biogas", "landfillGas", "biodiesel", "bioBriquettes", "biomass", "bagasse", "riceHusk",

@@ -17,22 +17,21 @@
 import { useState } from "react";
 import { Snowflake } from "lucide-react";
 import { GRAD, CAT_ICON, ICON_COLOR, showNum, unitLabel, type Nav } from "./shared";
-import { FUELS, FUELS_BY_CATEGORY, REFRIGERANTS } from "@/lib/model/factors";
+import { FUELS, REFRIGERANTS } from "@/lib/model/factors";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { fuelFamily } from "@/lib/activity-groups";
 import { displayUnits, fromRef, toRef } from "@/lib/unit-convert";
-import { fyLabel, type FuelUnit, type FuelId, type RefrigerantId } from "@/lib/model/types";
+import { fyLabel, type FuelUnit, type RefrigerantId } from "@/lib/model/types";
 import { refrigClassesFor, refrigClassProfile, type RefrigClassId } from "@/lib/model/refrigerant-class";
 import { combustionGrade, facilityGrade, refrigerantGrade } from "@/lib/data-quality";
 import { defaultBasis, explainAllocation, unallocated } from "@/lib/equipment/allocate";
 import { fmt, fmtMoney } from "@/lib/utils";
 import { CURRENCY } from "@/lib/defaults";
-import { endUsesFor } from "@/lib/model/end-use";
 import { CombustionCalc, RefrigerantCalcBlock } from "../DataInputTab";
 import { FacilityDetailContent } from "../../scope2/DataInputTab";
 import { CAT_DEFS } from "./shared";
 import { EntryShell, TabPanel, type EntryTab } from "./EntryShell";
-import { TextField, NumField, SelectField, Segmented } from "./fields";
+import { NumField, SelectField, Segmented } from "./fields";
 import { EquipmentSection } from "./EquipmentSection";
 import type { CombustionAsset, RefrigerationSystem } from "@/lib/model/types";
 import type { Facility } from "@/lib/scope2/model/types";
@@ -291,25 +290,6 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
   const altUnits = displayUnits(a.fuelType).filter((u) => u !== disp);
   const setVolDisp = (v: number) => updateCombustion(year, a.id, { annualVolume: toRef(v, a.fuelType, disp) });
 
-  const fuelOptions = FUELS_BY_CATEGORY[a.category].map((id) => ({ value: id as FuelId, label: FUELS[id].label }));
-  const onCategory = (cat: CombustionAsset["category"]) => {
-    const allowed = FUELS_BY_CATEGORY[cat];
-    const patch: Partial<CombustionAsset> = { category: cat };
-    if (!allowed.includes(a.fuelType)) { patch.fuelType = allowed[0]; patch.unit = FUELS[allowed[0]].unit; }
-    // End-use lives on the equipment under D4/5.2 — clearing it flat here would
-    // be discarded by resolveEquipment, which stamps it from the equipment and
-    // ignores anything on the entry. Ruling K: `equipment` may be absent.
-    const offered = endUsesFor(cat);
-    const eq = a.equipment ?? [];
-    if (eq.some((e) => e.endUse && !offered.some((p) => p.id === e.endUse))) {
-      patch.equipment = eq.map((e) =>
-        e.endUse && !offered.some((p) => p.id === e.endUse) ? { ...e, endUse: undefined } : e,
-      );
-    }
-    updateCombustion(year, a.id, patch);
-  };
-  const onFuel = (v: FuelId) => updateCombustion(year, a.id, { fuelType: v, unit: FUELS[v].unit });
-
   const equipment = a.equipment ?? [];
   const equipmentCount = equipment.length;
   const volume = Number.isFinite(a.annualVolume) ? a.annualVolume : 0;
@@ -418,46 +398,12 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
       ),
     },
     {
-      key: "asset",
-      label: "Asset details",
-      alert: a.opex === 0,
-      content: (
-        <TabPanel>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
-            <div className="sm:col-span-2">
-              <TextField label="Site / location" value={a.site ?? ""} onChange={(v) => updateCombustion(year, a.id, { site: v })} placeholder="e.g. Pune plant" />
-            </div>
-            <SelectField label="Category" value={a.category} options={[{ value: "stationary", label: "Stationary" }, { value: "mobile", label: "Mobile" }]} onChange={onCategory} />
-            <SelectField label="Fuel" value={a.fuelType} options={fuelOptions} onChange={onFuel} />
-            {mode === "metered" ? (
-              <NumField
-                label="Annual spend" suffix={`${CURRENCY}/yr`} value={a.opex} min={0}
-                onChange={(v) => updateCombustion(year, a.id, { opex: v })}
-                hint="Fuel cost plus related maintenance for the year. Drives payback and cost-per-tonne in the action plan."
-                footer={price > 0 && a.opex !== avgOpex ? (
-                  <button type="button" onClick={() => updateCombustion(year, a.id, { opex: avgOpex })} className="text-brand-600 hover:underline">
-                    Use average ≈ {fmtMoney(avgOpex)} ({CURRENCY}{fmt(price)}/{a.unit})
-                  </button>
-                ) : price > 0 ? `≈ average at ${CURRENCY}${fmt(price)}/${a.unit}` : null}
-              />
-            ) : (
-              <NumField
-                label="Annual volume" suffix={`${unitLabel(disp)}/yr`} value={volDisp} min={0}
-                onChange={setVolDisp}
-                hint="Metered fuel volume for the year. Edit directly or estimate it from spend above."
-              />
-            )}
-          </div>
-        </TabPanel>
-      ),
-    },
-    {
       /* Units, remaining life and end-use are per EQUIPMENT (D4/5.2), so they
          live in here rather than on the source: resolveEquipment stamps all
          three onto the resolved rows FROM the equipment and ignores anything
          written flat on the entry. */
       key: "equipment",
-      label: "Equipment",
+      label: "Asset details",
       badge: equipmentCount > 0 ? String(equipmentCount) : undefined,
       alert: leftover > 0,
       content: (
@@ -481,7 +427,8 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
       icon={Icon}
       iconColor={ICON_COLOR[fam]}
       name={a.name}
-      onNameChange={(v) => updateCombustion(year, a.id, { name: v })}
+      /* No onNameChange: a fuel entry is named by the fuel picked from the
+         dropdown, and nothing else. */
       subtitle={`${FUELS[a.fuelType].label} · ${catLabel}${a.bu ? ` · ${a.bu}` : ""} · ${fyLabel(year)}`}
       emissionsT={combustionCO2e(a)}
       emissionsNote="Scope 1 · combustion"

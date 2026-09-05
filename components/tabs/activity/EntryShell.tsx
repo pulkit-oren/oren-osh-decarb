@@ -48,7 +48,10 @@ export function EntryShell({
   icon: React.ElementType;
   iconColor: string;
   name: string;
-  onNameChange: (v: string) => void;
+  /** Omit to render the name as fixed text. A fuel entry is named by the fuel
+   *  it burns and there is nothing to rename; systems and facilities are named
+   *  by the user and pass a handler. */
+  onNameChange?: (v: string) => void;
   subtitle: string;
   emissionsT: number;
   /** What the figure IS — "Scope 1 · combustion", "Scope 2 · location-based". */
@@ -81,12 +84,16 @@ export function EntryShell({
             <Icon size={22} strokeWidth={1.9} style={{ color: iconColor }} />
           </span>
           <div className="min-w-0 flex-1">
-            <input
-              value={name}
-              onChange={(e) => onNameChange(e.target.value)}
-              className="w-full text-xl font-extrabold text-ink bg-transparent border-b-2 border-transparent hover:border-ink/20 focus:border-ink/40 focus:outline-none"
-              aria-label="Source name"
-            />
+            {onNameChange ? (
+              <input
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                className="w-full text-xl font-extrabold text-ink bg-transparent border-b-2 border-transparent hover:border-ink/20 focus:border-ink/40 focus:outline-none"
+                aria-label="Source name"
+              />
+            ) : (
+              <h1 className="w-full text-xl font-extrabold text-ink truncate">{name}</h1>
+            )}
             <p className="text-[13px] font-medium text-ink-soft mt-0.5 truncate">{subtitle}</p>
           </div>
         </div>
