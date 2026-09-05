@@ -6,7 +6,7 @@ import { Scope2Provider } from "@/lib/scope2/store";
 import { EsgProvider } from "@/lib/esg/store";
 import { CompanyProvider } from "@/lib/company/store";
 import { ActivityDataTab } from "@/components/tabs/ActivityDataTab";
-import { FUELS } from "@/lib/model/factors";
+import { FUELS, REFRIGERANTS } from "@/lib/model/factors";
 
 function Probe() {
   const { combustion, baseYear } = useScenario();
@@ -132,5 +132,32 @@ describe("adding a fuel", () => {
     addFuel("Kerosene / Burning Oil");
     const all = JSON.parse(screen.getByTestId("dump").textContent!);
     expect(all.find((e: { name: string }) => e.name === "Kerosene / Burning Oil").capacityUnit).toBeUndefined();
+  });
+});
+
+/** Same journey, but into Refrigerants & cooling. */
+function openAddRefrigerantForm() {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: /^Environment$/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Energy & Emissions/i }));
+  fireEvent.click(screen.getByText("Refrigerants & cooling").closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: /Add a refrigerant/i }));
+}
+
+describe("adding a refrigerant", () => {
+  it("offers no name box — the system is named by the gas", () => {
+    openAddRefrigerantForm();
+    expect(screen.queryByLabelText(/source name/i)).toBeNull();
+    expect(screen.getByLabelText(/Refrigerant gas/i)).toBeTruthy();
+    // System type and equipment class are model inputs, not names — still here.
+    expect(screen.getByLabelText(/Equipment class/i)).toBeTruthy();
+    expect(screen.getByText(/System type/i)).toBeTruthy();
+  });
+
+  it("names the system after the gas picked from the dropdown", () => {
+    openAddRefrigerantForm();
+    fireEvent.change(screen.getByLabelText(/Refrigerant gas/i), { target: { value: "R407C" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Add$/ }));
+    expect(screen.getAllByText(REFRIGERANTS.R407C.label).some((el) => el.tagName === "SPAN")).toBe(true);
   });
 });

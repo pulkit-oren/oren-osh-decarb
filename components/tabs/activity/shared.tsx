@@ -83,6 +83,19 @@ export const facCO2e = (f: { annualLoadKwh: number; gridEf: number }) => (f.annu
 let _idc = 0;
 export const newId = (p: string) => `${p}-${Date.now().toString(36)}-${_idc++}`;
 export const showNum = (v: number) => Number(v.toFixed(4));
+
+/** The name of an entry that is named by a catalogue, not by hand — a fuel by
+ *  its fuel, a refrigeration system by its gas, an electricity record by its
+ *  instrument. `base` is the catalogue label; `taken` is every sibling name
+ *  already on that screen. A repeat gets a numeric suffix, because two rows
+ *  reading identically is worse than a suffix. */
+export function catalogueName(base: string, taken: Iterable<string>): string {
+  const used = new Set(taken);
+  if (!used.has(base)) return base;
+  let n = 2;
+  while (used.has(`${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
 export const unitLabel = (u: string) => (u === "m3" ? "m³" : u);
 
 // ─── Small shared components ───────────────────────────────────────────────

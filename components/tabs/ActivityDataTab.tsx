@@ -195,6 +195,7 @@ export function ActivityDataTab({
         co2Fac={co2Fac}
         previousAllocation={previousAllocation}
         hasLever={hasLever}
+        siblingSystemNames={s1.selectedSystems.filter((sy) => sy.id !== nav.id).map((sy) => sy.name)}
       />
     );
   }

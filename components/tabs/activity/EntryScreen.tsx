@@ -16,7 +16,7 @@
 
 import { useState } from "react";
 import { Snowflake } from "lucide-react";
-import { GRAD, CAT_ICON, ICON_COLOR, showNum, unitLabel, type Nav } from "./shared";
+import { GRAD, CAT_ICON, ICON_COLOR, showNum, unitLabel, catalogueName, type Nav } from "./shared";
 import { FUELS, REFRIGERANTS } from "@/lib/model/factors";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
 import { fuelFamily } from "@/lib/activity-groups";
@@ -59,6 +59,11 @@ type Props = {
    *  ActivityDataTab (which holds the scenario store) so that removing a split
    *  that a plan depends on is confirmed rather than silent. */
   hasLever?: (equipmentId: string) => boolean;
+  /** Names of every OTHER refrigeration system, so that switching this one's
+   *  gas can rename it without landing on a name a sibling already holds.
+   *  Supplied by ActivityDataTab for the same reason as the two props above —
+   *  this screen never reaches into the store itself. */
+  siblingSystemNames?: string[];
 };
 
 /** The consumption figure is the one number the whole screen exists to collect,
@@ -79,7 +84,7 @@ export function EntryScreen(props: Props) {
   return <EntryScreenInner key={`${props.nav.kind}-${props.nav.id}`} {...props} />;
 }
 
-function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac, previousAllocation, hasLever }: Props) {
+function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById, updateCombustion, updateFacility, updateRefrigeration, co2Fac, previousAllocation, hasLever, siblingSystemNames = [] }: Props) {
   const [tab, setTab] = useState("consumption");
 
   /* ---- Refrigerant entry ---- */
@@ -158,7 +163,13 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
                 onChange={(v) => updateRefrigeration(year, s.id, { equipmentClass: (v || undefined) as RefrigClassId | undefined })}
                 hint="A finer class sharpens the recommended low-GWP swap used by the modeller."
               />
-              <SelectField label="Refrigerant gas" value={s.refrigerant} options={gasOptions} onChange={(v) => updateRefrigeration(year, s.id, { refrigerant: v })} />
+              {/* A system is named by its gas, so switching the gas renames it
+                  too — otherwise the header would keep advertising a refrigerant
+                  the system no longer holds. */}
+              <SelectField label="Refrigerant gas" value={s.refrigerant} options={gasOptions} onChange={(v) => updateRefrigeration(year, s.id, {
+                refrigerant: v,
+                name: catalogueName(REFRIGERANTS[v].label, siblingSystemNames),
+              })} />
               <NumField label="Gas cost" suffix={`${CURRENCY}/kg`} value={s.gasCostPerKg} min={0} onChange={(v) => updateRefrigeration(year, s.id, { gasCostPerKg: v })} hint="Purchase price of replacement refrigerant. Used to value the savings from cutting leaks." />
               <NumField
                 label="Installed charge"
@@ -185,7 +196,7 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
         icon={Snowflake}
         iconColor={ICON_COLOR.refrigerant}
         name={s.name}
-        onNameChange={(v) => updateRefrigeration(year, s.id, { name: v })}
+        /* No onNameChange: the system is named by its refrigerant. */
         subtitle={`${gas.label} · Refrigerant${s.bu ? ` · ${s.bu}` : ""} · ${fyLabel(year)}`}
         emissionsT={refrigerantCO2e(s)}
         emissionsNote="Scope 1 · fugitive"
@@ -254,7 +265,11 @@ function EntryScreenInner({ nav, setNav, year, combById, facById, refrigSysById,
         icon={ElecIcon}
         iconColor={ICON_COLOR.electricity}
         name={f.name}
-        onNameChange={(v) => updateFacility(year, f.id, { name: v })}
+        /* No onNameChange, and this one is load-bearing: a facility's NAME is
+           its instrument identity — instruments.ts classifies VPPA / I-REC /
+           solar / grid records by matching it, and ensureFacility finds the
+           (BU, instrument) record the same way. Renaming one would silently
+           orphan it and mint a duplicate. */
         subtitle={`Electricity · Scope 2${f.bu ? ` · ${f.bu}` : ""} · ${fyLabel(year)}`}
         emissionsT={locationT}
         emissionsNote="Scope 2 · location-based"

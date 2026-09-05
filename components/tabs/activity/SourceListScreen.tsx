@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ArrowLeft, Plus, X, ChevronRight } from "lucide-react";
-import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, CentralPill, showNum, unitLabel, newId, type Nav, type CatDef } from "./shared";
+import { CAT_DEFS, GRAD, CAT_ICON, ICON_COLOR, ScopeBadge, CentralPill, showNum, unitLabel, newId, catalogueName, type Nav, type CatDef } from "./shared";
 import { FUELS, FUELS_BY_CATEGORY, REFRIGERANTS } from "@/lib/model/factors";
 import { fuelsInExcelFamily, fuelFamily, type FuelFamily } from "@/lib/activity-groups";
 import { combustionCO2e, refrigerantCO2e } from "@/lib/model/baseline";
@@ -47,7 +47,6 @@ export function SourceListScreen({
   setNav,
 }: Props) {
   const [showForm, setShowForm] = useState(false);
-  const [sourceName, setSourceName] = useState("");
   const [fuelType, setFuelType] = useState<FuelType>("stationary");
   const [selectedFuel, setSelectedFuel] = useState<FuelId | "">("");
   const [selectedGas, setSelectedGas] = useState<RefrigerantId | "">("");
@@ -66,7 +65,6 @@ export function SourceListScreen({
 
   // Initialize selectedFuel/Gas on form open
   const handleOpenForm = () => {
-    setSourceName("");
     setFuelType("stationary");
     if (!isRefrigerant) {
       const fuels = fuelsInExcelFamily(family).filter(
@@ -96,19 +94,12 @@ export function SourceListScreen({
     ? refrigerationSystems
     : combustionAssets.filter((a) => fuelFamily(a.fuelType) === family);
 
-  /* A fuel entry is named by the fuel it burns — the add form offers no
-     free-text name, because the only fuels that can exist here are the ones in
-     the dropdown. Adding the same fuel twice would otherwise produce two rows
-     with identical labels, so a collision takes a numeric suffix. Refrigerant
-     systems keep their own name: a chiller is not named by its gas. */
-  const fuelEntryName = (fuelId: FuelId): string => {
-    const base = FUELS[fuelId].label;
-    const taken = new Set((sources as CombustionAsset[]).map((a) => a.name));
-    if (!taken.has(base)) return base;
-    let n = 2;
-    while (taken.has(`${base} ${n}`)) n += 1;
-    return `${base} ${n}`;
-  };
+  /* Every entry on this screen is named by what you pick from the dropdown —
+     a fuel by its fuel, a system by its refrigerant. The add form offers no
+     free-text name at all, because the only things that can exist here are the
+     catalogue's own entries. */
+  const entryName = (base: string): string =>
+    catalogueName(base, sources.map((x) => x.name));
 
   // Total emissions for the category (non-excluded) — derived from the already-filtered sources array
   const totalEmissions = isRefrigerant
@@ -117,10 +108,10 @@ export function SourceListScreen({
 
   const handleAdd = () => {
     if (isRefrigerant) {
-      if (!sourceName.trim() || !selectedGas) return;
+      if (!selectedGas) return;
       addRefrigerationSystem(year, {
         id: newId("r"),
-        name: sourceName.trim(),
+        name: entryName(REFRIGERANTS[selectedGas as RefrigerantId].label),
         systemType,
         refrigerant: selectedGas as RefrigerantId,
         toppedUpKg: 0,
@@ -135,7 +126,7 @@ export function SourceListScreen({
       const id = newId("c");
       const base: CombustionAsset = {
         id,
-        name: fuelEntryName(fuelId),
+        name: entryName(FUELS[fuelId].label),
         category: fuelType,
         fuelType: fuelId,
         unit: FUELS[fuelId].unit,
@@ -157,7 +148,6 @@ export function SourceListScreen({
       });
     }
     setShowForm(false);
-    setSourceName("");
   };
 
   const currentFuels = isRefrigerant
@@ -293,33 +283,18 @@ export function SourceListScreen({
           <span className="grid place-items-center w-5 h-5 rounded-full bg-brand-500 text-white group-hover:bg-brand-600 transition-colors">
             <Plus size={14} strokeWidth={2.5} />
           </span>
-          Add a {isRefrigerant ? "system" : "fuel"}
+          Add a {isRefrigerant ? "refrigerant" : "fuel"}
         </button>
       ) : (
         <div className="rounded-xl3 border border-brand-200 bg-surface shadow-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-ink">New {isRefrigerant ? "system" : "fuel"}</h2>
+            <h2 className="text-sm font-semibold text-ink">New {isRefrigerant ? "refrigerant" : "fuel"}</h2>
             <button onClick={() => setShowForm(false)} aria-label="Close" className="p-1 -mr-1 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-muted transition-colors">
               <X size={16} />
             </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Name — refrigerant systems only. A fuel takes its name from the
-                fuel picked below, so there is nothing here to type. */}
-            {isRefrigerant && (
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] font-semibold text-ink-soft">Name</label>
-                <input
-                  aria-label="Source name"
-                  type="text"
-                  value={sourceName}
-                  onChange={(e) => setSourceName(e.target.value)}
-                  placeholder="e.g. Rooftop chillers"
-                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
-                />
-              </div>
-            )}
 
             {/* Type control */}
             {!isRefrigerant ? (
@@ -424,7 +399,7 @@ export function SourceListScreen({
             </button>
             <button
               onClick={handleAdd}
-              disabled={isRefrigerant ? !sourceName.trim() : !selectedFuel}
+              disabled={isRefrigerant ? !selectedGas : !selectedFuel}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={15} strokeWidth={2.5} /> Add

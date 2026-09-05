@@ -18,11 +18,12 @@
    a click to reach. */
 
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { EntryScreen } from "../EntryScreen";
 import type { CombustionAsset } from "@/lib/model/types";
 import type { Nav } from "../shared";
 import type { RefrigerationSystem } from "@/lib/model/types";
+import { REFRIGERANTS } from "@/lib/model/factors";
 
 function entry(over: Partial<CombustionAsset> = {}): CombustionAsset {
   return {
@@ -168,5 +169,65 @@ describe("Entry consumption — cross-check", () => {
     // 662 kg x ₹900/kg — stated as a yearly replacement cost, not a unit price.
     expect(screen.getByText(/That leak costs about/i).textContent)
       .toMatch(/a year to replace, at ₹900\/kg/);
+  });
+});
+
+/* ── A system is named by its gas, and stays named by its gas ───────────────
+   The add form derives the name from the refrigerant dropdown, so the entry
+   screen must not offer a way to type over it — and must not let the name go
+   stale when the gas underneath it is swapped. */
+
+function renderSystem(over: Partial<RefrigerationSystem> = {}, onUpdate = () => {}) {
+  const sys = {
+    id: "r-1", name: "R-404A (HFC)", refrigerant: "R404A",
+    systemType: "commercialHVAC", toppedUpKg: 662, gasCostPerKg: 900,
+    ...over,
+  } as unknown as RefrigerationSystem;
+  render(
+    <EntryScreen
+      nav={{ level: "entry", kind: "refrigerant", id: "r-1" }}
+      setNav={() => {}}
+      year={2025}
+      combById={() => undefined}
+      facById={() => undefined}
+      refrigSysById={() => sys}
+      updateCombustion={() => {}}
+      updateFacility={() => {}}
+      updateRefrigeration={onUpdate as never}
+      co2Fac={() => 0}
+      siblingSystemNames={["R-410A (HFC)"]}
+    />,
+  );
+  return sys;
+}
+
+describe("Refrigerant entry — named by its gas", () => {
+  it("shows the name as text, with no box to rename it", () => {
+    renderSystem();
+    expect(screen.queryByLabelText(/Source name/i)).toBeNull();
+    expect(screen.getByRole("heading", { name: "R-404A (HFC)" })).toBeTruthy();
+  });
+
+  it("renames the system when the gas is swapped, so the name cannot go stale", () => {
+    const patches: Record<string, unknown>[] = [];
+    renderSystem({}, ((_y: number, _id: string, patch: Record<string, unknown>) => {
+      patches.push(patch);
+    }) as never);
+    fireEvent.click(screen.getByRole("tab", { name: /System details/i }));
+    fireEvent.change(screen.getByLabelText(/Refrigerant gas/i), { target: { value: "R407C" } });
+    expect(patches).toHaveLength(1);
+    expect(patches[0].refrigerant).toBe("R407C");
+    expect(patches[0].name).toBe(REFRIGERANTS.R407C.label);
+  });
+
+  it("suffixes the new name when a sibling already holds it", () => {
+    const patches: Record<string, unknown>[] = [];
+    renderSystem({}, ((_y: number, _id: string, patch: Record<string, unknown>) => {
+      patches.push(patch);
+    }) as never);
+    fireEvent.click(screen.getByRole("tab", { name: /System details/i }));
+    // siblingSystemNames already contains "R-410A (HFC)".
+    fireEvent.change(screen.getByLabelText(/Refrigerant gas/i), { target: { value: "R410A" } });
+    expect(patches[0].name).toBe(`${REFRIGERANTS.R410A.label} 2`);
   });
 });

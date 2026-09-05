@@ -274,10 +274,10 @@ async function openR404aBuRow() {
       <ActivityDataTab initialNav={{ level: "home" }} />
     </Wrapper>,
   );
-  // Navigate: home → Refrigerants & cooling → Add a source → name + R-404A → submit
+  // Navigate: home → Refrigerants & cooling → Add a refrigerant → pick R-404A
+  // → submit. No name box: the system is named by the gas.
   fireEvent.click(screen.getByText("Refrigerants & cooling").closest("button")!);
-  fireEvent.click(screen.getByRole("button", { name: /Add a system/i }));
-  fireEvent.change(screen.getByLabelText(/Source name/i), { target: { value: "Pune R404A System" } });
+  fireEvent.click(screen.getByRole("button", { name: /Add a refrigerant/i }));
   // The gas dropdown should have R-404A; select it by label
   const gasSelect = screen.getByLabelText(/Refrigerant gas/i);
   // Find the option value for R-404A
@@ -298,7 +298,7 @@ describe("ActivityDataTab — refrigerant gear opens full entry screen (Task 5)"
   it("refrigerant gear opens the full refrigerant entry screen", async () => {
     await openR404aBuRow();
     // Click the source row to navigate to the entry screen
-    const nameSpanR = screen.getAllByText("Pune R404A System").find((el) => el.tagName === "SPAN");
+    const nameSpanR = screen.getAllByText("R-404A (HFC)").find((el) => el.tagName === "SPAN");
     fireEvent.click(nameSpanR!.closest("div")!);
     // full screen (not a side panel): back link + System details + live calc heading
     expect(screen.getByRole("button", { name: /Back to Refrigerants/i })).toBeTruthy();
@@ -501,7 +501,7 @@ describe("ActivityDataTab — refrigerant equipment class", () => {
 
   it("entry screen shows an equipment-class selector and recommended swap", async () => {
     await openR404aBuRow();
-    const nameSpanR = screen.getAllByText("Pune R404A System").find((el) => el.tagName === "SPAN");
+    const nameSpanR = screen.getAllByText("R-404A (HFC)").find((el) => el.tagName === "SPAN");
     fireEvent.click(nameSpanR!.closest("div")!);
     openEntryTab(/System details/i);
     const sel = screen.getByLabelText(/Equipment class/i) as HTMLSelectElement;
